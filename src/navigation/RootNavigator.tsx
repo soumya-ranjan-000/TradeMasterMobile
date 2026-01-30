@@ -1,0 +1,150 @@
+import React from 'react';
+import { View } from 'react-native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { NavigationContainer, DarkTheme } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { Home, PieChart, Activity, BookOpen, Calendar } from 'lucide-react-native';
+
+import DashboardScreen from '../screens/DashboardScreen';
+import WatchlistScreen from '../screens/WatchlistScreen';
+import PortfolioScreen from '../screens/PortfolioScreen';
+import StockDetailScreen from '../screens/StockDetailScreen';
+import TradeScreen from '../screens/TradeScreen';
+import CalendarScreen from '../screens/CalendarScreen';
+import LoginScreen from '../screens/LoginScreen';
+
+// Types for Navigation
+export type RootStackParamList = {
+    Login: undefined;
+    MainTabs: undefined;
+    StockDetail: { symbol: string };
+    Trade: { symbol: string; side: 'BUY' | 'SELL' };
+};
+
+export type MainTabParamList = {
+    Dashboard: undefined;
+    Watchlist: undefined;
+    Portfolio: undefined;
+    Journal: undefined;
+    StockDetail: { symbol: string };
+    Trade: { symbol: string; side: 'BUY' | 'SELL' };
+};
+
+const Tab = createBottomTabNavigator<MainTabParamList>();
+const Stack = createNativeStackNavigator<RootStackParamList>();
+
+const TradeMasterTheme = {
+    ...DarkTheme,
+    colors: {
+        ...DarkTheme.colors,
+        primary: '#2563eb',
+        background: '#0B0E11',
+        card: '#151921',
+        text: '#E1E7ED',
+        border: '#2A2E39',
+        notification: '#EF4444',
+    },
+};
+
+const MainTabs = () => {
+    return (
+        <Tab.Navigator
+            screenOptions={({ route }) => ({
+                tabBarIcon: ({ color, size, focused }) => {
+                    let Icon;
+                    if (route.name === 'Dashboard') Icon = Home;
+                    else if (route.name === 'Watchlist') Icon = Activity;
+                    else if (route.name === 'Portfolio') Icon = PieChart;
+                    else if (route.name === 'Journal') Icon = BookOpen;
+                    else return null;
+
+                    return (
+                        <View className="items-center justify-center pt-2">
+                            <View
+                                className={`w-12 h-12 items-center justify-center`}
+                            >
+                                <Icon
+                                    size={26}
+                                    color={focused ? '#2563eb' : '#94A3B8'}
+                                    strokeWidth={focused ? 2.2 : 1.8}
+                                />
+                            </View>
+                            {focused && (
+                                <View className="absolute -bottom-1 w-6 h-1 rounded-full bg-primary" />
+                            )}
+                        </View>
+                    );
+                },
+                tabBarActiveTintColor: '#2563eb',
+                tabBarInactiveTintColor: '#94A3B8',
+                tabBarStyle: {
+                    backgroundColor: '#1E2329',
+                    height: 80,
+                    borderTopWidth: 1.2,
+                    borderTopColor: 'rgba(255,255,255,0.08)',
+                    paddingBottom: 15,
+                    paddingTop: 5,
+                },
+                headerShown: false,
+                tabBarShowLabel: false,
+            })}
+        >
+            <Tab.Screen name="Dashboard" component={DashboardScreen} />
+            <Tab.Screen name="Watchlist" component={WatchlistScreen} />
+            <Tab.Screen name="Journal" component={CalendarScreen} />
+            <Tab.Screen name="Portfolio" component={PortfolioScreen} />
+
+            {/* Hidden Tabs (to keep Navbar visible) */}
+            <Tab.Screen
+                name="StockDetail"
+                component={StockDetailScreen}
+                options={{
+                    tabBarItemStyle: { display: 'none' },
+                }}
+            />
+            <Tab.Screen
+                name="Trade"
+                component={TradeScreen}
+                options={{
+                    tabBarItemStyle: { display: 'none' },
+                }}
+            />
+        </Tab.Navigator>
+    );
+};
+
+const RootNavigator = () => {
+    return (
+        <NavigationContainer theme={TradeMasterTheme}>
+            <Stack.Navigator
+                initialRouteName="Login"
+                screenOptions={{
+                    headerStyle: {
+                        backgroundColor: '#151921',
+                    },
+                    headerTintColor: '#E1E7ED',
+                    headerTitleStyle: {
+                        fontWeight: 'bold',
+                    },
+                    headerShadowVisible: false,
+                    contentStyle: {
+                        backgroundColor: '#0B0E11',
+                    }
+                }}
+            >
+                <Stack.Screen
+                    name="Login"
+                    component={LoginScreen}
+                    options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                    name="MainTabs"
+                    component={MainTabs}
+                    options={{ headerShown: false }}
+                />
+            </Stack.Navigator>
+        </NavigationContainer>
+    );
+};
+
+export default RootNavigator;

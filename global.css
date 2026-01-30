@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* NativeWind doesn't support @layer base for React Native views the same way as web, 
+   but it helps for the web output. */
+@layer base {
+    html {
+        @apply bg-background text-text-primary;
+        background-color: #0B0E11;
+        /* Fallback */
+    }
+
+    body {
+        @apply bg-background text-text-primary;
+    }
+}
