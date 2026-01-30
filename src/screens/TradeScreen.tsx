@@ -60,12 +60,12 @@ const TradeScreen = () => {
 
                 // Only poll if open
                 if (msData.is_open) {
-                    timer = setInterval(fetchLivePrice, 5000);
+                    timer = setInterval(fetchLivePrice, 10000);
                 }
             } catch (e) {
                 // Fallback: poll anyway if check fails
                 fetchLivePrice();
-                timer = setInterval(fetchLivePrice, 5000);
+                timer = setInterval(fetchLivePrice, 10000);
             }
         };
         init();

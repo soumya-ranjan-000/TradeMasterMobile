@@ -217,39 +217,6 @@ const DashboardScreen = () => {
                     </LinearGradient>
                 </View>
 
-                {/* Header and Market Status */}
-                <View className="px-4 pt-12 pb-4">
-                    <View className="flex-row items-center justify-between">
-                        <View className="flex-row items-center">
-                            <View className="w-10 h-10 rounded-full bg-surface border border-border items-center justify-center mr-3">
-                                <Text className="text-text-primary font-bold text-xs">{profile?.full_name ? profile.full_name.substring(0, 2).toUpperCase() : 'SO'}</Text>
-                            </View>
-                            <View>
-                                <Text className="text-text-muted text-[10px] font-bold uppercase tracking-widest">Good Morning</Text>
-                                <Text className="text-text-primary font-bold text-sm tracking-tight">{profile?.full_name || 'Trader'}</Text>
-                            </View>
-                        </View>
-
-                        {/* Market Status Badge */}
-                        {marketStatus && (
-                            <View className={`flex-row items-center px-3 py-1.5 rounded-full border ${marketStatus.is_open ? 'bg-success/10 border-success/30' : 'bg-error/10 border-error/30'}`}>
-                                <View className={`w-1.5 h-1.5 rounded-full mr-2 ${marketStatus.is_open ? 'bg-success' : 'bg-error'}`} />
-                                <Text className={`text-[10px] font-black uppercase tracking-tight ${marketStatus.is_open ? 'text-success' : 'text-error'}`}>
-                                    {marketStatus.is_open ? 'Market Open' : 'Market Closed'}
-                                </Text>
-                            </View>
-                        )}
-
-                        <View className="flex-row gap-2">
-                            <TouchableOpacity className="bg-surface p-2 rounded-xl border border-border" onPress={() => navigation.navigate('Watchlist')}>
-                                <Search size={20} color="#E1E7ED" />
-                            </TouchableOpacity>
-                            <TouchableOpacity className="bg-surface p-2 rounded-xl border border-border">
-                                <Bell size={20} color="#E1E7ED" />
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </View>
 
                 {/* Stats row */}
                 <View className="flex-row px-6 justify-between mt-4">

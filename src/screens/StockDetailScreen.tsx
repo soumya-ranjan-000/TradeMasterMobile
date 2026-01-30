@@ -84,11 +84,11 @@ const StockDetailScreen = () => {
 
                 // Only poll if market is open
                 if (msData.is_open) {
-                    timer = setInterval(fetchStockData, 5000);
+                    timer = setInterval(fetchStockData, 10000);
                 }
             } catch (e) {
-                // Fallback to polling if check fails
-                timer = setInterval(fetchStockData, 5000);
+                // Fallback to polling if check fails (but use slower interval)
+                timer = setInterval(fetchStockData, 10000);
             }
         };
         init();
