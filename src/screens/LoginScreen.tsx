@@ -223,9 +223,16 @@ const LoginScreen = () => {
                 colors={['#0B0E11', '#151921']}
                 className="flex-1"
             >
-                {view === 'CHOICE' && renderChoice()}
-                {view === 'TOKEN' && renderTokenInput()}
-                {view === 'PIN' && renderPinPad()}
+                <ScrollView
+                    className="flex-1"
+                    contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                >
+                    {view === 'CHOICE' && renderChoice()}
+                    {view === 'TOKEN' && renderTokenInput()}
+                    {view === 'PIN' && renderPinPad()}
+                </ScrollView>
 
                 {loading && view === 'CHOICE' && (
                     <View className="absolute inset-0 bg-black/50 items-center justify-center">

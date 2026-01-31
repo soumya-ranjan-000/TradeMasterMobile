@@ -238,9 +238,9 @@ const PortfolioScreen = () => {
             <View className="flex-row gap-3">
                 <TouchableOpacity
                     onPress={() => quickExit(item.symbol, item.current_ltp || item.average_price, item.position_id)}
-                    className="flex-1 bg-error/10 border border-error/20 py-3 rounded-xl items-center"
+                    className="flex-1 bg-error/10 border border-error/20 py-3 rounded-xl items-center justify-center"
                 >
-                    <Text className="text-error font-black text-xs uppercase tracking-widest">Quick Exit</Text>
+                    <Text className="text-error font-black text-xs uppercase tracking-wider" numberOfLines={1}>Quick Exit</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                     onPress={() => {
@@ -249,9 +249,9 @@ const PortfolioScreen = () => {
                         setNewTarget(item.target?.toString() || '');
                         setNewTrailingSL(item.trailing_sl?.toString() || '');
                     }}
-                    className="flex-1 bg-surface border border-border py-3 rounded-xl items-center"
+                    className="flex-1 bg-surface border border-border py-3 rounded-xl items-center justify-center"
                 >
-                    <Text className="text-text-primary font-bold text-xs uppercase tracking-widest">Modify</Text>
+                    <Text className="text-text-primary font-bold text-xs uppercase tracking-wider" numberOfLines={1}>Modify</Text>
                 </TouchableOpacity>
             </View>
 
@@ -426,11 +426,18 @@ const PortfolioScreen = () => {
                         />
                     }
                     ListEmptyComponent={
-                        <View className="items-center mt-20 opacity-50 px-10">
-                            <Layers size={48} color="#2A2E39" />
-                            <Text className="text-text-muted text-lg font-bold mt-4">No Open Positions</Text>
-                            <Text className="text-text-muted text-center mt-2">You don't have any active trades currently.</Text>
-                        </View>
+                        loading ? (
+                            <View className="items-center mt-20">
+                                <ActivityIndicator size="large" color="#00E0A1" />
+                                <Text className="text-text-muted font-bold mt-4">Loading Positions...</Text>
+                            </View>
+                        ) : (
+                            <View className="items-center mt-20 opacity-50 px-10">
+                                <Layers size={48} color="#2A2E39" />
+                                <Text className="text-text-muted text-lg font-bold mt-4">No Open Positions</Text>
+                                <Text className="text-text-muted text-center mt-2">You don't have any active trades currently.</Text>
+                            </View>
+                        )
                     }
                 />
             ) : (
@@ -448,11 +455,18 @@ const PortfolioScreen = () => {
                         />
                     }
                     ListEmptyComponent={
-                        <View className="items-center mt-20 opacity-50 px-10">
-                            <History size={48} color="#2A2E39" />
-                            <Text className="text-text-muted text-lg font-bold mt-4">No Trade History</Text>
-                            <Text className="text-text-muted text-center mt-2">Your completed trades will appear here.</Text>
-                        </View>
+                        loading ? (
+                            <View className="items-center mt-20">
+                                <ActivityIndicator size="large" color="#00E0A1" />
+                                <Text className="text-text-muted font-bold mt-4">Loading Order History...</Text>
+                            </View>
+                        ) : (
+                            <View className="items-center mt-20 opacity-50 px-10">
+                                <History size={48} color="#2A2E39" />
+                                <Text className="text-text-muted text-lg font-bold mt-4">No Trade History</Text>
+                                <Text className="text-text-muted text-center mt-2">Your completed trades will appear here.</Text>
+                            </View>
+                        )
                     }
                 />
             )}
@@ -465,10 +479,11 @@ const PortfolioScreen = () => {
             >
                 <View className="flex-1 justify-end bg-black/60">
                     <KeyboardAvoidingView
-                        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                        className="bg-surface rounded-t-[40px] border-t border-border p-8"
+                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                        className="bg-surface rounded-t-[40px] border-t border-border overflow-hidden"
+                        style={{ maxHeight: '90%' }}
                     >
-                        <View className="flex-row justify-between items-center mb-8">
+                        <View className="flex-row justify-between items-center p-8 pb-4">
                             <View>
                                 <Text className="text-text-primary text-2xl font-black">Modify Protection</Text>
                                 <Text className="text-text-muted text-sm font-bold">{modifyingPos?.symbol}</Text>
@@ -481,109 +496,115 @@ const PortfolioScreen = () => {
                             </TouchableOpacity>
                         </View>
 
-                        <View className="gap-8">
-                            <View>
-                                <View className="flex-row items-center mb-4">
-                                    <ShieldCheck size={18} color="#EF4444" />
-                                    <Text className="text-text-primary font-bold ml-2 text-base">Stop Loss</Text>
-                                </View>
-                                <TextInput
-                                    className="bg-background border border-border p-5 rounded-2xl text-text-primary font-bold text-lg"
-                                    placeholder="Enter Price"
-                                    placeholderTextColor="#6B7280"
-                                    keyboardType="numeric"
-                                    value={newSL}
-                                    onChangeText={setNewSL}
-                                />
-                                <View className="flex-row gap-2 mt-3">
-                                    {[1, 2, 5].map(p => (
-                                        <TouchableOpacity
-                                            key={p}
-                                            onPress={() => {
-                                                const avg = modifyingPos.average_price;
-                                                const val = modifyingPos.quantity > 0 ? avg * (1 - p / 100) : avg * (1 + p / 100);
-                                                setNewSL(val.toFixed(2));
-                                            }}
-                                            className="px-4 py-2 bg-error/10 border border-error/20 rounded-xl"
-                                        >
-                                            <Text className="text-error text-xs font-bold">-{p}%</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            </View>
-
-                            <View>
-                                <View className="flex-row items-center mb-4">
-                                    <Target size={18} color="#10B981" />
-                                    <Text className="text-text-primary font-bold ml-2 text-base">Target Price</Text>
-                                </View>
-                                <TextInput
-                                    className="bg-background border border-border p-5 rounded-2xl text-text-primary font-bold text-lg"
-                                    placeholder="Enter Price"
-                                    placeholderTextColor="#6B7280"
-                                    keyboardType="numeric"
-                                    value={newTarget}
-                                    onChangeText={setNewTarget}
-                                />
-                                <View className="flex-row gap-2 mt-3">
-                                    {[2, 5, 10].map(p => (
-                                        <TouchableOpacity
-                                            key={p}
-                                            onPress={() => {
-                                                const avg = modifyingPos.average_price;
-                                                const val = modifyingPos.quantity > 0 ? avg * (1 + p / 100) : avg * (1 - p / 100);
-                                                setNewTarget(val.toFixed(2));
-                                            }}
-                                            className="px-4 py-2 bg-success/10 border border-success/20 rounded-xl"
-                                        >
-                                            <Text className="text-success text-xs font-bold">+{p}%</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            </View>
-
-                            <View>
-                                <View className="flex-row items-center mb-4">
-                                    <History size={18} color="#00E0A1" />
-                                    <Text className="text-text-primary font-bold ml-2 text-base">Trailing SL (Distance)</Text>
-                                </View>
-                                <TextInput
-                                    className="bg-background border border-border p-5 rounded-2xl text-text-primary font-bold text-lg"
-                                    placeholder="Enter Distance"
-                                    placeholderTextColor="#6B7280"
-                                    keyboardType="numeric"
-                                    value={newTrailingSL}
-                                    onChangeText={setNewTrailingSL}
-                                />
-                                <View className="flex-row gap-2 mt-3">
-                                    {[0.5, 1, 2].map(p => (
-                                        <TouchableOpacity
-                                            key={p}
-                                            onPress={() => {
-                                                const avg = modifyingPos.average_price;
-                                                const val = avg * (p / 100);
-                                                setNewTrailingSL(val.toFixed(2));
-                                            }}
-                                            className="px-4 py-2 bg-primary/10 border border-primary/20 rounded-xl"
-                                        >
-                                            <Text className="text-primary text-xs font-bold">{p}% Dist</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            </View>
-                        </View>
-
-                        <TouchableOpacity
-                            disabled={loading}
-                            onPress={updatePositionRisk}
-                            className={`py-5 rounded-2xl items-center mt-10 mb-4 shadow-xl ${loading ? 'bg-primary/50' : 'bg-primary shadow-primary/20'}`}
+                        <ScrollView
+                            className="px-8"
+                            showsVerticalScrollIndicator={false}
+                            contentContainerStyle={{ paddingBottom: 40 }}
                         >
-                            {loading ? (
-                                <ActivityIndicator color="white" />
-                            ) : (
-                                <Text className="text-white font-black text-lg uppercase tracking-tight">Update Protection</Text>
-                            )}
-                        </TouchableOpacity>
+                            <View className="gap-8">
+                                <View>
+                                    <View className="flex-row items-center mb-4">
+                                        <ShieldCheck size={18} color="#EF4444" />
+                                        <Text className="text-text-primary font-bold ml-2 text-base">Stop Loss</Text>
+                                    </View>
+                                    <TextInput
+                                        className="bg-background border border-border p-5 rounded-2xl text-text-primary font-bold text-lg"
+                                        placeholder="Enter Price"
+                                        placeholderTextColor="#6B7280"
+                                        keyboardType="numeric"
+                                        value={newSL}
+                                        onChangeText={setNewSL}
+                                    />
+                                    <View className="flex-row gap-2 mt-3">
+                                        {[1, 2, 5].map(p => (
+                                            <TouchableOpacity
+                                                key={p}
+                                                onPress={() => {
+                                                    const avg = modifyingPos.average_price;
+                                                    const val = modifyingPos.quantity > 0 ? avg * (1 - p / 100) : avg * (1 + p / 100);
+                                                    setNewSL(val.toFixed(2));
+                                                }}
+                                                className="px-4 py-2 bg-error/10 border border-error/20 rounded-xl"
+                                            >
+                                                <Text className="text-error text-xs font-bold">-{p}%</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
+
+                                <View>
+                                    <View className="flex-row items-center mb-4">
+                                        <Target size={18} color="#10B981" />
+                                        <Text className="text-text-primary font-bold ml-2 text-base">Target Price</Text>
+                                    </View>
+                                    <TextInput
+                                        className="bg-background border border-border p-5 rounded-2xl text-text-primary font-bold text-lg"
+                                        placeholder="Enter Price"
+                                        placeholderTextColor="#6B7280"
+                                        keyboardType="numeric"
+                                        value={newTarget}
+                                        onChangeText={setNewTarget}
+                                    />
+                                    <View className="flex-row gap-2 mt-3">
+                                        {[2, 5, 10].map(p => (
+                                            <TouchableOpacity
+                                                key={p}
+                                                onPress={() => {
+                                                    const avg = modifyingPos.average_price;
+                                                    const val = modifyingPos.quantity > 0 ? avg * (1 + p / 100) : avg * (1 - p / 100);
+                                                    setNewTarget(val.toFixed(2));
+                                                }}
+                                                className="px-4 py-2 bg-success/10 border border-success/20 rounded-xl"
+                                            >
+                                                <Text className="text-success text-xs font-bold">+{p}%</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
+
+                                <View>
+                                    <View className="flex-row items-center mb-4">
+                                        <History size={18} color="#00E0A1" />
+                                        <Text className="text-text-primary font-bold ml-2 text-base">Trailing SL (Distance)</Text>
+                                    </View>
+                                    <TextInput
+                                        className="bg-background border border-border p-5 rounded-2xl text-text-primary font-bold text-lg"
+                                        placeholder="Enter Distance"
+                                        placeholderTextColor="#6B7280"
+                                        keyboardType="numeric"
+                                        value={newTrailingSL}
+                                        onChangeText={setNewTrailingSL}
+                                    />
+                                    <View className="flex-row gap-2 mt-3">
+                                        {[0.5, 1, 2].map(p => (
+                                            <TouchableOpacity
+                                                key={p}
+                                                onPress={() => {
+                                                    const avg = modifyingPos.average_price;
+                                                    const val = avg * (p / 100);
+                                                    setNewTrailingSL(val.toFixed(2));
+                                                }}
+                                                className="px-4 py-2 bg-primary/10 border border-primary/20 rounded-xl"
+                                            >
+                                                <Text className="text-primary text-xs font-bold">{p}% Dist</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
+                            </View>
+
+                            <TouchableOpacity
+                                disabled={loading}
+                                onPress={updatePositionRisk}
+                                className={`py-5 rounded-2xl items-center mt-10 mb-4 shadow-xl ${loading ? 'bg-primary/50' : 'bg-primary shadow-primary/20'}`}
+                            >
+                                {loading ? (
+                                    <ActivityIndicator color="white" />
+                                ) : (
+                                    <Text className="text-white font-black text-lg uppercase tracking-tight">Update Protection</Text>
+                                )}
+                            </TouchableOpacity>
+                        </ScrollView>
                     </KeyboardAvoidingView>
                 </View>
             </Modal>

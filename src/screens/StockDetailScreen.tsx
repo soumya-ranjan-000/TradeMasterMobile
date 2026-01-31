@@ -451,15 +451,15 @@ const StockDetailScreen = () => {
                         <View className="flex-row gap-3">
                             <TouchableOpacity
                                 onPress={() => navigation.navigate('Trade', { symbol, side: 'SELL' })}
-                                className="flex-1 bg-error/10 border border-error/30 py-4 rounded-3xl items-center active:scale-[0.96]"
+                                className="flex-1 bg-error/10 border border-error/30 py-4 rounded-3xl items-center justify-center active:scale-[0.96]"
                             >
-                                <Text className="text-error font-black text-sm tracking-widest uppercase">Short</Text>
+                                <Text className="text-error font-black text-sm tracking-wider uppercase" numberOfLines={1}>Short</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 onPress={() => navigation.navigate('Trade', { symbol, side: 'BUY' })}
-                                className="flex-1 bg-success/10 border border-success/30 py-4 rounded-3xl items-center active:scale-[0.96]"
+                                className="flex-1 bg-success/10 border border-success/30 py-4 rounded-3xl items-center justify-center active:scale-[0.96]"
                             >
-                                <Text className="text-success font-black text-sm tracking-widest uppercase">Buy</Text>
+                                <Text className="text-success font-black text-sm tracking-wider uppercase" numberOfLines={1}>Buy</Text>
                             </TouchableOpacity>
                         </View>
                     </View>

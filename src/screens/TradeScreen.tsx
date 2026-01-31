@@ -20,11 +20,9 @@ const TradeScreen = () => {
 
     // Safety check for route params
     const params = route.params as { symbol: string, side: 'BUY' | 'SELL' } | undefined;
-    const symbol = params?.symbol || 'UNKNOWN';
-    const initialSide = params?.side || 'BUY';
 
     const [userId, setUserId] = useState<string>(TEST_USER_ID);
-    const [side, setSide] = useState<'BUY' | 'SELL'>(initialSide);
+    const [side, setSide] = useState<'BUY' | 'SELL'>(params?.side || 'BUY');
     const [quantity, setQuantity] = useState('1');
     const [livePrice, setLivePrice] = useState<number | null>(null);
     const [stopLoss, setStopLoss] = useState('');
@@ -32,6 +30,19 @@ const TradeScreen = () => {
     const [trailingStopLoss, setTrailingStopLoss] = useState('');
     const [loading, setLoading] = useState(false);
     const [showRiskPanel, setShowRiskPanel] = useState(false);
+
+    // Context Awareness: Sync state with navigation params
+    React.useEffect(() => {
+        if (params?.side) setSide(params.side);
+        // Reset form when entering with new params or different symbol
+        setQuantity('1');
+        setStopLoss('');
+        setTarget('');
+        setTrailingStopLoss('');
+        setShowRiskPanel(false);
+    }, [params?.symbol, params?.side]);
+
+    const symbol = params?.symbol || 'UNKNOWN';
 
     const fetchLivePrice = async () => {
         try {
@@ -115,7 +126,10 @@ const TradeScreen = () => {
     const isBuy = side === 'BUY';
 
     return (
-        <View className="flex-1 bg-background">
+        <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            className="flex-1 bg-background"
+        >
             <StatusBar barStyle="light-content" />
 
             {/* Header */}
@@ -126,7 +140,11 @@ const TradeScreen = () => {
                 <Text className="text-xl font-bold text-text-primary">New Order</Text>
             </View>
 
-            <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+            <ScrollView
+                className="flex-1"
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+            >
                 {/* Side Selector */}
                 <View className="px-6 mt-4">
                     <View className="bg-surface p-1.5 rounded-2xl flex-row border border-border">
@@ -179,7 +197,10 @@ const TradeScreen = () => {
                             {[1, 10, 50, 100].map((val) => (
                                 <TouchableOpacity
                                     key={val}
-                                    onPress={() => setQuantity(val.toString())}
+                                    onPress={() => {
+                                        const current = parseInt(quantity) || 0;
+                                        setQuantity((current + val).toString());
+                                    }}
                                     className="px-4 py-2 bg-background border border-border rounded-xl"
                                 >
                                     <Text className="text-text-primary font-bold">+{val}</Text>
@@ -332,7 +353,7 @@ const TradeScreen = () => {
                     )}
                 </TouchableOpacity>
             </View>
-        </View>
+        </KeyboardAvoidingView>
     );
 };
 
