@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, FlatList, TouchableOpacity, ActivityIndicator, ScrollView, RefreshControl, StatusBar, Pressable } from 'react-native';
+import { View, Text, TextInput, FlatList, TouchableOpacity, ActivityIndicator, ScrollView, RefreshControl, StatusBar, Pressable, Platform } from 'react-native';
 import { Plus, Search, Bell, Trash2, X, ChevronRight } from 'lucide-react-native';
 import { API_URL, BREEZE_API_URL, TEST_USER_ID } from '../config';
 import { useNavigation, CompositeNavigationProp, useIsFocused } from '@react-navigation/native';
@@ -147,27 +147,45 @@ const DashboardScreen = () => {
     };
 
     const deleteWatchlist = async (watchlistId: string, name: string) => {
-        Alert.alert(
-            "Delete Watchlist",
-            `Are you sure you want to delete "${name}"?`,
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Delete",
-                    style: "destructive",
-                    onPress: async () => {
-                        try {
-                            const res = await fetch(`${API_URL}/watchlists/${userId}/${watchlistId}`, { method: 'DELETE' });
-                            if (res.ok) {
-                                fetchWatchlists(userId);
-                            }
-                        } catch (error) {
-                            console.error("Failed to delete watchlist:", error);
-                        }
-                    }
+        console.log("Attempting to delete watchlist:", watchlistId, name);
+        if (!watchlistId) {
+            console.error("Watchlist ID is missing");
+            return;
+        }
+
+        const runDelete = async () => {
+            try {
+                console.log(`Sending DELETE request for watchlist ${watchlistId}`);
+                const res = await fetch(`${API_URL}/watchlists/${userId}/${watchlistId}`, {
+                    method: 'DELETE',
+                    headers: { 'Accept': 'application/json' }
+                });
+                console.log("Delete response status:", res.status);
+                if (res.ok) {
+                    fetchWatchlists(userId);
+                } else {
+                    const err = await res.json();
+                    console.error("Delete failed:", err);
                 }
-            ]
-        );
+            } catch (error) {
+                console.error("Failed to delete watchlist:", error);
+            }
+        };
+
+        if (Platform.OS === 'web') {
+            if (window.confirm(`Are you sure you want to delete "${name}"?`)) {
+                runDelete();
+            }
+        } else {
+            Alert.alert(
+                "Delete Watchlist",
+                `Are you sure you want to delete "${name}"?`,
+                [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "Delete", style: "destructive", onPress: runDelete }
+                ]
+            );
+        }
     };
 
     const removeFromWatchlist = async (watchlistId: string, symbol: string) => {
@@ -328,75 +346,93 @@ const DashboardScreen = () => {
                 {activeCategory === 'Watchlists' && (
                     <View className="mt-6 px-4 pb-20">
                         {watchLoading && watchlists.length === 0 ? (
-                            <ActivityIndicator size="large" color="#2563eb" className="mt-10" />
-                        ) : watchlists.length > 0 ? watchlists.map((wl, i) => (
-                            <View key={wl._id} className="mb-8">
-                                <View className="flex-row justify-between items-center mb-4 px-2">
-                                    <View>
-                                        <Text className="text-lg font-black text-text-primary">{wl.name}</Text>
-                                        <Text className="text-text-muted text-xs font-bold uppercase tracking-widest">{wl.symbols.length} Stocks</Text>
-                                    </View>
-                                    <TouchableOpacity
-                                        onPress={() => deleteWatchlist(wl._id, wl.name)}
-                                        className="w-8 h-8 rounded-full bg-error/10 items-center justify-center"
-                                    >
-                                        <Trash2 size={16} color="#EF4444" />
-                                    </TouchableOpacity>
-                                </View>
-
-                                {wl.symbols.length > 0 ? wl.symbols.map((sym: string, j: number) => {
-                                    const quote = watchlistQuotes[sym] || watchlistQuotes[sym + '.NS'];
-                                    return (
-                                        <Pressable
-                                            key={sym}
-                                            onPress={() => navigation.navigate('StockDetail', { symbol: sym })}
-                                            className="bg-surface p-6 rounded-[32px] border border-border mb-4 flex-row items-center justify-between active:scale-95 transition-transform"
-                                        >
-                                            <View className="flex-row items-center">
-                                                <View className={`w-14 h-14 rounded-2xl items-center justify-center mr-4 ${quote?.change >= 0 || !quote ? 'bg-success/10' : 'bg-error/10'}`}>
-                                                    <Text className={`font-black text-xl ${quote?.change >= 0 || !quote ? 'text-success' : 'text-error'}`}>{sym[0]}</Text>
-                                                </View>
-                                                <View>
-                                                    <Text className="text-text-primary font-black text-lg tracking-tight">{sym.split('.')[0]}</Text>
-                                                    <View className="flex-row items-center mt-1">
-                                                        <Text className="text-text-secondary text-[10px] font-bold uppercase tracking-tight" numberOfLines={1} style={{ maxWidth: 80 }}>
-                                                            {quote?.change !== undefined ? `NSE • ` : 'NSE • EQUITY'}
-                                                        </Text>
-                                                        {quote?.change !== undefined && (
-                                                            <Text className={`text-xs font-bold ${quote.change >= 0 ? 'text-success' : 'text-error'}`}>
-                                                                {quote.change >= 0 ? '+' : ''}{quote.change.toFixed(2)}%
-                                                            </Text>
-                                                        )}
-                                                    </View>
-                                                </View>
-                                            </View>
-                                            <View className="flex-row items-center">
-                                                <View className="items-end mr-4">
-                                                    <Text className="text-text-primary font-black text-lg">
-                                                        {quote?.price ? `₹${quote.price.toFixed(2)}` : '---'}
-                                                    </Text>
-                                                    <View className="flex-row gap-0.5 mt-2 items-end h-4">
-                                                        {[1, 2, 3, 4, 5].map((s) => (
-                                                            <View key={s} className={`w-0.5 rounded-full ${quote?.change >= 0 || !quote ? 'bg-success' : 'bg-error'}`} style={{ height: Math.abs(Math.sin(s + j)) * 10 + 3, opacity: 0.3 + (s / 10) }} />
-                                                        ))}
-                                                    </View>
-                                                </View>
-                                                <TouchableOpacity
-                                                    onPress={() => removeFromWatchlist(wl._id, sym)}
-                                                    className="w-8 h-8 rounded-full bg-surface border border-border items-center justify-center"
-                                                >
-                                                    <X size={14} color="#6B7280" />
-                                                </TouchableOpacity>
-                                            </View>
-                                        </Pressable>
-                                    );
-                                }) : (
-                                    <View className="bg-surface/30 p-8 rounded-[28px] border border-dashed border-border items-center">
-                                        <Text className="text-text-muted font-bold text-sm">No stocks in this watchlist</Text>
+                            <View className="items-center py-20">
+                                <ActivityIndicator size="large" color="#2563eb" />
+                                <Text className="text-text-muted font-bold mt-4">Fetching your watchlists...</Text>
+                            </View>
+                        ) : watchlists.length > 0 ? (
+                            <>
+                                {watchLoading && (
+                                    <View className="flex-row items-center justify-center mb-4">
+                                        <ActivityIndicator size="small" color="#2563eb" className="mr-2" />
+                                        <Text className="text-primary text-xs font-bold">Updating prices...</Text>
                                     </View>
                                 )}
-                            </View>
-                        )) : (
+                                {watchlists.map((wl, i) => (
+                                    <View key={wl._id || wl.id} className="mb-8">
+                                        <View className="flex-row justify-between items-center mb-4 px-2">
+                                            <View>
+                                                <Text className="text-lg font-black text-text-primary">{wl.name}</Text>
+                                                <Text className="text-text-muted text-xs font-bold uppercase tracking-widest">{wl.symbols.length} Stocks</Text>
+                                            </View>
+                                            <TouchableOpacity
+                                                onPress={() => {
+                                                    console.log("Trash icon pressed for:", wl._id || wl.id);
+                                                    deleteWatchlist(wl._id || wl.id, wl.name);
+                                                }}
+                                                hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                                                className="w-10 h-10 rounded-full bg-error/10 items-center justify-center active:scale-90"
+                                            >
+                                                <Trash2 size={18} color="#EF4444" />
+                                            </TouchableOpacity>
+                                        </View>
+
+                                        {wl.symbols.length > 0 ? wl.symbols.map((sym: string, j: number) => {
+                                            const quote = watchlistQuotes[sym] || watchlistQuotes[sym + '.NS'];
+                                            return (
+                                                <Pressable
+                                                    key={sym}
+                                                    onPress={() => navigation.navigate('StockDetail', { symbol: sym })}
+                                                    className="bg-surface p-6 rounded-[32px] border border-border mb-4 flex-row items-center justify-between active:scale-95 transition-transform"
+                                                >
+                                                    <View className="flex-row items-center">
+                                                        <View className={`w-14 h-14 rounded-2xl items-center justify-center mr-4 ${quote?.change >= 0 || !quote ? 'bg-success/10' : 'bg-error/10'}`}>
+                                                            <Text className={`font-black text-xl ${quote?.change >= 0 || !quote ? 'text-success' : 'text-error'}`}>{sym[0]}</Text>
+                                                        </View>
+                                                        <View>
+                                                            <Text className="text-text-primary font-black text-lg tracking-tight">{sym.split('.')[0]}</Text>
+                                                            <View className="flex-row items-center mt-1">
+                                                                <Text className="text-text-secondary text-[10px] font-bold uppercase tracking-tight" numberOfLines={1} style={{ maxWidth: 80 }}>
+                                                                    {quote?.change !== undefined ? `NSE • ` : 'NSE • EQUITY'}
+                                                                </Text>
+                                                                {quote?.change !== undefined && (
+                                                                    <Text className={`text-xs font-bold ${quote.change >= 0 ? 'text-success' : 'text-error'}`}>
+                                                                        {quote.change >= 0 ? '+' : ''}{quote.change.toFixed(2)}%
+                                                                    </Text>
+                                                                )}
+                                                            </View>
+                                                        </View>
+                                                    </View>
+                                                    <View className="flex-row items-center">
+                                                        <View className="items-end mr-4">
+                                                            <Text className="text-text-primary font-black text-lg">
+                                                                {quote?.price ? `₹${quote.price.toFixed(2)}` : '---'}
+                                                            </Text>
+                                                            <View className="flex-row gap-0.5 mt-2 items-end h-4">
+                                                                {[1, 2, 3, 4, 5].map((s) => (
+                                                                    <View key={s} className={`w-0.5 rounded-full ${quote?.change >= 0 || !quote ? 'bg-success' : 'bg-error'}`} style={{ height: Math.abs(Math.sin(s + j)) * 10 + 3, opacity: 0.3 + (s / 10) }} />
+                                                                ))}
+                                                            </View>
+                                                        </View>
+                                                        <TouchableOpacity
+                                                            onPress={() => removeFromWatchlist(wl._id || wl.id, sym)}
+                                                            hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                                                            className="w-8 h-8 rounded-full bg-surface border border-border items-center justify-center active:scale-90"
+                                                        >
+                                                            <X size={14} color="#6B7280" />
+                                                        </TouchableOpacity>
+                                                    </View>
+                                                </Pressable>
+                                            );
+                                        }) : (
+                                            <View className="bg-surface/30 p-8 rounded-[28px] border border-dashed border-border items-center">
+                                                <Text className="text-text-muted font-bold text-sm">No stocks in this watchlist</Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                ))}
+                            </>
+                        ) : (
                             <View className="items-center py-20 opacity-50">
                                 <Text className="text-text-muted font-bold mb-4">No watchlists yet</Text>
                                 <TouchableOpacity

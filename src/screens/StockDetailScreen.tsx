@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, Dimensions, Modal, TextInput, Alert, FlatList } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Pressable, Modal, TextInput, FlatList, Alert, Platform, Dimensions, StatusBar } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/RootNavigator';
@@ -63,7 +63,7 @@ const StockDetailScreen = () => {
                 case '1W': period = '6mo'; intervalValue = '1wk'; break;
             }
 
-            const response = await fetch(`${BREEZE_API_URL}/api/history?symbol=${symbol}&period=${period}&interval=${intervalValue}`);
+            const response = await fetch(`${BREEZE_API_URL} /api/history ? symbol = ${symbol}& period=${period}& interval=${intervalValue} `);
             const data = await response.json();
             // We only show the last 60 candles to keep it clean, but allow scrolling
             const plotData = Array.isArray(data) ? data : [];
@@ -88,7 +88,7 @@ const StockDetailScreen = () => {
             fetchStockData();
 
             try {
-                const msRes = await fetch(`${BREEZE_API_URL}/api/market-status`);
+                const msRes = await fetch(`${BREEZE_API_URL} /api/market - status`);
                 const msData = await msRes.json();
 
                 // Only poll if market is open
@@ -110,7 +110,7 @@ const StockDetailScreen = () => {
             const savedId = await AsyncStorage.getItem('USER_ID');
             const uid = savedId || TEST_USER_ID;
             setUserId(uid);
-            const response = await fetch(`${API_URL}/watchlists/${uid}`);
+            const response = await fetch(`${API_URL} /watchlists/${uid} `);
             const data = await response.json();
             setUserWatchlists(Array.isArray(data) ? data : []);
         } catch (error) {
@@ -123,7 +123,7 @@ const StockDetailScreen = () => {
     const addToWatchlist = async (watchlistId: string) => {
         try {
             setWatchLoading(true);
-            const response = await fetch(`${API_URL}/watchlists/add`, {
+            const response = await fetch(`${API_URL} /watchlists/add`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -133,11 +133,20 @@ const StockDetailScreen = () => {
                 })
             });
             if (response.ok) {
-                Alert.alert("Success", `Added ${symbol} to watchlist`);
+                if (Platform.OS === 'web') {
+                    alert(`Success: Added ${symbol} to watchlist`);
+                } else {
+                    Alert.alert("Success", `Added ${symbol} to watchlist`);
+                }
                 setIsWatchlistModalVisible(false);
             } else {
                 const err = await response.json();
-                Alert.alert("Error", err.detail || "Failed to add to watchlist");
+                const msg = err.detail || "Failed to add to watchlist";
+                if (Platform.OS === 'web') {
+                    alert(`Error: ${msg} `);
+                } else {
+                    Alert.alert("Error", msg);
+                }
             }
         } catch (error) {
             console.error("Failed to add to watchlist:", error);
@@ -148,7 +157,11 @@ const StockDetailScreen = () => {
 
     const createWatchlist = async () => {
         if (!newWatchlistName.trim()) {
-            Alert.alert("Error", "Please enter a name for the watchlist");
+            if (Platform.OS === 'web') {
+                alert("Error: Please enter a name for the watchlist");
+            } else {
+                Alert.alert("Error", "Please enter a name for the watchlist");
+            }
             return;
         }
         try {
@@ -515,7 +528,7 @@ const StockDetailScreen = () => {
                                 ) : (
                                     <FlatList
                                         data={userWatchlists}
-                                        keyExtractor={(item) => item._id}
+                                        keyExtractor={(item) => item._id || item.id}
                                         ListHeaderComponent={
                                             <TouchableOpacity
                                                 onPress={() => setIsCreatingNew(true)}
@@ -527,7 +540,7 @@ const StockDetailScreen = () => {
                                         }
                                         renderItem={({ item }) => (
                                             <TouchableOpacity
-                                                onPress={() => addToWatchlist(item._id)}
+                                                onPress={() => addToWatchlist(item._id || item.id)}
                                                 className="flex-row items-center justify-between p-5 bg-background border border-border rounded-2xl mb-3"
                                             >
                                                 <View>
