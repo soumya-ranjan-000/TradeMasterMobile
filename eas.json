@@ -15,11 +15,19 @@
             "distribution": "internal",
             "android": {
                 "buildType": "apk"
+            },
+            "env": {
+                "EXPO_PUBLIC_PAPER_BACKEND_URL": "https://trademaster-paper-trading-service.onrender.com/api/v1",
+                "EXPO_PUBLIC_BREEZE_API_URL": "https://icici-dirct-breeze-api-interface.onrender.com"
             }
         },
         "production": {
             "android": {
                 "buildType": "app-bundle"
+            },
+            "env": {
+                "EXPO_PUBLIC_PAPER_BACKEND_URL": "https://trademaster-paper-trading-service.onrender.com/api/v1",
+                "EXPO_PUBLIC_BREEZE_API_URL": "https://icici-dirct-breeze-api-interface.onrender.com"
             }
         }
     },
