@@ -2,8 +2,8 @@ import { Platform } from 'react-native';
 
 const getBaseUrl = () => {
     // Priority: Env variable > Platform-specific dev default
-    if (process.env.EXPO_PUBLIC_API_URL) {
-        return process.env.EXPO_PUBLIC_API_URL;
+    if (process.env.EXPO_PUBLIC_PAPER_BACKEND_URL) {
+        return process.env.EXPO_PUBLIC_PAPER_BACKEND_URL;
     }
 
     if (Platform.OS === 'android') {

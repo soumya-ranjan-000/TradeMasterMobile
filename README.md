@@ -55,14 +55,11 @@ If you are using a physical phone, you need to point the app to your computer's 
 1. Find your local IP address (e.g., `192.168.1.5`):
    - **Windows**: Run `ipconfig` in Command Prompt.
    - **Mac/Linux**: Run `ifconfig` or `ip addr`.
-2. Open `src/config.ts` in the `TradeMasterMobile` directory.
-3. Update the `getBaseUrl` function to use your IP:
+2. Open the `.env` file in the `TradeMasterMobile` directory.
+3. Update `EXPO_PUBLIC_PAPER_BACKEND_URL` with your IP:
 
-   ```typescript
-   const getBaseUrl = () => {
-       // Replace 'your-ip' with your actual local IP address
-       return 'http://your-ip:8001/api/v1'; 
-   };
+   ```bash
+   EXPO_PUBLIC_PAPER_BACKEND_URL=http://your-ip:8001/api/v1
    ```
 
 ## ✨ Features
