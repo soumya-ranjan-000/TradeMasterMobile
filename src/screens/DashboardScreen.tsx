@@ -271,12 +271,20 @@ const DashboardScreen = () => {
                             </Text>
                         </View>
                     )}
-                    <TouchableOpacity
-                        className="bg-surface w-12 h-12 items-center justify-center rounded-2xl border border-border shadow-sm active:scale-95"
-                        onPress={() => navigation.navigate('Watchlist')}
-                    >
-                        <Search size={22} color="#E1E7ED" />
-                    </TouchableOpacity>
+                    <View className="flex-row items-center gap-3">
+                        <TouchableOpacity
+                            className="bg-surface w-12 h-12 items-center justify-center rounded-2xl border border-border shadow-sm active:scale-95"
+                            onPress={() => navigation.navigate('Alerts')}
+                        >
+                            <Bell size={22} color="#00E0A1" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            className="bg-surface w-12 h-12 items-center justify-center rounded-2xl border border-border shadow-sm active:scale-95"
+                            onPress={() => navigation.navigate('Watchlist')}
+                        >
+                            <Search size={22} color="#E1E7ED" />
+                        </TouchableOpacity>
+                    </View>
                 </View>
             </View>
             {/* Category Selector (Trending, News, Top Market) */}

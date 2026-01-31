@@ -6,7 +6,8 @@ import { RootStackParamList } from '../navigation/RootNavigator';
 import { ChevronLeft, Share2, Star, TrendingUp, Plus, X, Search, ListPlus } from 'lucide-react-native';
 import { BREEZE_API_URL, API_URL, TEST_USER_ID } from '../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Svg, { Rect, Line, Defs, LinearGradient as SVGGradiant, Stop, Text as SvgText } from 'react-native-svg';
+import Svg, { Rect, Line, Defs, LinearGradient as SVGGradiant, Stop, Text as SvgText, Path, Polyline, G } from 'react-native-svg';
+import { Activity, Settings2, PencilLine, BarChart3, Calendar } from 'lucide-react-native';
 
 type StockDetailScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'StockDetail'>;
 
@@ -30,9 +31,16 @@ const StockDetailScreen = () => {
     const [newWatchlistName, setNewWatchlistName] = useState('');
     const [isCreatingNew, setIsCreatingNew] = useState(false);
     const [watchLoading, setWatchLoading] = useState(false);
+    const [showRangePicker, setShowRangePicker] = useState(false);
+    const [chartPeriod, setChartPeriod] = useState('1mo');
 
     // Interaction State
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+    const [activeIndicators, setActiveIndicators] = useState<string[]>([]);
+    const [showIndicatorMenu, setShowIndicatorMenu] = useState(false);
+    const [isDrawingMode, setIsDrawingMode] = useState(false);
+    const [drawings, setDrawings] = useState<any[]>([]);
+    const [activeDrawing, setActiveDrawing] = useState<any>(null);
     const scrollRef = useRef<ScrollView>(null);
 
     const params = route.params as { symbol: string } | undefined;
@@ -52,24 +60,33 @@ const StockDetailScreen = () => {
     const fetchHistory = async () => {
         try {
             setLoading(true);
-            let period = '1d';
+            let period = chartPeriod;
             let intervalValue = '5m';
 
-            switch (chartInterval) {
-                case '5M': period = '1d'; intervalValue = '5m'; break;
-                case '15M': period = '1d'; intervalValue = '15m'; break;
-                case '1H': period = '5d'; intervalValue = '1h'; break;
-                case '1D': period = '1mo'; intervalValue = '1d'; break;
-                case '1W': period = '6mo'; intervalValue = '1wk'; break;
+            if (chartPeriod === 'custom') {
+                switch (chartInterval) {
+                    case '5M': period = '1d'; intervalValue = '5m'; break;
+                    case '15M': period = '1d'; intervalValue = '15m'; break;
+                    case '1H': period = '5d'; intervalValue = '1h'; break;
+                    case '1D': period = '1mo'; intervalValue = '1d'; break;
+                    case '1W': period = '6mo'; intervalValue = '1wk'; break;
+                }
+            } else {
+                // If period is set, choose reasonable interval
+                switch (chartPeriod) {
+                    case '1d': intervalValue = '5m'; break;
+                    case '5d': intervalValue = '1h'; break;
+                    case '1mo': intervalValue = '1d'; break;
+                    case '3mo': intervalValue = '1d'; break;
+                    case '1y': intervalValue = '1wk'; break;
+                    default: intervalValue = '1d';
+                }
             }
 
             const response = await fetch(`${BREEZE_API_URL}/api/history?symbol=${symbol}&period=${period}&interval=${intervalValue}`);
             const data = await response.json();
-            // We only show the last 60 candles to keep it clean, but allow scrolling
-            const plotData = Array.isArray(data) ? data : [];
-            setHistory(plotData);
+            setHistory(Array.isArray(data) ? data : []);
 
-            // Auto-scroll to end after a short delay
             setTimeout(() => {
                 scrollRef.current?.scrollToEnd({ animated: false });
             }, 100);
@@ -199,14 +216,113 @@ const StockDetailScreen = () => {
 
     useEffect(() => {
         fetchHistory();
-    }, [symbol, chartInterval]);
+    }, [symbol, chartInterval, chartPeriod]);
 
-    const handleTouch = (evt: any) => {
+    const handleTouchStart = (evt: any) => {
         const x = evt.nativeEvent.locationX;
+        const y = evt.nativeEvent.locationY;
         const index = Math.floor(x / CANDLE_SPACING);
-        if (index >= 0 && index < history.length) {
-            setSelectedIndex(index);
+
+        if (isDrawingMode) {
+            const maxHigh = Math.max(...history.map(d => d.high));
+            const minLow = Math.min(...history.map(d => d.low));
+            const range = maxHigh - minLow || 1;
+            const price = maxHigh - ((y - 40) / (CHART_HEIGHT - 80)) * range;
+
+            setActiveDrawing({ startIndex: index, startPrice: price, endIndex: index, endPrice: price });
+        } else {
+            if (index >= 0 && index < history.length) {
+                setSelectedIndex(index);
+            }
         }
+    };
+
+    const handleTouchMove = (evt: any) => {
+        const x = evt.nativeEvent.locationX;
+        const y = evt.nativeEvent.locationY;
+        const index = Math.floor(x / CANDLE_SPACING);
+
+        if (isDrawingMode && activeDrawing) {
+            const maxHigh = Math.max(...history.map(d => d.high));
+            const minLow = Math.min(...history.map(d => d.low));
+            const range = maxHigh - minLow || 1;
+            const price = maxHigh - ((y - 40) / (CHART_HEIGHT - 80)) * range;
+
+            setActiveDrawing({ ...activeDrawing, endIndex: index, endPrice: price });
+        } else if (!isDrawingMode) {
+            if (index >= 0 && index < history.length) {
+                setSelectedIndex(index);
+            }
+        }
+    };
+
+    const handleTouchEnd = () => {
+        if (isDrawingMode && activeDrawing) {
+            setDrawings([...drawings, activeDrawing]);
+            setActiveDrawing(null);
+        } else {
+            setSelectedIndex(null);
+        }
+    };
+
+    // --- Indicator Calculations ---
+    const calculateSMA = (data: any[], period: number) => {
+        if (data.length < period) return [];
+        let smas = new Array(period - 1).fill(null);
+        for (let i = period - 1; i < data.length; i++) {
+            const sum = data.slice(i - period + 1, i + 1).reduce((acc, d) => acc + d.close, 0);
+            smas.push(sum / period);
+        }
+        return smas;
+    };
+
+    const calculateRSI = (data: any[], period: number = 14) => {
+        if (data.length <= period) return new Array(data.length).fill(null);
+        let rsis = new Array(period).fill(null);
+        let gains = 0;
+        let losses = 0;
+
+        for (let i = 1; i <= period; i++) {
+            const diff = data[i].close - data[i - 1].close;
+            if (diff > 0) gains += diff;
+            else losses -= diff;
+        }
+
+        let avgGain = gains / period;
+        let avgLoss = losses / period;
+
+        for (let i = period + 1; i < data.length; i++) {
+            const diff = data[i].close - data[i - 1].close;
+            const currentGain = diff > 0 ? diff : 0;
+            const currentLoss = diff < 0 ? -diff : 0;
+
+            avgGain = (avgGain * (period - 1) + currentGain) / period;
+            avgLoss = (avgLoss * (period - 1) + currentLoss) / period;
+
+            const rs = avgGain / (avgLoss || 1);
+            rsis.push(100 - (100 / (1 + rs)));
+        }
+        return rsis;
+    };
+
+    const calculateMACD = (data: any[]) => {
+        const calculateEMA = (prices: number[], period: number) => {
+            const k = 2 / (period + 1);
+            let ema = [prices[0]];
+            for (let i = 1; i < prices.length; i++) {
+                ema.push(prices[i] * k + ema[i - 1] * (1 - k));
+            }
+            return ema;
+        };
+
+        const prices = data.map(d => d.close);
+        const ema12 = calculateEMA(prices, 12);
+        const ema26 = calculateEMA(prices, 26);
+        const macdLine = ema12.map((e12, i) => e12 - ema26[i]);
+        const signalLine = calculateEMA(macdLine, 9);
+        const histogram = macdLine.map((m, i) => m - signalLine[i]);
+
+        return { macdLine, signalLine, histogram };
     };
 
     const renderCandleChart = () => {
@@ -217,14 +333,25 @@ const StockDetailScreen = () => {
         const range = maxHigh - minLow || 1;
         const totalWidth = history.length * CANDLE_SPACING + 40;
 
-        const getY = (price: number) => 40 + (CHART_HEIGHT - 80) * (1 - (price - minLow) / range);
+        const getY = (price: number, h: number = CHART_HEIGHT) => 40 + (h - 80) * (1 - (price - minLow) / range);
 
         const currentPrice = stockData?.price || (history.length > 0 ? history[history.length - 1].close : 0);
         const currentY = getY(currentPrice);
 
+        // Calculations for indicators
+        const sma50 = activeIndicators.includes('SMA50') ? calculateSMA(history, 50) : [];
+        const sma200 = activeIndicators.includes('SMA200') ? calculateSMA(history, 200) : [];
+        const rsiLevels = activeIndicators.includes('RSI') ? calculateRSI(history) : [];
+        const macdData = activeIndicators.includes('MACD') ? calculateMACD(history) : null;
+
+        const subChartHeight = 120;
+        const totalSvgHeight = CHART_HEIGHT +
+            (activeIndicators.includes('RSI') ? subChartHeight : 0) +
+            (activeIndicators.includes('MACD') ? subChartHeight : 0);
+
         return (
-            <View onTouchStart={handleTouch} onTouchMove={handleTouch} onTouchEnd={() => setSelectedIndex(null)}>
-                <Svg width={totalWidth} height={CHART_HEIGHT}>
+            <View onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
+                <Svg width={totalWidth} height={totalSvgHeight}>
                     <Defs>
                         <SVGGradiant id="priceLineGradient" x1="0" y1="0" x2="1" y2="0">
                             <Stop offset="0" stopColor="#00E0A1" stopOpacity="0.1" />
@@ -232,100 +359,204 @@ const StockDetailScreen = () => {
                         </SVGGradiant>
                     </Defs>
 
-                    {/* Current Price Line */}
-                    <Line
-                        x1="0"
-                        y1={currentY}
-                        x2={totalWidth}
-                        y2={currentY}
-                        stroke="#00E0A1"
-                        strokeWidth="1"
-                        strokeDasharray="4 4"
-                        opacity="0.3"
-                    />
+                    {/* Main Price Chart */}
+                    <G>
+                        {/* Current Price Line */}
+                        <Line
+                            x1="0"
+                            y1={currentY}
+                            x2={totalWidth}
+                            y2={currentY}
+                            stroke="#00E0A1"
+                            strokeWidth="1"
+                            strokeDasharray="4 4"
+                            opacity="0.3"
+                        />
 
-                    {history.map((d, i) => {
-                        const isBullish = d.close >= d.open;
-                        const color = isBullish ? '#10B981' : '#EF4444';
-                        const x = i * CANDLE_SPACING + (CANDLE_SPACING - CANDLE_WIDTH_BASE) / 2;
+                        {history.map((d, i) => {
+                            const isBullish = d.close >= d.open;
+                            const color = isBullish ? '#10B981' : '#EF4444';
+                            const x = i * CANDLE_SPACING + (CANDLE_SPACING - CANDLE_WIDTH_BASE) / 2;
 
-                        const highY = getY(d.high);
-                        const lowY = getY(d.low);
-                        const openY = getY(d.open);
-                        const closeY = getY(d.close);
+                            const highY = getY(d.high);
+                            const lowY = getY(d.low);
+                            const openY = getY(d.open);
+                            const closeY = getY(d.close);
 
-                        const rectTop = Math.min(openY, closeY);
-                        const rectHeight = Math.max(Math.abs(openY - closeY), 1.5);
+                            const rectTop = Math.min(openY, closeY);
+                            const rectHeight = Math.max(Math.abs(openY - closeY), 1.5);
 
-                        const isHighlighted = selectedIndex === i;
+                            const isHighlighted = selectedIndex === i;
 
-                        return (
-                            <React.Fragment key={i}>
-                                {isHighlighted && (
-                                    <Rect
-                                        x={i * CANDLE_SPACING}
-                                        y="0"
-                                        width={CANDLE_SPACING}
-                                        height={CHART_HEIGHT}
-                                        fill="white"
-                                        opacity="0.05"
+                            return (
+                                <React.Fragment key={i}>
+                                    {isHighlighted && (
+                                        <Rect
+                                            x={i * CANDLE_SPACING}
+                                            y="0"
+                                            width={CANDLE_SPACING}
+                                            height={CHART_HEIGHT}
+                                            fill="white"
+                                            opacity="0.05"
+                                        />
+                                    )}
+                                    {/* Wick */}
+                                    <Line
+                                        x1={x + CANDLE_WIDTH_BASE / 2}
+                                        y1={highY}
+                                        x2={x + CANDLE_WIDTH_BASE / 2}
+                                        y2={lowY}
+                                        stroke={color}
+                                        strokeWidth="1.2"
+                                        opacity={selectedIndex !== null && !isHighlighted ? 0.3 : 1}
                                     />
-                                )}
-                                {/* Wick */}
-                                <Line
-                                    x1={x + CANDLE_WIDTH_BASE / 2}
-                                    y1={highY}
-                                    x2={x + CANDLE_WIDTH_BASE / 2}
-                                    y2={lowY}
-                                    stroke={color}
-                                    strokeWidth="1.2"
-                                    opacity={selectedIndex !== null && !isHighlighted ? 0.3 : 1}
-                                />
-                                {/* Body */}
-                                <Rect
-                                    x={x}
-                                    y={rectTop}
-                                    width={CANDLE_WIDTH_BASE}
-                                    height={rectHeight}
-                                    fill={color}
-                                    rx={2}
-                                    opacity={selectedIndex !== null && !isHighlighted ? 0.3 : 1}
-                                />
-                            </React.Fragment>
-                        );
-                    })}
+                                    {/* Body */}
+                                    <Rect
+                                        x={x}
+                                        y={rectTop}
+                                        width={CANDLE_WIDTH_BASE}
+                                        height={rectHeight}
+                                        fill={color}
+                                        rx={2}
+                                        opacity={selectedIndex !== null && !isHighlighted ? 0.3 : 1}
+                                    />
+                                </React.Fragment>
+                            );
+                        })}
 
-                    {/* Interaction Tooltip Label */}
-                    {selectedIndex !== null && (
-                        <React.Fragment>
+                        {/* SMA Overlays */}
+                        {sma50.length > 0 && (
+                            <Polyline
+                                points={sma50.map((v, i) => v !== null ? `${i * CANDLE_SPACING + CANDLE_SPACING / 2},${getY(v)}` : '').filter(p => p).join(' ')}
+                                fill="none"
+                                stroke="#3B82F6"
+                                strokeWidth="1.5"
+                                opacity="0.8"
+                            />
+                        )}
+                        {sma200.length > 0 && (
+                            <Polyline
+                                points={sma200.map((v, i) => v !== null ? `${i * CANDLE_SPACING + CANDLE_SPACING / 2},${getY(v)}` : '').filter(p => p).join(' ')}
+                                fill="none"
+                                stroke="#F59E0B"
+                                strokeWidth="1.5"
+                                opacity="0.8"
+                            />
+                        )}
+
+                        {/* Interaction Tooltip Label */}
+                        {selectedIndex !== null && (
+                            <React.Fragment>
+                                <Line
+                                    x1={selectedIndex * CANDLE_SPACING + CANDLE_SPACING / 2}
+                                    y1="0"
+                                    x2={selectedIndex * CANDLE_SPACING + CANDLE_SPACING / 2}
+                                    y2={CHART_HEIGHT}
+                                    stroke="white"
+                                    strokeWidth="0.5"
+                                    strokeDasharray="2 2"
+                                />
+                                <Rect
+                                    x={Math.min(selectedIndex * CANDLE_SPACING - 30, totalWidth - 80)}
+                                    y={getY(history[selectedIndex].close) - 25}
+                                    width="70"
+                                    height="20"
+                                    rx="4"
+                                    fill="#1F2937"
+                                />
+                                <SvgText
+                                    x={Math.min(selectedIndex * CANDLE_SPACING + 5, totalWidth - 45)}
+                                    y={getY(history[selectedIndex].close) - 11}
+                                    fill="white"
+                                    fontSize="10"
+                                    fontWeight="bold"
+                                    textAnchor="middle"
+                                >
+                                    {history[selectedIndex].close.toFixed(2)}
+                                </SvgText>
+                            </React.Fragment>
+                        )}
+
+                        {/* Drawings (Trendlines) */}
+                        {drawings.map((draw, i) => (
                             <Line
-                                x1={selectedIndex * CANDLE_SPACING + CANDLE_SPACING / 2}
-                                y1="0"
-                                x2={selectedIndex * CANDLE_SPACING + CANDLE_SPACING / 2}
-                                y2={CHART_HEIGHT}
-                                stroke="white"
-                                strokeWidth="0.5"
-                                strokeDasharray="2 2"
+                                key={`draw-${i}`}
+                                x1={draw.startIndex * CANDLE_SPACING + CANDLE_SPACING / 2}
+                                y1={getY(draw.startPrice)}
+                                x2={draw.endIndex * CANDLE_SPACING + CANDLE_SPACING / 2}
+                                y2={getY(draw.endPrice)}
+                                stroke="#10B981"
+                                strokeWidth="2"
+                                opacity="0.6"
                             />
-                            <Rect
-                                x={Math.min(selectedIndex * CANDLE_SPACING - 30, totalWidth - 80)}
-                                y={getY(history[selectedIndex].close) - 25}
-                                width="70"
-                                height="20"
-                                rx="4"
-                                fill="#1F2937"
+                        ))}
+
+                        {/* Active Drawing Preview */}
+                        {activeDrawing && (
+                            <Line
+                                x1={activeDrawing.startIndex * CANDLE_SPACING + CANDLE_SPACING / 2}
+                                y1={getY(activeDrawing.startPrice)}
+                                x2={activeDrawing.endIndex * CANDLE_SPACING + CANDLE_SPACING / 2}
+                                y2={getY(activeDrawing.endPrice)}
+                                stroke="#10B981"
+                                strokeWidth="2"
+                                strokeDasharray="5 5"
+                                opacity="0.8"
                             />
-                            <SvgText
-                                x={Math.min(selectedIndex * CANDLE_SPACING + 5, totalWidth - 45)}
-                                y={getY(history[selectedIndex].close) - 11}
-                                fill="white"
-                                fontSize="10"
-                                fontWeight="bold"
-                                textAnchor="middle"
-                            >
-                                {history[selectedIndex].close.toFixed(2)}
-                            </SvgText>
-                        </React.Fragment>
+                        )}
+                    </G>
+
+                    {/* RSI Sub-chart */}
+                    {activeIndicators.includes('RSI') && (
+                        <G transform={`translate(0, ${CHART_HEIGHT})`}>
+                            <Line x1="0" y1="0" x2={totalWidth} y2="0" stroke="#2A2E39" strokeWidth="1" />
+                            <Line x1="0" y1={subChartHeight * 0.3} x2={totalWidth} y2={subChartHeight * 0.3} stroke="#2A2E39" strokeWidth="0.5" strokeDasharray="5 5" />
+                            <Line x1="0" y1={subChartHeight * 0.7} x2={totalWidth} y2={subChartHeight * 0.7} stroke="#2A2E39" strokeWidth="0.5" strokeDasharray="5 5" />
+                            <Polyline
+                                points={rsiLevels.map((v, i) => v !== null ? `${i * CANDLE_SPACING + CANDLE_SPACING / 2},${subChartHeight * (1 - v / 100)}` : '').filter(p => p).join(' ')}
+                                fill="none"
+                                stroke="#8B5CF6"
+                                strokeWidth="1.5"
+                            />
+                            <SvgText x="10" y="15" fill="#8B5CF6" fontSize="10" fontWeight="bold">RSI (14)</SvgText>
+                        </G>
+                    )}
+
+                    {/* MACD Sub-chart */}
+                    {activeIndicators.includes('MACD') && macdData && (
+                        <G transform={`translate(0, ${CHART_HEIGHT + (activeIndicators.includes('RSI') ? subChartHeight : 0)})`}>
+                            <Line x1="0" y1="0" x2={totalWidth} y2="0" stroke="#2A2E39" strokeWidth="1" />
+                            {/* Histogram */}
+                            {macdData.histogram.map((h, i) => {
+                                const barH = Math.abs(h) * 2;
+                                return (
+                                    <Rect
+                                        key={i}
+                                        x={i * CANDLE_SPACING + (CANDLE_SPACING - 3) / 2}
+                                        y={h >= 0 ? subChartHeight / 2 - barH : subChartHeight / 2}
+                                        width="3"
+                                        height={barH}
+                                        fill={h >= 0 ? '#10B981' : '#EF4444'}
+                                        opacity="0.5"
+                                    />
+                                );
+                            })}
+                            {/* MACD Line */}
+                            <Polyline
+                                points={macdData.macdLine.map((v, i) => `${i * CANDLE_SPACING + CANDLE_SPACING / 2},${subChartHeight / 2 - v * 2}`).join(' ')}
+                                fill="none"
+                                stroke="#3B82F6"
+                                strokeWidth="1.2"
+                            />
+                            {/* Signal Line */}
+                            <Polyline
+                                points={macdData.signalLine.map((v, i) => `${i * CANDLE_SPACING + CANDLE_SPACING / 2},${subChartHeight / 2 - v * 2}`).join(' ')}
+                                fill="none"
+                                stroke="#F59E0B"
+                                strokeWidth="1.2"
+                            />
+                            <SvgText x="10" y="15" fill="#E1E7ED" fontSize="10" fontWeight="bold">MACD (12, 26, 9)</SvgText>
+                        </G>
                     )}
                 </Svg>
             </View>
@@ -403,8 +634,65 @@ const StockDetailScreen = () => {
                     </View>
                 </View>
 
-                {/* Interval Bar - Minimalist */}
+                {/* Interval & Analysis Bar */}
                 <View className="mt-6 px-6">
+                    <View className="flex-row items-center justify-between mb-4">
+                        <View className="flex-row items-center gap-2">
+                            <Activity size={16} color="#00E0A1" />
+                            <Text className="text-text-primary font-bold text-sm">Analysis Tools</Text>
+                        </View>
+                        <TouchableOpacity
+                            onPress={() => setShowIndicatorMenu(!showIndicatorMenu)}
+                            className="bg-surface/50 p-2 px-3 rounded-lg border border-border/50 flex-row items-center gap-2"
+                        >
+                            <Settings2 size={14} color="#E1E7ED" />
+                            <Text className="text-text-primary text-[10px] font-bold uppercase">Indicators ({activeIndicators.length})</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {showIndicatorMenu && (
+                        <View className="bg-surface/20 p-4 rounded-2xl border border-border/30 mb-4 flex-row flex-wrap gap-2">
+                            {['SMA50', 'SMA200', 'RSI', 'MACD'].map((ind) => (
+                                <TouchableOpacity
+                                    key={ind}
+                                    onPress={() => {
+                                        if (activeIndicators.includes(ind)) {
+                                            setActiveIndicators(activeIndicators.filter(a => a !== ind));
+                                        } else {
+                                            setActiveIndicators([...activeIndicators, ind]);
+                                        }
+                                    }}
+                                    className={`px-3 py-1.5 rounded-lg border ${activeIndicators.includes(ind) ? 'bg-primary/20 border-primary' : 'bg-background border-border/50'}`}
+                                >
+                                    <Text className={`text-[10px] font-bold ${activeIndicators.includes(ind) ? 'text-primary' : 'text-text-muted'}`}>{ind}</Text>
+                                </TouchableOpacity>
+                            ))}
+                            <TouchableOpacity
+                                onPress={() => setShowRangePicker(true)}
+                                className="px-3 py-1.5 rounded-lg border bg-background border-border/50 flex-row items-center gap-1"
+                            >
+                                <Calendar size={12} color="#6B7280" />
+                                <Text className="text-[10px] font-bold text-text-muted">Period: {chartPeriod.toUpperCase()}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={() => setIsDrawingMode(!isDrawingMode)}
+                                className={`px-3 py-1.5 rounded-lg border flex-row items-center gap-1 ${isDrawingMode ? 'bg-primary/20 border-primary' : 'bg-background border-border/50'}`}
+                            >
+                                <PencilLine size={12} color={isDrawingMode ? "#00E0A1" : "#6B7280"} />
+                                <Text className={`text-[10px] font-bold ${isDrawingMode ? 'text-primary' : 'text-text-muted'}`}>Draw Tools</Text>
+                            </TouchableOpacity>
+                            {drawings.length > 0 && (
+                                <TouchableOpacity
+                                    onPress={() => setDrawings([])}
+                                    className="px-3 py-1.5 rounded-lg border bg-error/10 border-error/20 flex-row items-center gap-1"
+                                >
+                                    <X size={10} color="#EF4444" />
+                                    <Text className="text-[10px] font-bold text-error">Clear</Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                    )}
+
                     <View className="bg-surface/30 p-1 rounded-2xl flex-row justify-between border border-border/50">
                         {intervals.map((item) => (
                             <TouchableOpacity
@@ -568,6 +856,56 @@ const StockDetailScreen = () => {
                         )}
                     </View>
                 </View>
+            </Modal>
+            {/* Period/Range Picker Modal */}
+            <Modal
+                visible={showRangePicker}
+                animationType="fade"
+                transparent={true}
+                onRequestClose={() => setShowRangePicker(false)}
+            >
+                <Pressable
+                    className="flex-1 bg-black/60 items-center justify-center p-6"
+                    onPress={() => setShowRangePicker(false)}
+                >
+                    <View className="bg-surface w-full rounded-[32px] border border-border p-6" onStartShouldSetResponder={() => true}>
+                        <View className="flex-row justify-between items-center mb-6">
+                            <Text className="text-text-primary text-xl font-black">Select Period</Text>
+                            <TouchableOpacity onPress={() => setShowRangePicker(false)}>
+                                <X size={20} color="#E1E7ED" />
+                            </TouchableOpacity>
+                        </View>
+                        <View className="gap-3">
+                            {[
+                                { label: '1 Day', value: '1d' },
+                                { label: '5 Days', value: '5d' },
+                                { label: '1 Month', value: '1mo' },
+                                { label: '3 Months', value: '3mo' },
+                                { label: '1 Year', value: '1y' },
+                                { label: 'YTD', value: 'ytd' },
+                                { label: 'Custom Range', value: 'custom' },
+                            ].map((p) => (
+                                <TouchableOpacity
+                                    key={p.value}
+                                    onPress={() => {
+                                        setChartPeriod(p.value);
+                                        setShowRangePicker(false);
+                                    }}
+                                    className={`p-4 rounded-2xl flex-row justify-between items-center ${chartPeriod === p.value ? 'bg-primary/10 border border-primary/30' : 'bg-background border border-border/50'}`}
+                                >
+                                    <Text className={`font-bold ${chartPeriod === p.value ? 'text-primary' : 'text-text-primary'}`}>{p.label}</Text>
+                                    {chartPeriod === p.value && <View className="w-2 h-2 rounded-full bg-primary" />}
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                        <TouchableOpacity
+                            onPress={() => setShowRangePicker(false)}
+                            className="mt-6 py-4 bg-surface border border-border rounded-2xl items-center"
+                        >
+                            <Text className="text-text-muted font-bold">Close</Text>
+                        </TouchableOpacity>
+                    </View>
+                </Pressable>
             </Modal>
         </View>
     );

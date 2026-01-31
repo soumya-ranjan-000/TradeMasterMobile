@@ -13,6 +13,8 @@ import TradeScreen from '../screens/TradeScreen';
 import CalendarScreen from '../screens/CalendarScreen';
 import LoginScreen from '../screens/LoginScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import AlertsScreen from '../screens/AlertsScreen';
+import PerformanceScreen from '../screens/PerformanceScreen';
 
 // Types for Navigation
 export type RootStackParamList = {
@@ -20,6 +22,8 @@ export type RootStackParamList = {
     MainTabs: undefined;
     StockDetail: { symbol: string };
     Trade: { symbol: string; side: 'BUY' | 'SELL' };
+    Alerts: undefined;
+    Performance: undefined;
 };
 
 export type MainTabParamList = {
@@ -30,6 +34,8 @@ export type MainTabParamList = {
     Profile: undefined;
     StockDetail: { symbol: string };
     Trade: { symbol: string; side: 'BUY' | 'SELL' };
+    Alerts: undefined;
+    Performance: undefined;
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -113,6 +119,20 @@ const MainTabs = () => {
                     tabBarItemStyle: { display: 'none' },
                 }}
             />
+            <Tab.Screen
+                name="Alerts"
+                component={AlertsScreen}
+                options={{
+                    tabBarItemStyle: { display: 'none' },
+                }}
+            />
+            <Tab.Screen
+                name="Performance"
+                component={PerformanceScreen}
+                options={{
+                    tabBarItemStyle: { display: 'none' },
+                }}
+            />
         </Tab.Navigator>
     );
 };
@@ -144,6 +164,16 @@ const RootNavigator = () => {
                 <Stack.Screen
                     name="MainTabs"
                     component={MainTabs}
+                    options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                    name="Alerts"
+                    component={AlertsScreen}
+                    options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                    name="Performance"
+                    component={PerformanceScreen}
                     options={{ headerShown: false }}
                 />
             </Stack.Navigator>

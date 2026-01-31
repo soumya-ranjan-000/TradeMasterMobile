@@ -1,11 +1,18 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, FlatList, RefreshControl, TouchableOpacity, ScrollView, StatusBar, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, CompositeNavigationProp } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { RootStackParamList, MainTabParamList } from '../navigation/RootNavigator';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Briefcase, ArrowUpRight, ArrowDownRight, History, Layers, Info, ShieldCheck, X, Target, TrendingUp, ChevronDown, ChevronRight } from 'lucide-react-native';
+import { Briefcase, ArrowUpRight, ArrowDownRight, History, Layers, Info, ShieldCheck, X, Target, TrendingUp, ChevronDown, ChevronRight, BarChart3 } from 'lucide-react-native';
 import { API_URL, BREEZE_API_URL, TEST_USER_ID } from '../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 const PortfolioScreen = () => {
+    const navigation = useNavigation<CompositeNavigationProp<
+        BottomTabNavigationProp<MainTabParamList, 'Portfolio'>,
+        NativeStackNavigationProp<RootStackParamList>
+    >>();
     const [userId, setUserId] = useState<string>(TEST_USER_ID);
     const [activeTab, setActiveTab] = useState<'POSITIONS' | 'ORDERS'>('POSITIONS');
     const [positions, setPositions] = useState<any[]>([]);
@@ -369,6 +376,16 @@ const PortfolioScreen = () => {
                             {totalReturnsOverall >= 0 ? <ArrowUpRight size={24} color="#10B981" /> : <ArrowDownRight size={24} color="#EF4444" />}
                         </View>
                     </View>
+
+                    <TouchableOpacity
+                        onPress={() => navigation.navigate('Performance')}
+                        className="bg-white/10 py-3 rounded-2xl items-center mb-6 border border-white/10"
+                    >
+                        <View className="flex-row items-center">
+                            <BarChart3 size={14} color="#00E0A1" className="mr-2" />
+                            <Text className="text-white text-xs font-black uppercase tracking-widest">Show Analytics</Text>
+                        </View>
+                    </TouchableOpacity>
 
                     <View className="flex-row justify-between">
                         <View>
