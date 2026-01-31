@@ -287,8 +287,8 @@ const PortfolioScreen = () => {
                 >
                     <View className="flex-row justify-between items-center">
                         <View className="flex-row items-center">
-                            <View className={`w-8 h-8 rounded-xl items-center justify-center mr-3 ${item.status === 'CLOSED' ? 'bg-primary/10' : 'bg-success/10'}`}>
-                                <Briefcase size={14} color={item.status === 'CLOSED' ? '#2563eb' : '#10B981'} />
+                            <View className={`w-8 h-8 rounded-xl items-center justify-center mr-3 ${item.status === 'CLOSED' ? 'bg-primary/20' : 'bg-success/10'}`}>
+                                <Briefcase size={14} color={item.status === 'CLOSED' ? '#00E0A1' : '#10B981'} />
                             </View>
                             <View>
                                 <Text className="text-text-primary font-bold text-base">{item.symbol}</Text>
@@ -346,7 +346,7 @@ const PortfolioScreen = () => {
 
     return (
         <View className="flex-1 bg-background pt-12">
-            <StatusBar barStyle="light-content" />
+            <StatusBar barStyle="light-content" backgroundColor="#0E1116" />
 
             <View className="px-4 mb-6">
                 <Text className="text-3xl font-black text-text-primary">Portfolio</Text>
@@ -397,14 +397,14 @@ const PortfolioScreen = () => {
                         onPress={() => setActiveTab('POSITIONS')}
                         className={`flex-1 py-3.5 rounded-[14px] flex-row items-center justify-center ${activeTab === 'POSITIONS' ? 'bg-background border border-border' : ''}`}
                     >
-                        <Layers size={16} color={activeTab === 'POSITIONS' ? '#2563eb' : '#6B7280'} className="mr-2" />
+                        <Layers size={16} color={activeTab === 'POSITIONS' ? '#00E0A1' : '#6B7280'} className="mr-2" />
                         <Text className={`font-bold text-sm ${activeTab === 'POSITIONS' ? 'text-text-primary' : 'text-text-muted'}`}>Positions</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                         onPress={() => setActiveTab('ORDERS')}
                         className={`flex-1 py-3.5 rounded-[14px] flex-row items-center justify-center ${activeTab === 'ORDERS' ? 'bg-background border border-border' : ''}`}
                     >
-                        <History size={16} color={activeTab === 'ORDERS' ? '#2563eb' : '#6B7280'} className="mr-2" />
+                        <History size={16} color={activeTab === 'ORDERS' ? '#00E0A1' : '#6B7280'} className="mr-2" />
                         <Text className={`font-bold text-sm ${activeTab === 'ORDERS' ? 'text-text-primary' : 'text-text-muted'}`}>Orders</Text>
                     </TouchableOpacity>
                 </View>
@@ -421,8 +421,8 @@ const PortfolioScreen = () => {
                         <RefreshControl
                             refreshing={loading}
                             onRefresh={fetchData}
-                            tintColor="#2563eb"
-                            colors={["#2563eb"]}
+                            tintColor="#00E0A1"
+                            colors={["#00E0A1"]}
                         />
                     }
                     ListEmptyComponent={
@@ -443,8 +443,8 @@ const PortfolioScreen = () => {
                         <RefreshControl
                             refreshing={loading}
                             onRefresh={fetchData}
-                            tintColor="#2563eb"
-                            colors={["#2563eb"]}
+                            tintColor="#00E0A1"
+                            colors={["#00E0A1"]}
                         />
                     }
                     ListEmptyComponent={
@@ -544,7 +544,7 @@ const PortfolioScreen = () => {
 
                             <View>
                                 <View className="flex-row items-center mb-4">
-                                    <History size={18} color="#2563eb" />
+                                    <History size={18} color="#00E0A1" />
                                     <Text className="text-text-primary font-bold ml-2 text-base">Trailing SL (Distance)</Text>
                                 </View>
                                 <TextInput

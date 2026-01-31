@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ShieldCheck, User, Zap, ArrowRight, Lock, Key } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -7,6 +7,8 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BREEZE_API_URL, API_URL, TEST_USER_ID } from '../config';
 import { RootStackParamList } from '../navigation/RootNavigator';
+
+const Logo = require('../../assets/icon.png');
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
@@ -107,19 +109,21 @@ const LoginScreen = () => {
     const renderChoice = () => (
         <View className="flex-1 justify-center px-6">
             <View className="mb-12 items-center">
-                <View className="w-20 h-20 bg-primary/20 rounded-[24px] items-center justify-center mb-6 border border-primary/30">
-                    <ShieldCheck size={40} color="#2563eb" />
-                </View>
-                <Text className="text-text-primary text-3xl font-black text-center">Welcome Back</Text>
-                <Text className="text-text-muted text-center mt-2 font-medium">Choose your trading environment</Text>
+                <Image
+                    source={Logo}
+                    style={{ width: 100, height: 100, borderRadius: 50 }}
+                    className="mb-6 shadow-2xl"
+                />
+                <Text className="text-text-primary text-4xl font-black text-center tracking-tighter">TradeMaster</Text>
+                <Text className="text-text-muted text-center mt-2 font-medium">Master the Markets</Text>
             </View>
 
             <TouchableOpacity
                 onPress={checkExistingSession}
-                className="bg-surface border border-border p-6 rounded-[32px] mb-4 flex-row items-center active:scale-95 transition-transform"
+                className="bg-surface border border-border/50 p-6 rounded-[32px] mb-4 flex-row items-center active:scale-95 transition-transform"
             >
                 <View className="w-14 h-14 bg-primary/10 rounded-2xl items-center justify-center mr-4">
-                    <Zap size={28} color="#2563eb" />
+                    <Zap size={28} color="#00E0A1" />
                 </View>
                 <View className="flex-1">
                     <Text className="text-text-primary font-black text-xl">Real Trading</Text>
@@ -130,10 +134,10 @@ const LoginScreen = () => {
 
             <TouchableOpacity
                 onPress={handleTestLogin}
-                className="bg-surface/50 border border-border/50 p-6 rounded-[32px] flex-row items-center active:scale-95 transition-transform"
+                className="bg-surface/50 border border-border/30 p-6 rounded-[32px] flex-row items-center active:scale-95 transition-transform"
             >
-                <View className="w-14 h-14 bg-success/10 rounded-2xl items-center justify-center mr-4">
-                    <User size={28} color="#10B981" />
+                <View className="w-14 h-14 bg-primary-blue/10 rounded-2xl items-center justify-center mr-4">
+                    <User size={28} color="#3B82F6" />
                 </View>
                 <View className="flex-1">
                     <Text className="text-text-primary font-black text-xl opacity-80">Test User</Text>

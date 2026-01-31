@@ -39,12 +39,12 @@ const TradeMasterTheme = {
     ...DarkTheme,
     colors: {
         ...DarkTheme.colors,
-        primary: '#2563eb',
-        background: '#0B0E11',
-        card: '#151921',
-        text: '#E1E7ED',
+        primary: '#00E0A1',
+        background: '#0E1116',
+        card: '#1C1F26',
+        text: '#F3F4F6',
         border: '#2A2E39',
-        notification: '#EF4444',
+        notification: '#FF4D4D',
     },
 };
 
@@ -68,7 +68,7 @@ const MainTabs = () => {
                             >
                                 <Icon
                                     size={26}
-                                    color={focused ? '#2563eb' : '#94A3B8'}
+                                    color={focused ? '#00E0A1' : '#94A3B8'}
                                     strokeWidth={focused ? 2.2 : 1.8}
                                 />
                             </View>
@@ -78,7 +78,7 @@ const MainTabs = () => {
                         </View>
                     );
                 },
-                tabBarActiveTintColor: '#2563eb',
+                tabBarActiveTintColor: '#00E0A1',
                 tabBarInactiveTintColor: '#94A3B8',
                 tabBarStyle: {
                     backgroundColor: '#1E2329',
@@ -124,15 +124,15 @@ const RootNavigator = () => {
                 initialRouteName="Login"
                 screenOptions={{
                     headerStyle: {
-                        backgroundColor: '#151921',
+                        backgroundColor: '#1C1F26',
                     },
-                    headerTintColor: '#E1E7ED',
+                    headerTintColor: '#F3F4F6',
                     headerTitleStyle: {
                         fontWeight: 'bold',
                     },
                     headerShadowVisible: false,
                     contentStyle: {
-                        backgroundColor: '#0B0E11',
+                        backgroundColor: '#0E1116',
                     }
                 }}
             >

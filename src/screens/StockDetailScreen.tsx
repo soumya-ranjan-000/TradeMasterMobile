@@ -11,7 +11,7 @@ import Svg, { Rect, Line, Defs, LinearGradient as SVGGradiant, Stop, Text as Svg
 type StockDetailScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'StockDetail'>;
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CHART_HEIGHT = 350;
+const CHART_HEIGHT = 280;
 const CANDLE_WIDTH_BASE = 12;
 const CANDLE_SPACING = 16;
 
@@ -63,7 +63,7 @@ const StockDetailScreen = () => {
                 case '1W': period = '6mo'; intervalValue = '1wk'; break;
             }
 
-            const response = await fetch(`${BREEZE_API_URL} /api/history ? symbol = ${symbol}& period=${period}& interval=${intervalValue} `);
+            const response = await fetch(`${BREEZE_API_URL}/api/history?symbol=${symbol}&period=${period}&interval=${intervalValue}`);
             const data = await response.json();
             // We only show the last 60 candles to keep it clean, but allow scrolling
             const plotData = Array.isArray(data) ? data : [];
@@ -88,7 +88,7 @@ const StockDetailScreen = () => {
             fetchStockData();
 
             try {
-                const msRes = await fetch(`${BREEZE_API_URL} /api/market - status`);
+                const msRes = await fetch(`${BREEZE_API_URL}/api/market-status`);
                 const msData = await msRes.json();
 
                 // Only poll if market is open
@@ -110,7 +110,7 @@ const StockDetailScreen = () => {
             const savedId = await AsyncStorage.getItem('USER_ID');
             const uid = savedId || TEST_USER_ID;
             setUserId(uid);
-            const response = await fetch(`${API_URL} /watchlists/${uid} `);
+            const response = await fetch(`${API_URL}/watchlists/${uid}`);
             const data = await response.json();
             setUserWatchlists(Array.isArray(data) ? data : []);
         } catch (error) {
@@ -123,7 +123,7 @@ const StockDetailScreen = () => {
     const addToWatchlist = async (watchlistId: string) => {
         try {
             setWatchLoading(true);
-            const response = await fetch(`${API_URL} /watchlists/add`, {
+            const response = await fetch(`${API_URL}/watchlists/add`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -227,8 +227,8 @@ const StockDetailScreen = () => {
                 <Svg width={totalWidth} height={CHART_HEIGHT}>
                     <Defs>
                         <SVGGradiant id="priceLineGradient" x1="0" y1="0" x2="1" y2="0">
-                            <Stop offset="0" stopColor="#2563eb" stopOpacity="0.1" />
-                            <Stop offset="1" stopColor="#2563eb" stopOpacity="0.5" />
+                            <Stop offset="0" stopColor="#00E0A1" stopOpacity="0.1" />
+                            <Stop offset="1" stopColor="#00E0A1" stopOpacity="0.5" />
                         </SVGGradiant>
                     </Defs>
 
@@ -238,7 +238,7 @@ const StockDetailScreen = () => {
                         y1={currentY}
                         x2={totalWidth}
                         y2={currentY}
-                        stroke="#2563eb"
+                        stroke="#00E0A1"
                         strokeWidth="1"
                         strokeDasharray="4 4"
                         opacity="0.3"
@@ -358,15 +358,15 @@ const StockDetailScreen = () => {
 
             <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
                 {/* Information Section */}
-                <View className="px-6 mt-6">
+                <View className="px-6 mt-4">
                     <View className="flex-row items-center justify-between">
                         <View className="flex-row items-center">
-                            <View className="w-12 h-12 rounded-2xl bg-primary/10 items-center justify-center mr-4 border border-primary/20">
-                                <Text className="text-primary font-black text-xl">{symbol[0]}</Text>
+                            <View className="w-10 h-10 rounded-xl bg-primary/10 items-center justify-center mr-3 border border-primary/20">
+                                <Text className="text-primary font-black text-lg">{symbol[0]}</Text>
                             </View>
                             <View>
-                                <Text className="text-text-primary font-black text-2xl tracking-tight">{symbol.split('.')[0]}</Text>
-                                <Text className="text-text-muted text-xs font-semibold uppercase tracking-widest mt-0.5">Live Analytics</Text>
+                                <Text className="text-text-primary font-black text-xl tracking-tight">{symbol.split('.')[0]}</Text>
+                                <Text className="text-text-muted text-[10px] font-semibold uppercase tracking-widest mt-0.5">Live Analytics</Text>
                             </View>
                         </View>
                         {selectedCandle ? (
@@ -385,11 +385,11 @@ const StockDetailScreen = () => {
                         )}
                     </View>
 
-                    <View className="mt-8">
-                        <Text className="text-text-primary text-6xl font-black tracking-tighter">
+                    <View className="mt-6">
+                        <Text className="text-text-primary text-5xl font-black tracking-tighter">
                             ₹{stockData?.price?.toFixed(2) || '---'}
                         </Text>
-                        <View className="flex-row items-center mt-3">
+                        <View className="flex-row items-center mt-2">
                             <View className={`flex-row items-center px-3 py-1.5 rounded-xl mr-3 ${stockData?.change >= 0 ? 'bg-success/10 border border-success/20' : 'bg-error/10 border border-error/20'}`}>
                                 <TrendingUp size={16} color={stockData?.change >= 0 ? '#10B981' : '#EF4444'} />
                                 <Text className={`font-black text-base ml-2 ${stockData?.change >= 0 ? 'text-success' : 'text-error'}`}>
@@ -404,7 +404,7 @@ const StockDetailScreen = () => {
                 </View>
 
                 {/* Interval Bar - Minimalist */}
-                <View className="mt-10 px-6">
+                <View className="mt-6 px-6">
                     <View className="bg-surface/30 p-1 rounded-2xl flex-row justify-between border border-border/50">
                         {intervals.map((item) => (
                             <TouchableOpacity
@@ -419,10 +419,10 @@ const StockDetailScreen = () => {
                 </View>
 
                 {/* Interactive Chart - No Boundaries, Immersive */}
-                <View className="mt-4 min-h-[350px]">
+                <View className="mt-4 min-h-[280px]">
                     {loading && history.length === 0 ? (
-                        <View className="h-[350px] items-center justify-center">
-                            <ActivityIndicator size="large" color="#2563eb" />
+                        <View className="h-[280px] items-center justify-center">
+                            <ActivityIndicator size="large" color="#00E0A1" />
                         </View>
                     ) : (
                         <ScrollView
@@ -430,7 +430,7 @@ const StockDetailScreen = () => {
                             horizontal
                             showsHorizontalScrollIndicator={false}
                             className="bg-transparent"
-                            contentContainerStyle={{ paddingVertical: 0 }}
+                            contentContainerStyle={{ paddingVertical: 0, minWidth: SCREEN_WIDTH, justifyContent: 'center' }}
                         >
                             {renderCandleChart()}
                         </ScrollView>
@@ -438,9 +438,9 @@ const StockDetailScreen = () => {
                 </View>
 
                 {/* Action Section */}
-                <View className="px-6 mt-4 pb-12">
-                    <View className="bg-surface/20 p-6 rounded-[40px] border border-border/40">
-                        <View className="flex-row justify-between items-center mb-8">
+                <View className="px-6 mt-2 pb-12">
+                    <View className="bg-surface/20 p-5 rounded-[32px] border border-border/40">
+                        <View className="flex-row justify-between items-center mb-4">
                             <View>
                                 <Text className="text-text-muted text-[10px] font-bold uppercase tracking-[3px]">Buying Power</Text>
                                 <Text className="text-text-primary font-black text-xl mt-1">₹84,250.00</Text>
@@ -448,18 +448,18 @@ const StockDetailScreen = () => {
                             <Text className="text-primary font-bold text-xs">RELOAD</Text>
                         </View>
 
-                        <View className="flex-row gap-4">
+                        <View className="flex-row gap-3">
                             <TouchableOpacity
                                 onPress={() => navigation.navigate('Trade', { symbol, side: 'SELL' })}
-                                className="flex-1 bg-error/10 border border-error/30 py-6 rounded-[32px] items-center active:scale-[0.96]"
+                                className="flex-1 bg-error/10 border border-error/30 py-4 rounded-3xl items-center active:scale-[0.96]"
                             >
-                                <Text className="text-error font-black text-base tracking-widest uppercase">Short</Text>
+                                <Text className="text-error font-black text-sm tracking-widest uppercase">Short</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 onPress={() => navigation.navigate('Trade', { symbol, side: 'BUY' })}
-                                className="flex-1 bg-success/10 border border-success/30 py-6 rounded-[32px] items-center active:scale-[0.96]"
+                                className="flex-1 bg-success/10 border border-success/30 py-4 rounded-3xl items-center active:scale-[0.96]"
                             >
-                                <Text className="text-success font-black text-base tracking-widest uppercase">Buy</Text>
+                                <Text className="text-success font-black text-sm tracking-widest uppercase">Buy</Text>
                             </TouchableOpacity>
                         </View>
                     </View>

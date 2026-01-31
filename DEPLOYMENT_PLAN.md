@@ -4,13 +4,13 @@ This plan outlines the steps required to deploy the TradeMaster mobile applicati
 
 ## Phase 1: Preparation & Branding
 
-- [ ] **App Metadata**: Review and finalize the following in `app.json`:
+- [x] **App Metadata**: Review and finalize the following in `app.json`:
   - `name`: TradeMaster
   - `slug`: TradeMasterMobile
   - `version`: 1.0.0
   - `android.package`: `com.samba.trademaster`
   - `ios.bundleIdentifier`: `com.samba.trademaster`
-- [ ] **Assets**: Replace placeholder icons and splash screens in `./assets`:
+- [x] **Assets**: Replace placeholder icons and splash screens in `./assets`:
   - `icon.png` (1024x1024)
   - `adaptive-icon.png` (1024x1024)
   - `splash-icon.png` (2000x2000)

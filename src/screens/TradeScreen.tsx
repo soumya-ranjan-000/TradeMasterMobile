@@ -196,7 +196,7 @@ const TradeScreen = () => {
                         className="bg-surface/50 border border-border p-5 rounded-3xl flex-row justify-between items-center"
                     >
                         <View className="flex-row items-center">
-                            <ShieldCheck size={20} color="#2563eb" />
+                            <ShieldCheck size={20} color="#00E0A1" />
                             <Text className="text-text-primary font-bold ml-3 text-base">Risk Management</Text>
                         </View>
                         <Text className="text-primary font-bold">{showRiskPanel ? 'Hide' : 'Add SL/TP'}</Text>

@@ -104,8 +104,8 @@ const ProfileScreen = () => {
                     <RefreshControl
                         refreshing={loading}
                         onRefresh={fetchData}
-                        tintColor="#2563eb"
-                        colors={["#2563eb"]}
+                        tintColor="#00E0A1"
+                        colors={["#00E0A1"]}
                     />
                 }
             >
@@ -123,10 +123,10 @@ const ProfileScreen = () => {
                 {/* Total Balance Card (Moved from Dashboard) */}
                 <View className="px-4 mb-8">
                     <LinearGradient
-                        colors={['#2563eb', '#1d4ed8']}
+                        colors={['#00E0A1', '#059669']}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
-                        className="rounded-[32px] p-8 shadow-2xl shadow-primary/40 overflow-hidden"
+                        className="rounded-[32px] p-8 shadow-2xl shadow-primary/20 overflow-hidden"
                     >
                         <View className="items-center">
                             <Text className="text-white/70 text-sm mb-1 uppercase tracking-widest font-bold">Total Balance</Text>

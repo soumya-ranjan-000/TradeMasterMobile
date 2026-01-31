@@ -69,8 +69,8 @@ const WatchlistScreen = () => {
 
     return (
         <View className="flex-1 bg-background pt-12">
-            <View className="px-4 mb-6">
-                <Text className="text-3xl font-bold text-text-primary text-center">Market Explorer</Text>
+            <View className="px-6 mb-8">
+                <Text className="text-3xl font-black text-text-primary">Exploration</Text>
             </View>
 
             {/* Category Filters */}
@@ -120,24 +120,34 @@ const WatchlistScreen = () => {
 
             {/* Search Results Dropdown */}
             {results.length > 0 && (
-                <View className="mx-4 bg-surface rounded-2xl border border-border mb-4 max-h-40 overflow-hidden shadow-2xl">
+                <View className="mx-4 bg-surface rounded-[24px] border border-border mb-6 max-h-60 overflow-hidden shadow-2xl">
                     <FlatList
                         data={results}
                         keyExtractor={(item) => item.symbol}
-                        renderItem={({ item }) => (
+                        showsVerticalScrollIndicator={false}
+                        renderItem={({ item, index }) => (
                             <TouchableOpacity
-                                className="p-4 border-b border-border flex-row justify-between items-center"
+                                className={`p-4 flex-row justify-between items-center active:bg-white/5 ${index !== results.length - 1 ? 'border-b border-border/50' : ''}`}
                                 onPress={() => {
                                     navigation.navigate('StockDetail', { symbol: item.symbol });
                                     setQuery('');
                                     setResults([]);
                                 }}
                             >
-                                <View>
-                                    <Text className="font-bold text-text-primary">{item.symbol}</Text>
-                                    <Text className="text-text-secondary text-xs">{item.description}</Text>
+                                <View className="flex-row items-center flex-1">
+                                    <View className="w-10 h-10 rounded-full bg-background border border-border items-center justify-center mr-3">
+                                        <Text className="text-text-primary font-bold text-xs">{item.symbol.substring(0, 2).toUpperCase()}</Text>
+                                    </View>
+                                    <View className="flex-1">
+                                        <Text className="font-black text-text-primary text-base">{item.symbol}</Text>
+                                        <Text className="text-text-muted text-[10px] font-bold uppercase tracking-tighter" numberOfLines={1}>
+                                            {item.description || 'Equity • NSE'}
+                                        </Text>
+                                    </View>
                                 </View>
-                                <ChevronRight size={16} color="#6B7280" />
+                                <View className="bg-background/50 p-2 rounded-xl">
+                                    <ChevronRight size={14} color="#6B7280" />
+                                </View>
                             </TouchableOpacity>
                         )}
                     />
@@ -148,8 +158,8 @@ const WatchlistScreen = () => {
             <FlatList
                 data={trending}
                 keyExtractor={(item) => item.symbol}
-                className="px-4"
-                ListHeaderComponent={<Text className="text-lg font-bold text-text-primary mb-4">Nifty 50 Movers</Text>}
+                className="px-4 pt-4"
+                ListHeaderComponent={<Text className="text-xl font-black text-text-primary mb-6 mt-4">Nifty 50 Movers</Text>}
                 renderItem={({ item, index }) => (
                     <TouchableOpacity
                         className="bg-surface p-6 rounded-[32px] border border-border mb-4 flex-row items-center justify-between active:scale-[0.98]"
@@ -180,9 +190,9 @@ const WatchlistScreen = () => {
                     </TouchableOpacity>
                 )}
                 ListFooterComponent={<View className="h-20" />}
-                ListEmptyComponent={<ActivityIndicator size="large" color="#2563eb" className="mt-10" />}
+                ListEmptyComponent={<ActivityIndicator size="large" color="#00E0A1" className="mt-10" />}
                 refreshControl={
-                    <RefreshControl refreshing={false} onRefresh={fetchTrending} tintColor="#2563eb" />
+                    <RefreshControl refreshing={false} onRefresh={fetchTrending} tintColor="#00E0A1" />
                 }
             />
         </View>

@@ -98,9 +98,9 @@ const CalendarScreen = () => {
                         <View key={dateStr} className="flex-1 h-20 border border-border/20 p-1">
                             <Text className="text-text-muted text-[10px] font-bold">{dayNum}</Text>
                             {pnl !== undefined && (
-                                <View className={`flex-1 rounded-lg mt-1 items-center justify-center ${pnl >= 0 ? 'bg-success/10' : 'bg-error/10'}`}>
-                                    <Text className={`text-[10px] font-black ${pnl >= 0 ? 'text-success' : 'text-error'}`}>
-                                        {pnl >= 0 ? '+' : ''}{pnl.toFixed(0)}
+                                <View className={`flex-1 rounded-lg mt-1 items-center justify-center ${pnl > 0 ? 'bg-success/10' : pnl < 0 ? 'bg-error/10' : 'bg-surfaceHighlight'}`}>
+                                    <Text className={`text-[10px] font-black ${pnl > 0 ? 'text-success' : pnl < 0 ? 'text-error' : 'text-text-muted'}`}>
+                                        {pnl > 0 ? '+' : ''}{pnl.toFixed(0)}
                                     </Text>
                                 </View>
                             )}
@@ -134,7 +134,7 @@ const CalendarScreen = () => {
             <StatusBar barStyle="light-content" />
             <ScrollView
                 className="flex-1 px-4"
-                refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchPnL} tintColor="#2563eb" />}
+                refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchPnL} tintColor="#00E0A1" />}
             >
                 <View className="mb-6">
                     <Text className="text-3xl font-black text-text-primary">Journal</Text>
@@ -144,12 +144,12 @@ const CalendarScreen = () => {
                 <View className="bg-surface rounded-[32px] border border-border p-6 mb-8 flex-row items-center justify-between">
                     <View>
                         <Text className="text-text-muted text-xs font-bold uppercase tracking-widest mb-1">Monthly P&L</Text>
-                        <Text className={`text-2xl font-black ${totalMonthPnL >= 0 ? 'text-success' : 'text-error'}`}>
-                            {totalMonthPnL >= 0 ? '+' : ''}₹{totalMonthPnL.toLocaleString()}
+                        <Text className={`text-2xl font-black ${totalMonthPnL > 0 ? 'text-success' : totalMonthPnL < 0 ? 'text-error' : 'text-text-primary'}`}>
+                            {totalMonthPnL > 0 ? '+' : ''}₹{totalMonthPnL.toLocaleString()}
                         </Text>
                     </View>
-                    <View className={`w-12 h-12 rounded-2xl items-center justify-center ${totalMonthPnL >= 0 ? 'bg-success/10' : 'bg-error/10'}`}>
-                        {totalMonthPnL >= 0 ? <TrendingUp size={24} color="#10B981" /> : <TrendingDown size={24} color="#EF4444" />}
+                    <View className={`w-12 h-12 rounded-2xl items-center justify-center ${totalMonthPnL > 0 ? 'bg-success/10' : totalMonthPnL < 0 ? 'bg-error/10' : 'bg-surfaceHighlight'}`}>
+                        {totalMonthPnL > 0 ? <TrendingUp size={24} color="#10B981" /> : totalMonthPnL < 0 ? <TrendingDown size={24} color="#EF4444" /> : <CalendarIcon size={24} color="#6B7280" />}
                     </View>
                 </View>
 
