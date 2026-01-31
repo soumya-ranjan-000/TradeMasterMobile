@@ -1,18 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, FlatList, TouchableOpacity, ActivityIndicator, ScrollView, RefreshControl, StatusBar, Pressable } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Wallet, Plus, ArrowUpRight, TrendingUp, Search, Bell, Settings } from 'lucide-react-native';
+import { Plus, Search, Bell, Trash2, X, ChevronRight } from 'lucide-react-native';
 import { API_URL, BREEZE_API_URL, TEST_USER_ID } from '../config';
-import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
+import { useNavigation, CompositeNavigationProp, useIsFocused } from '@react-navigation/native';
+import { Alert } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RootStackParamList, MainTabParamList } from '../navigation/RootNavigator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-interface AccountData {
-    balance: number;
-    equity: number;
-}
+
 
 interface ProfileData {
     full_name: string;
@@ -28,24 +25,17 @@ type DashboardScreenNavigationProp = CompositeNavigationProp<
 const DashboardScreen = () => {
     const navigation = useNavigation<DashboardScreenNavigationProp>();
     const [userId, setUserId] = useState<string>(TEST_USER_ID);
-    const [account, setAccount] = useState<AccountData | null>(null);
     const [profile, setProfile] = useState<ProfileData | null>(null);
     const [trends, setTrends] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [marketStatus, setMarketStatus] = useState<{ is_open: boolean; message: string } | null>(null);
+    const [activeCategory, setActiveCategory] = useState('Trending');
+    const [watchlists, setWatchlists] = useState<any[]>([]);
+    const [watchlistQuotes, setWatchlistQuotes] = useState<Record<string, any>>({});
+    const [watchLoading, setWatchLoading] = useState(false);
+    const isFocused = useIsFocused();
 
-    const fetchAccount = async (id: string = userId) => {
-        try {
-            setLoading(true);
-            const response = await fetch(`${API_URL}/account/${id}`);
-            const data = await response.json();
-            setAccount(data);
-        } catch (error) {
-            console.error("Failed to fetch account:", error);
-        } finally {
-            setLoading(false);
-        }
-    };
+
 
     const fetchTrends = async () => {
         try {
@@ -104,6 +94,48 @@ const DashboardScreen = () => {
         }
     };
 
+    const fetchWatchlistQuotes = async (symbols: string[]) => {
+        try {
+            const res = await fetch(`${BREEZE_API_URL}/api/batch-quotes`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ symbols })
+            });
+            const data = await res.json();
+            const quoteMap: Record<string, any> = {};
+            if (Array.isArray(data)) {
+                data.forEach((q: any) => {
+                    quoteMap[q.symbol] = q;
+                    // Also store by clean symbol for easier lookup
+                    quoteMap[q.symbol.split('.')[0]] = q;
+                });
+            }
+            setWatchlistQuotes(quoteMap);
+        } catch (error) {
+            console.error("Failed to fetch watchlist quotes:", error);
+        }
+    };
+
+    const fetchWatchlists = async (id: string = userId) => {
+        try {
+            setWatchLoading(true);
+            const res = await fetch(`${API_URL}/watchlists/${id}`);
+            const data = await res.json();
+            const wLists = Array.isArray(data) ? data : [];
+            setWatchlists(wLists);
+
+            // Get unique symbols across all watchlists
+            const allSymbols = Array.from(new Set(wLists.flatMap(wl => wl.symbols)));
+            if (allSymbols.length > 0) {
+                fetchWatchlistQuotes(allSymbols);
+            }
+        } catch (error) {
+            console.error("Failed to fetch watchlists:", error);
+        } finally {
+            setWatchLoading(false);
+        }
+    };
+
     const fetchMarketStatus = async () => {
         try {
             const res = await fetch(`${BREEZE_API_URL}/api/market-status`);
@@ -114,18 +146,67 @@ const DashboardScreen = () => {
         }
     };
 
+    const deleteWatchlist = async (watchlistId: string, name: string) => {
+        Alert.alert(
+            "Delete Watchlist",
+            `Are you sure you want to delete "${name}"?`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            const res = await fetch(`${API_URL}/watchlists/${userId}/${watchlistId}`, { method: 'DELETE' });
+                            if (res.ok) {
+                                fetchWatchlists(userId);
+                            }
+                        } catch (error) {
+                            console.error("Failed to delete watchlist:", error);
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    const removeFromWatchlist = async (watchlistId: string, symbol: string) => {
+        try {
+            const res = await fetch(`${API_URL}/watchlists/remove`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_id: userId,
+                    watchlist_id: watchlistId,
+                    symbol: symbol
+                })
+            });
+            if (res.ok) {
+                fetchWatchlists(userId);
+            }
+        } catch (error) {
+            console.error("Failed to remove stock:", error);
+        }
+    };
+
+    useEffect(() => {
+        if (isFocused) {
+            fetchWatchlists(userId);
+        }
+    }, [isFocused, userId]);
+
     useEffect(() => {
         const init = async () => {
             const savedId = await AsyncStorage.getItem('USER_ID');
             const finalId = savedId || TEST_USER_ID;
             setUserId(finalId);
-            fetchAccount(finalId);
             fetchTrends();
             fetchProfile(finalId);
             fetchMarketStatus();
+            fetchWatchlists(finalId);
         };
         init();
-        const timer = setInterval(fetchMarketStatus, 60000); // Check every minute
+        const timer = setInterval(fetchMarketStatus, 60000);
         return () => clearInterval(timer);
     }, []);
 
@@ -146,7 +227,7 @@ const DashboardScreen = () => {
                 refreshControl={
                     <RefreshControl
                         refreshing={loading}
-                        onRefresh={() => { fetchAccount(userId); fetchTrends(); fetchProfile(userId); }}
+                        onRefresh={() => { fetchTrends(); fetchProfile(userId); fetchWatchlists(userId); }}
                         tintColor="#2563eb"
                         colors={["#2563eb"]}
                     />
@@ -188,113 +269,153 @@ const DashboardScreen = () => {
                     </View>
                 </View>
 
-                {/* Balance Card with Gradient */}
-                <View className="px-4 py-4">
-                    <LinearGradient
-                        colors={['#2563eb', '#1d4ed8']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        className="rounded-[32px] p-8 shadow-2xl shadow-primary/40 overflow-hidden"
-                    >
-                        <View className="items-center">
-                            <Text className="text-white/70 text-sm mb-1 uppercase tracking-widest font-bold">Total Balance</Text>
-                            <Text className="text-white text-4xl font-black tracking-tight mb-8">
-                                {account ? formatCurrency(account.equity) : '₹0.00'}
-                            </Text>
-
-                            <View className="flex-row gap-4 w-full">
-                                <TouchableOpacity className="flex-1 bg-white/20 py-3.5 rounded-2xl items-center border border-white/30">
-                                    <Text className="text-white font-bold text-base">Deposit</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity className="flex-1 bg-white/10 py-3.5 rounded-2xl items-center border border-white/20">
-                                    <Text className="text-white font-bold text-base">Withdraw</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-
-                        {/* Decorative Circle */}
-                        <View className="absolute -top-20 -right-20 w-40 h-40 rounded-full bg-white/10" />
-                    </LinearGradient>
-                </View>
-
-
-                {/* Stats row */}
-                <View className="flex-row px-6 justify-between mt-4">
-                    <View className="flex-row items-center">
-                        <View className="w-8 h-8 rounded-full bg-success/10 items-center justify-center mr-2">
-                            <TrendingUp size={16} color="#10B981" />
-                        </View>
-                        <View>
-                            <Text className="text-text-muted text-[10px] uppercase font-bold">Day Profit</Text>
-                            <Text className="text-success font-bold">+ ₹1,240.50</Text>
-                        </View>
-                    </View>
-                    <View className="h-8 w-px bg-border mx-2" />
-                    <View className="flex-row items-center">
-                        <View className="w-8 h-8 rounded-full bg-primary/10 items-center justify-center mr-2">
-                            <Wallet size={16} color="#2563eb" />
-                        </View>
-                        <View>
-                            <Text className="text-text-muted text-[10px] uppercase font-bold">Invested</Text>
-                            <Text className="text-text-primary font-bold">₹85,000.00</Text>
-                        </View>
-                    </View>
-                </View>
-
                 {/* Category Selector (Trending, News, Top Market) */}
                 <View className="mt-8 px-4">
                     <View className="flex-row gap-6 items-center">
-                        {['Trending', 'News', 'Top Market'].map((cat, i) => (
-                            <TouchableOpacity key={i}>
-                                <Text className={`text-base font-bold ${i === 0 ? 'text-text-primary' : 'text-text-muted'}`}>{cat}</Text>
-                                {i === 0 && <View className="h-1 bg-primary rounded-full w-1/3 mt-1" />}
+                        {['Trending', 'Watchlists', 'News', 'Top Market'].map((cat, i) => (
+                            <TouchableOpacity key={cat} onPress={() => setActiveCategory(cat)}>
+                                <Text className={`text-base font-bold ${activeCategory === cat ? 'text-text-primary' : 'text-text-muted'}`}>{cat}</Text>
+                                {activeCategory === cat && <View className="h-1 bg-primary rounded-full w-1/3 mt-1" />}
                             </TouchableOpacity>
                         ))}
                     </View>
                 </View>
 
-                {/* Trending Stocks List */}
-                <View className="mt-6 px-4 pb-20">
-                    <View className="flex-row justify-between items-center mb-6">
-                        <Text className="text-lg font-bold text-text-primary">Market Trends</Text>
-                        <TouchableOpacity onPress={fetchTrends}>
-                            <Plus size={20} color="#2563eb" />
-                        </TouchableOpacity>
-                    </View>
+                {activeCategory === 'Trending' && (
+                    <View className="mt-6 px-4 pb-20">
+                        <View className="flex-row justify-between items-center mb-6">
+                            <Text className="text-lg font-bold text-text-primary">Market Trends</Text>
+                            <TouchableOpacity onPress={fetchTrends}>
+                                <Plus size={20} color="#2563eb" />
+                            </TouchableOpacity>
+                        </View>
 
-                    {trends.length > 0 ? trends.map((asset, i) => (
-                        <Pressable
-                            key={i}
-                            onPress={() => navigation.navigate('StockDetail', { symbol: asset.symbol })}
-                            className="bg-surface p-6 rounded-[32px] border border-border mb-4 flex-row items-center justify-between active:scale-95 transition-transform"
-                        >
-                            <View className="flex-row items-center">
-                                <View className={`w-14 h-14 rounded-2xl items-center justify-center mr-4 ${asset.change >= 0 ? 'bg-success/10' : 'bg-error/10'}`}>
-                                    <Text className={`font-black text-xl ${asset.change >= 0 ? 'text-success' : 'text-error'}`}>{asset.symbol[0]}</Text>
-                                </View>
-                                <View>
-                                    <Text className="text-text-primary font-black text-lg tracking-tight">{asset.symbol.split('.')[0]}</Text>
-                                    <View className="flex-row items-center mt-1">
-                                        <Text className="text-text-secondary text-xs font-medium" numberOfLines={1} style={{ maxWidth: 120 }}>{asset.name} • </Text>
-                                        <Text className={`text-xs font-bold ${asset.change >= 0 ? 'text-success' : 'text-error'}`}>
-                                            {asset.change >= 0 ? '+' : ''}{asset.change.toFixed(2)}%
-                                        </Text>
+                        {trends.length > 0 ? trends.map((asset, i) => (
+                            <Pressable
+                                key={i}
+                                onPress={() => navigation.navigate('StockDetail', { symbol: asset.symbol })}
+                                className="bg-surface p-6 rounded-[32px] border border-border mb-4 flex-row items-center justify-between active:scale-95 transition-transform"
+                            >
+                                <View className="flex-row items-center">
+                                    <View className={`w-14 h-14 rounded-2xl items-center justify-center mr-4 ${asset.change >= 0 ? 'bg-success/10' : 'bg-error/10'}`}>
+                                        <Text className={`font-black text-xl ${asset.change >= 0 ? 'text-success' : 'text-error'}`}>{asset.symbol[0]}</Text>
+                                    </View>
+                                    <View>
+                                        <Text className="text-text-primary font-black text-lg tracking-tight">{asset.symbol.split('.')[0]}</Text>
+                                        <View className="flex-row items-center mt-1">
+                                            <Text className="text-text-secondary text-xs font-medium" numberOfLines={1} style={{ maxWidth: 120 }}>{asset.name} • </Text>
+                                            <Text className={`text-xs font-bold ${asset.change >= 0 ? 'text-success' : 'text-error'}`}>
+                                                {asset.change >= 0 ? '+' : ''}{asset.change.toFixed(2)}%
+                                            </Text>
+                                        </View>
                                     </View>
                                 </View>
-                            </View>
-                            <View className="items-end">
-                                <Text className="text-text-primary font-black text-lg">₹{asset.price.toFixed(2)}</Text>
-                                <View className="flex-row gap-1 mt-2 items-end h-6">
-                                    {[1, 2, 3, 4, 5, 6, 7].map((s) => (
-                                        <View key={s} className={`w-1 rounded-full ${asset.change >= 0 ? 'bg-success' : 'bg-error'}`} style={{ height: Math.abs(Math.sin(s + i)) * 15 + 5, opacity: 0.3 + (s / 10) }} />
-                                    ))}
+                                <View className="items-end">
+                                    <Text className="text-text-primary font-black text-lg">₹{asset.price.toFixed(2)}</Text>
+                                    <View className="flex-row gap-1 mt-2 items-end h-6">
+                                        {[1, 2, 3, 4, 5, 6, 7].map((s) => (
+                                            <View key={s} className={`w-1 rounded-full ${asset.change >= 0 ? 'bg-success' : 'bg-error'}`} style={{ height: Math.abs(Math.sin(s + i)) * 15 + 5, opacity: 0.3 + (s / 10) }} />
+                                        ))}
+                                    </View>
                                 </View>
+                            </Pressable>
+                        )) : (
+                            <ActivityIndicator size="large" color="#2563eb" className="mt-10" />
+                        )}
+                    </View>
+                )}
+
+                {activeCategory === 'Watchlists' && (
+                    <View className="mt-6 px-4 pb-20">
+                        {watchLoading && watchlists.length === 0 ? (
+                            <ActivityIndicator size="large" color="#2563eb" className="mt-10" />
+                        ) : watchlists.length > 0 ? watchlists.map((wl, i) => (
+                            <View key={wl._id} className="mb-8">
+                                <View className="flex-row justify-between items-center mb-4 px-2">
+                                    <View>
+                                        <Text className="text-lg font-black text-text-primary">{wl.name}</Text>
+                                        <Text className="text-text-muted text-xs font-bold uppercase tracking-widest">{wl.symbols.length} Stocks</Text>
+                                    </View>
+                                    <TouchableOpacity
+                                        onPress={() => deleteWatchlist(wl._id, wl.name)}
+                                        className="w-8 h-8 rounded-full bg-error/10 items-center justify-center"
+                                    >
+                                        <Trash2 size={16} color="#EF4444" />
+                                    </TouchableOpacity>
+                                </View>
+
+                                {wl.symbols.length > 0 ? wl.symbols.map((sym: string, j: number) => {
+                                    const quote = watchlistQuotes[sym] || watchlistQuotes[sym + '.NS'];
+                                    return (
+                                        <Pressable
+                                            key={sym}
+                                            onPress={() => navigation.navigate('StockDetail', { symbol: sym })}
+                                            className="bg-surface p-6 rounded-[32px] border border-border mb-4 flex-row items-center justify-between active:scale-95 transition-transform"
+                                        >
+                                            <View className="flex-row items-center">
+                                                <View className={`w-14 h-14 rounded-2xl items-center justify-center mr-4 ${quote?.change >= 0 || !quote ? 'bg-success/10' : 'bg-error/10'}`}>
+                                                    <Text className={`font-black text-xl ${quote?.change >= 0 || !quote ? 'text-success' : 'text-error'}`}>{sym[0]}</Text>
+                                                </View>
+                                                <View>
+                                                    <Text className="text-text-primary font-black text-lg tracking-tight">{sym.split('.')[0]}</Text>
+                                                    <View className="flex-row items-center mt-1">
+                                                        <Text className="text-text-secondary text-[10px] font-bold uppercase tracking-tight" numberOfLines={1} style={{ maxWidth: 80 }}>
+                                                            {quote?.change !== undefined ? `NSE • ` : 'NSE • EQUITY'}
+                                                        </Text>
+                                                        {quote?.change !== undefined && (
+                                                            <Text className={`text-xs font-bold ${quote.change >= 0 ? 'text-success' : 'text-error'}`}>
+                                                                {quote.change >= 0 ? '+' : ''}{quote.change.toFixed(2)}%
+                                                            </Text>
+                                                        )}
+                                                    </View>
+                                                </View>
+                                            </View>
+                                            <View className="flex-row items-center">
+                                                <View className="items-end mr-4">
+                                                    <Text className="text-text-primary font-black text-lg">
+                                                        {quote?.price ? `₹${quote.price.toFixed(2)}` : '---'}
+                                                    </Text>
+                                                    <View className="flex-row gap-0.5 mt-2 items-end h-4">
+                                                        {[1, 2, 3, 4, 5].map((s) => (
+                                                            <View key={s} className={`w-0.5 rounded-full ${quote?.change >= 0 || !quote ? 'bg-success' : 'bg-error'}`} style={{ height: Math.abs(Math.sin(s + j)) * 10 + 3, opacity: 0.3 + (s / 10) }} />
+                                                        ))}
+                                                    </View>
+                                                </View>
+                                                <TouchableOpacity
+                                                    onPress={() => removeFromWatchlist(wl._id, sym)}
+                                                    className="w-8 h-8 rounded-full bg-surface border border-border items-center justify-center"
+                                                >
+                                                    <X size={14} color="#6B7280" />
+                                                </TouchableOpacity>
+                                            </View>
+                                        </Pressable>
+                                    );
+                                }) : (
+                                    <View className="bg-surface/30 p-8 rounded-[28px] border border-dashed border-border items-center">
+                                        <Text className="text-text-muted font-bold text-sm">No stocks in this watchlist</Text>
+                                    </View>
+                                )}
                             </View>
-                        </Pressable>
-                    )) : (
-                        <ActivityIndicator size="large" color="#2563eb" className="mt-10" />
-                    )}
-                </View>
+                        )) : (
+                            <View className="items-center py-20 opacity-50">
+                                <Text className="text-text-muted font-bold mb-4">No watchlists yet</Text>
+                                <TouchableOpacity
+                                    onPress={() => Alert.alert("Tip", "Visit any stock detail page to create a watchlist!")}
+                                    className="bg-primary/10 px-6 py-3 rounded-full border border-primary/20"
+                                >
+                                    <Text className="text-primary font-bold">How to add stocks?</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
+                    </View>
+                )}
+
+                {(activeCategory === 'News' || activeCategory === 'Top Market') && (
+                    <View className="mt-10 items-center py-20 opacity-30">
+                        <Text className="text-text-muted font-bold text-lg">Under Construction</Text>
+                        <Text className="text-text-muted text-xs mt-2">Will be available in next update</Text>
+                    </View>
+                )}
             </ScrollView>
         </View>
     );

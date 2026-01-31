@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Home, PieChart, Activity, BookOpen, Calendar } from 'lucide-react-native';
+import { Home, PieChart, Activity, BookOpen, User } from 'lucide-react-native';
 
 import DashboardScreen from '../screens/DashboardScreen';
 import WatchlistScreen from '../screens/WatchlistScreen';
@@ -12,6 +12,7 @@ import StockDetailScreen from '../screens/StockDetailScreen';
 import TradeScreen from '../screens/TradeScreen';
 import CalendarScreen from '../screens/CalendarScreen';
 import LoginScreen from '../screens/LoginScreen';
+import ProfileScreen from '../screens/ProfileScreen';
 
 // Types for Navigation
 export type RootStackParamList = {
@@ -26,6 +27,7 @@ export type MainTabParamList = {
     Watchlist: undefined;
     Portfolio: undefined;
     Journal: undefined;
+    Profile: undefined;
     StockDetail: { symbol: string };
     Trade: { symbol: string; side: 'BUY' | 'SELL' };
 };
@@ -56,6 +58,7 @@ const MainTabs = () => {
                     else if (route.name === 'Watchlist') Icon = Activity;
                     else if (route.name === 'Portfolio') Icon = PieChart;
                     else if (route.name === 'Journal') Icon = BookOpen;
+                    else if (route.name === 'Profile') Icon = User;
                     else return null;
 
                     return (
@@ -93,6 +96,7 @@ const MainTabs = () => {
             <Tab.Screen name="Watchlist" component={WatchlistScreen} />
             <Tab.Screen name="Journal" component={CalendarScreen} />
             <Tab.Screen name="Portfolio" component={PortfolioScreen} />
+            <Tab.Screen name="Profile" component={ProfileScreen} />
 
             {/* Hidden Tabs (to keep Navbar visible) */}
             <Tab.Screen

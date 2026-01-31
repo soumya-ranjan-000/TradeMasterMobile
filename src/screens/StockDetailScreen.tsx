@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, Dimensions, PanResponder, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, Dimensions, Modal, TextInput, Alert, FlatList } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/RootNavigator';
-import { ChevronLeft, Share2, Star, TrendingUp, Plus } from 'lucide-react-native';
-import { BREEZE_API_URL, API_URL } from '../config';
+import { ChevronLeft, Share2, Star, TrendingUp, Plus, X, Search, ListPlus } from 'lucide-react-native';
+import { BREEZE_API_URL, API_URL, TEST_USER_ID } from '../config';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Rect, Line, Defs, LinearGradient as SVGGradiant, Stop, Text as SvgText } from 'react-native-svg';
 
 type StockDetailScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'StockDetail'>;
@@ -21,6 +22,14 @@ const StockDetailScreen = () => {
     const [stockData, setStockData] = useState<any>(null);
     const [history, setHistory] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+    const [userId, setUserId] = useState<string>(TEST_USER_ID);
+
+    // Watchlist State
+    const [isWatchlistModalVisible, setIsWatchlistModalVisible] = useState(false);
+    const [userWatchlists, setUserWatchlists] = useState<any[]>([]);
+    const [newWatchlistName, setNewWatchlistName] = useState('');
+    const [isCreatingNew, setIsCreatingNew] = useState(false);
+    const [watchLoading, setWatchLoading] = useState(false);
 
     // Interaction State
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -94,6 +103,86 @@ const StockDetailScreen = () => {
         init();
         return () => timer && clearInterval(timer);
     }, [symbol]);
+
+    const fetchUserWatchlists = async () => {
+        try {
+            setWatchLoading(true);
+            const savedId = await AsyncStorage.getItem('USER_ID');
+            const uid = savedId || TEST_USER_ID;
+            setUserId(uid);
+            const response = await fetch(`${API_URL}/watchlists/${uid}`);
+            const data = await response.json();
+            setUserWatchlists(Array.isArray(data) ? data : []);
+        } catch (error) {
+            console.error("Failed to fetch watchlists:", error);
+        } finally {
+            setWatchLoading(false);
+        }
+    };
+
+    const addToWatchlist = async (watchlistId: string) => {
+        try {
+            setWatchLoading(true);
+            const response = await fetch(`${API_URL}/watchlists/add`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_id: userId,
+                    watchlist_id: watchlistId,
+                    symbol: symbol
+                })
+            });
+            if (response.ok) {
+                Alert.alert("Success", `Added ${symbol} to watchlist`);
+                setIsWatchlistModalVisible(false);
+            } else {
+                const err = await response.json();
+                Alert.alert("Error", err.detail || "Failed to add to watchlist");
+            }
+        } catch (error) {
+            console.error("Failed to add to watchlist:", error);
+        } finally {
+            setWatchLoading(false);
+        }
+    };
+
+    const createWatchlist = async () => {
+        if (!newWatchlistName.trim()) {
+            Alert.alert("Error", "Please enter a name for the watchlist");
+            return;
+        }
+        try {
+            setWatchLoading(true);
+            const response = await fetch(`${API_URL}/watchlists`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_id: userId,
+                    name: newWatchlistName,
+                    symbols: [symbol]
+                })
+            });
+            if (response.ok) {
+                Alert.alert("Success", `Created watchlist "${newWatchlistName}" and added ${symbol}`);
+                setNewWatchlistName('');
+                setIsCreatingNew(false);
+                setIsWatchlistModalVisible(false);
+            } else {
+                const err = await response.json();
+                Alert.alert("Error", err.detail || "Failed to create watchlist");
+            }
+        } catch (error) {
+            console.error("Failed to create watchlist:", error);
+        } finally {
+            setWatchLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (isWatchlistModalVisible) {
+            fetchUserWatchlists();
+        }
+    }, [isWatchlistModalVisible]);
 
     useEffect(() => {
         fetchHistory();
@@ -243,7 +332,12 @@ const StockDetailScreen = () => {
                     <ChevronLeft size={24} color="#E1E7ED" />
                 </TouchableOpacity>
                 <View className="flex-row gap-3">
-                    <TouchableOpacity className="p-2 bg-white/5 rounded-full"><Plus size={20} color="#E1E7ED" /></TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={() => setIsWatchlistModalVisible(true)}
+                        className="p-2 bg-white/5 rounded-full"
+                    >
+                        <Plus size={20} color="#E1E7ED" />
+                    </TouchableOpacity>
                     <TouchableOpacity className="p-2 bg-white/5 rounded-full"><Share2 size={20} color="#E1E7ED" /></TouchableOpacity>
                     <TouchableOpacity className="p-2 bg-white/5 rounded-full"><Star size={20} color="#E1E7ED" /></TouchableOpacity>
                 </View>
@@ -358,6 +452,110 @@ const StockDetailScreen = () => {
                     </View>
                 </View>
             </ScrollView>
+
+            {/* Watchlist Modal */}
+            <Modal
+                visible={isWatchlistModalVisible}
+                animationType="slide"
+                transparent={true}
+                onRequestClose={() => setIsWatchlistModalVisible(false)}
+            >
+                <View className="flex-1 justify-end bg-black/60">
+                    <View className="bg-surface rounded-t-[40px] border-t border-border p-8 min-h-[50%]">
+                        <View className="flex-row justify-between items-center mb-8">
+                            <View>
+                                <Text className="text-text-primary text-2xl font-black">Add to Watchlist</Text>
+                                <Text className="text-text-muted text-sm font-bold">{symbol}</Text>
+                            </View>
+                            <TouchableOpacity
+                                onPress={() => {
+                                    setIsWatchlistModalVisible(false);
+                                    setIsCreatingNew(false);
+                                }}
+                                className="w-10 h-10 bg-background rounded-full items-center justify-center border border-border"
+                            >
+                                <X size={20} color="#E1E7ED" />
+                            </TouchableOpacity>
+                        </View>
+
+                        {isCreatingNew ? (
+                            <View>
+                                <View className="flex-row items-center mb-4">
+                                    <ListPlus size={18} color="#2563eb" />
+                                    <Text className="text-text-primary font-bold ml-2 text-base">New Watchlist Name</Text>
+                                </View>
+                                <TextInput
+                                    className="bg-background border border-border p-5 rounded-2xl text-text-primary font-bold text-lg mb-6"
+                                    placeholder="Enter Watchlist Name"
+                                    placeholderTextColor="#6B7280"
+                                    autoFocus
+                                    value={newWatchlistName}
+                                    onChangeText={setNewWatchlistName}
+                                />
+                                <View className="flex-row gap-4">
+                                    <TouchableOpacity
+                                        onPress={() => setIsCreatingNew(false)}
+                                        className="flex-1 py-4 rounded-2xl border border-border items-center"
+                                    >
+                                        <Text className="text-text-muted font-bold">Cancel</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        disabled={watchLoading}
+                                        onPress={createWatchlist}
+                                        className={`flex-1 py-4 rounded-2xl items-center ${watchLoading ? 'bg-primary/50' : 'bg-primary'}`}
+                                    >
+                                        {watchLoading ? <ActivityIndicator color="white" /> : <Text className="text-white font-bold">Create & Add</Text>}
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        ) : (
+                            <View className="flex-1">
+                                {watchLoading && userWatchlists.length === 0 ? (
+                                    <ActivityIndicator size="large" color="#2563eb" className="mt-10" />
+                                ) : (
+                                    <FlatList
+                                        data={userWatchlists}
+                                        keyExtractor={(item) => item._id}
+                                        ListHeaderComponent={
+                                            <TouchableOpacity
+                                                onPress={() => setIsCreatingNew(true)}
+                                                className="flex-row items-center p-5 bg-primary/10 rounded-2xl border border-primary/20 mb-4"
+                                            >
+                                                <ListPlus size={20} color="#2563eb" className="mr-3" />
+                                                <Text className="text-primary font-bold ml-3">Create New Watchlist</Text>
+                                            </TouchableOpacity>
+                                        }
+                                        renderItem={({ item }) => (
+                                            <TouchableOpacity
+                                                onPress={() => addToWatchlist(item._id)}
+                                                className="flex-row items-center justify-between p-5 bg-background border border-border rounded-2xl mb-3"
+                                            >
+                                                <View>
+                                                    <Text className="text-text-primary font-bold">{item.name}</Text>
+                                                    <Text className="text-text-muted text-xs">{item.symbols?.length || 0} stocks</Text>
+                                                </View>
+                                                {item.symbols?.includes(symbol) ? (
+                                                    <View className="bg-success/20 px-3 py-1 rounded-full">
+                                                        <Text className="text-success text-[10px] font-bold">ADDED</Text>
+                                                    </View>
+                                                ) : (
+                                                    <Plus size={18} color="#6B7280" />
+                                                )}
+                                            </TouchableOpacity>
+                                        )}
+                                        ListEmptyComponent={
+                                            <View className="items-center mt-10 py-10 opacity-50">
+                                                <Text className="text-text-muted font-bold">No watchlists found</Text>
+                                            </View>
+                                        }
+                                        contentContainerStyle={{ paddingBottom: 40 }}
+                                    />
+                                )}
+                            </View>
+                        )}
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 };
