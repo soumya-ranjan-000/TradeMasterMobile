@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Switch, TextInput, Alert, ActivityIndicator, StatusBar, Platform } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { ChevronLeft, Bell, BellPlus, Trash2, TrendingUp, AlertCircle, Clock, Smartphone } from 'lucide-react-native';
-import { API_URL, TEST_USER_ID } from '../config';
+import { API_URL, BREEZE_API_URL, TEST_USER_ID } from '../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useLivePrice } from '../context/MarketDataContext';
 
 const AlertsScreen = () => {
     const navigation = useNavigation();
@@ -16,7 +17,13 @@ const AlertsScreen = () => {
     const [showAddAlert, setShowAddAlert] = useState(false);
     const [newSymbol, setNewSymbol] = useState('');
     const [newPrice, setNewPrice] = useState('');
-    const [condition, setCondition] = useState('Above'); // 'Above' or 'Below'
+    const [condition, setCondition] = useState('Above');
+    const [searchResults, setSearchResults] = useState<any[]>([]);
+    const [searchLoading, setSearchLoading] = useState(false);
+
+    // Get live price for the selected symbol for validation
+    const liveTick = useLivePrice(newSymbol);
+    const currentPrice = liveTick?.ltp || 0;
 
     const fetchAlerts = async () => {
         try {
@@ -47,6 +54,30 @@ const AlertsScreen = () => {
     useEffect(() => {
         fetchAlerts();
     }, []);
+
+    const handleSearch = async (text: string) => {
+        setNewSymbol(text);
+        if (text.length < 2) {
+            setSearchResults([]);
+            return;
+        }
+
+        try {
+            setSearchLoading(true);
+            const res = await fetch(`${BREEZE_API_URL}/api/search?q=${text}`);
+            const data = await res.json();
+            setSearchResults(Array.isArray(data) ? data : []);
+        } catch (error) {
+            console.error("Symbol search failed:", error);
+        } finally {
+            setSearchLoading(false);
+        }
+    };
+
+    const selectSymbol = (symbol: string) => {
+        setNewSymbol(symbol);
+        setSearchResults([]);
+    };
 
     const toggleAlert = async (id: string, currentStatus: boolean) => {
         try {
@@ -85,6 +116,21 @@ const AlertsScreen = () => {
             Alert.alert("Error", "Please fill all fields");
             return;
         }
+
+        const triggerVal = parseFloat(newPrice);
+
+        // Logic Improvement: Validate condition against current price
+        if (currentPrice > 0) {
+            if (condition === 'Above' && triggerVal <= currentPrice) {
+                Alert.alert("Invalid Logic", `Trigger price must be GREATER than current price (₹${currentPrice.toFixed(2)}) for 'Above' condition.`);
+                return;
+            }
+            if (condition === 'Below' && triggerVal >= currentPrice) {
+                Alert.alert("Invalid Logic", `Trigger price must be LESS than current price (₹${currentPrice.toFixed(2)}) for 'Below' condition.`);
+                return;
+            }
+        }
+
         try {
             setLoading(true);
             const res = await fetch(`${API_URL}/alerts`, {
@@ -93,17 +139,21 @@ const AlertsScreen = () => {
                 body: JSON.stringify({
                     user_id: userId,
                     symbol: newSymbol.toUpperCase(),
-                    price: parseFloat(newPrice),
+                    price: triggerVal,
                     condition
                 })
             });
+
             if (res.ok) {
                 setShowAddAlert(false);
                 setNewSymbol('');
                 setNewPrice('');
+                setSearchResults([]);
                 fetchAlerts();
+                Alert.alert("Success", "Alert set successfully");
             } else {
-                Alert.alert("Error", "Failed to create alert");
+                const errData = await res.json();
+                Alert.alert("Error", errData.detail || "Failed to create alert");
             }
         } catch (error) {
             Alert.alert("Error", "Network error");
@@ -143,14 +193,45 @@ const AlertsScreen = () => {
                         <View className="gap-4">
                             <View>
                                 <Text className="text-text-muted text-[10px] font-bold uppercase tracking-widest mb-2">Stock Symbol</Text>
-                                <TextInput
-                                    className="bg-background border border-border p-4 rounded-xl text-text-primary font-bold"
-                                    placeholder="e.g. RELIANCE"
-                                    placeholderTextColor="#6B7280"
-                                    value={newSymbol}
-                                    onChangeText={setNewSymbol}
-                                    autoCapitalize="characters"
-                                />
+                                <View className="relative">
+                                    <TextInput
+                                        className="bg-background border border-border p-4 rounded-xl text-text-primary font-bold"
+                                        placeholder="Search Symbol (e.g. RELIANCE)"
+                                        placeholderTextColor="#6B7280"
+                                        value={newSymbol}
+                                        onChangeText={handleSearch}
+                                        autoCapitalize="characters"
+                                    />
+                                    {searchLoading && (
+                                        <View className="absolute right-4 top-4">
+                                            <ActivityIndicator size="small" color="#00E0A1" />
+                                        </View>
+                                    )}
+
+                                    {searchResults.length > 0 && (
+                                        <View className="absolute top-14 left-0 right-0 bg-surface border border-border rounded-xl z-50 shadow-2xl max-h-40">
+                                            <ScrollView nestedScrollEnabled>
+                                                {searchResults.map((item) => (
+                                                    <TouchableOpacity
+                                                        key={item.symbol}
+                                                        className="p-4 border-b border-border"
+                                                        onPress={() => selectSymbol(item.symbol)}
+                                                    >
+                                                        <Text className="text-text-primary font-bold">{item.symbol}</Text>
+                                                        <Text className="text-text-muted text-[10px]">{item.description}</Text>
+                                                    </TouchableOpacity>
+                                                ))}
+                                            </ScrollView>
+                                        </View>
+                                    )}
+                                </View>
+
+                                {currentPrice > 0 && (
+                                    <View className="flex-row items-center mt-2 px-2">
+                                        <View className="w-1.5 h-1.5 rounded-full bg-success mr-2" />
+                                        <Text className="text-[10px] font-bold text-success uppercase">Current Price: ₹{currentPrice.toFixed(2)}</Text>
+                                    </View>
+                                )}
                             </View>
 
                             <View className="flex-row gap-4">

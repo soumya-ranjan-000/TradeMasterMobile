@@ -101,16 +101,19 @@ const DashboardScreen = () => {
         const quotes: Record<string, any> = {};
         watchlists.forEach(wl => {
             wl.symbols.forEach((sym: string) => {
-                const stock_code = sym.split('.')[0].toUpperCase();
-                const tick = ticks[`NSE:${stock_code}`];
+                const cleanCode = sym.split('.')[0].toUpperCase();
+                // Check multiple possible keys in ticks
+                const tick = ticks[`NSE:${cleanCode}`] || ticks[`NSE:${sym.toUpperCase()}`] || ticks[sym.toUpperCase()];
+
                 if (tick) {
                     quotes[sym] = {
                         symbol: sym,
                         price: tick.ltp,
                         change: tick.day_change_perc
                     };
-                    // Support clean symbol lookup too
-                    quotes[stock_code] = quotes[sym];
+                    // Support various lookup keys for flexibility
+                    if (cleanCode !== sym) quotes[cleanCode] = quotes[sym];
+                    if (!sym.endsWith('.NS')) quotes[sym + '.NS'] = quotes[sym];
                 }
             });
         });
@@ -249,7 +252,10 @@ const DashboardScreen = () => {
             <StatusBar barStyle="light-content" backgroundColor="#0E1116" />
             {/* Header info - Focused on Identity */}
             <View className="flex-row justify-between items-center px-6 pt-12 pb-4">
-                <View className="flex-row items-center flex-1 mr-4">
+                <TouchableOpacity
+                    onPress={() => navigation.navigate('Profile')}
+                    className="flex-row items-center flex-1 mr-4 active:opacity-80"
+                >
                     <View className="w-12 h-12 rounded-full bg-surface border border-border items-center justify-center mr-3 shadow-sm">
                         <Text className="text-text-primary font-black text-base">
                             {profile?.full_name ? profile.full_name.substring(0, 2).toUpperCase() : 'TD'}
@@ -261,7 +267,7 @@ const DashboardScreen = () => {
                             {profile?.full_name || 'Trader'}
                         </Text>
                     </View>
-                </View>
+                </TouchableOpacity>
 
                 <View className="items-end">
                     {marketStatus && (

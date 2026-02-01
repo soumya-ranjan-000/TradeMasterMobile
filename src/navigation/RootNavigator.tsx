@@ -102,7 +102,6 @@ const MainTabs = () => {
             <Tab.Screen name="Watchlist" component={WatchlistScreen} />
             <Tab.Screen name="Journal" component={CalendarScreen} />
             <Tab.Screen name="Portfolio" component={PortfolioScreen} />
-            <Tab.Screen name="Profile" component={ProfileScreen} />
 
             {/* Hidden Tabs (to keep Navbar visible) */}
             <Tab.Screen
@@ -129,6 +128,13 @@ const MainTabs = () => {
             <Tab.Screen
                 name="Performance"
                 component={PerformanceScreen}
+                options={{
+                    tabBarItemStyle: { display: 'none' },
+                }}
+            />
+            <Tab.Screen
+                name="Profile"
+                component={ProfileScreen}
                 options={{
                     tabBarItemStyle: { display: 'none' },
                 }}

@@ -9,7 +9,8 @@ import {
     Shield,
     Bell,
     ChevronRight,
-    Wallet
+    Wallet,
+    ChevronLeft
 } from 'lucide-react-native';
 import { API_URL, BREEZE_API_URL, TEST_USER_ID } from '../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -98,7 +99,7 @@ const ProfileScreen = () => {
             <StatusBar barStyle="light-content" />
             <ScrollView
                 className="flex-1"
-                contentContainerStyle={{ paddingTop: 60, paddingBottom: 100 }}
+                contentContainerStyle={{ paddingTop: 20, paddingBottom: 100 }}
                 showsVerticalScrollIndicator={false}
                 refreshControl={
                     <RefreshControl
@@ -109,6 +110,17 @@ const ProfileScreen = () => {
                     />
                 }
             >
+                {/* Custom Header with Back Button */}
+                <View className="px-6 pt-4 mb-4 flex-row items-center">
+                    <TouchableOpacity
+                        onPress={() => navigation.goBack()}
+                        className="w-10 h-10 bg-surface rounded-full items-center justify-center border border-border"
+                    >
+                        <ChevronLeft size={24} color="#E1E7ED" />
+                    </TouchableOpacity>
+                    <Text className="ml-4 text-xl font-black text-text-primary">Profile</Text>
+                </View>
+
                 {/* Profile Header */}
                 <View className="items-center px-6 mb-8">
                     <View className="w-24 h-24 rounded-full bg-surface border-4 border-primary/20 items-center justify-center mb-4">
