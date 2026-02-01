@@ -596,17 +596,17 @@ const StockDetailScreen = () => {
 
                     <View className="mt-6">
                         <Text className="text-text-primary text-5xl font-black tracking-tighter">
-                            ₹{stockData?.price?.toFixed(2) || '---'}
+                            ₹{(stockData?.price || (history.length > 0 ? history[history.length - 1].close : 0))?.toFixed(2) || '---'}
                         </Text>
-                        <View className="flex-row items-center mt-2">
-                            <View className={`flex-row items-center px-3 py-1.5 rounded-xl mr-3 ${(stockData?.change ?? 0) >= 0 ? 'bg-success/10 border border-success/20' : 'bg-error/10 border border-error/20'}`}>
-                                <TrendingUp size={16} color={(stockData?.change ?? 0) >= 0 ? '#10B981' : '#EF4444'} />
-                                <Text className={`font-black text-base ml-2 ${(stockData?.change ?? 0) >= 0 ? 'text-success' : 'text-error'}`}>
-                                    {stockData?.change_percent ? `${stockData.change_percent.toFixed(2)}%` : '0.00%'}
+                        <View className="flex-row items-center mt-3">
+                            <View className={`px-2 py-1 rounded-lg flex-row items-center ${(stockData?.change_percent || 0) >= 0 ? 'bg-success/10' : 'bg-error/10'}`}>
+                                <TrendingUp size={14} color={(stockData?.change_percent || 0) >= 0 ? '#10B981' : '#EF4444'} />
+                                <Text className={`font-black text-sm ml-1.5 ${(stockData?.change_percent || 0) >= 0 ? 'text-success' : 'text-error'}`}>
+                                    {Math.abs(stockData?.change_percent || 0).toFixed(2)}%
                                 </Text>
                             </View>
-                            <Text className="text-text-muted font-bold text-sm tracking-tight">
-                                {stockData?.change !== undefined ? `${stockData.change > 0 ? '+' : ''}${stockData.change.toFixed(2)}` : '0.00'} Since Open
+                            <Text className="text-text-muted text-sm font-bold ml-3">
+                                {stockData?.change?.toFixed(2) || '0.00'} Since Open
                             </Text>
                         </View>
                     </View>
