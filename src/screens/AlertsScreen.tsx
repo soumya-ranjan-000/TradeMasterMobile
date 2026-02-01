@@ -41,6 +41,9 @@ const AlertsScreen = () => {
                     price: a.price,
                     condition: a.condition,
                     active: a.active,
+                    isTriggered: a.is_triggered,
+                    triggeredAt: a.triggered_at,
+                    triggeredPrice: a.triggered_price,
                     createdAt: a.created_at
                 })));
             }
@@ -286,7 +289,7 @@ const AlertsScreen = () => {
                     alerts.map((alert) => (
                         <View
                             key={alert.id}
-                            className={`bg-surface p-5 rounded-[28px] border mb-4 flex-row items-center justify-between ${alert.active ? 'border-primary/20' : 'border-border'}`}
+                            className={`bg-surface p-5 rounded-[28px] border mb-4 flex-row items-center justify-between ${alert.isTriggered ? 'border-success/30 bg-success/5' : alert.active ? 'border-primary/20' : 'border-border'}`}
                         >
                             <View className="flex-row items-center flex-1">
                                 <View className={`w-12 h-12 rounded-2xl items-center justify-center mr-4 ${alert.active ? 'bg-primary/10' : 'bg-background'}`}>
@@ -294,12 +297,24 @@ const AlertsScreen = () => {
                                 </View>
                                 <View>
                                     <Text className="text-text-primary font-black text-lg">{alert.symbol}</Text>
-                                    <View className="flex-row items-center mt-1">
-                                        <TrendingUp size={12} color={alert.condition === 'Above' ? "#10B981" : "#EF4444"} />
-                                        <Text className="text-text-muted text-xs font-bold ml-1">
-                                            {alert.condition} ₹{alert.price}
-                                        </Text>
-                                    </View>
+                                    {alert.isTriggered ? (
+                                        <View className="mt-1">
+                                            <View className="flex-row items-center">
+                                                <TrendingUp size={12} color="#10B981" />
+                                                <Text className="text-success text-[10px] font-black ml-1 uppercase">Triggered @ ₹{alert.triggeredPrice?.toFixed(2)}</Text>
+                                            </View>
+                                            <Text className="text-text-muted text-[9px] mt-0.5 font-bold">
+                                                {new Date(alert.triggeredAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                            </Text>
+                                        </View>
+                                    ) : (
+                                        <View className="flex-row items-center mt-1">
+                                            <TrendingUp size={12} color={alert.condition === 'Above' ? "#10B981" : "#EF4444"} />
+                                            <Text className="text-text-muted text-xs font-bold ml-1">
+                                                {alert.condition} ₹{alert.price}
+                                            </Text>
+                                        </View>
+                                    )}
                                 </View>
                             </View>
 
