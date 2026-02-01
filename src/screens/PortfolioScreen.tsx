@@ -8,6 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Briefcase, ArrowUpRight, ArrowDownRight, History, Layers, Info, ShieldCheck, X, Target, TrendingUp, ChevronDown, ChevronRight, BarChart3 } from 'lucide-react-native';
 import { API_URL, BREEZE_API_URL, TEST_USER_ID } from '../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useMarketData } from '../context/MarketDataContext';
 const PortfolioScreen = () => {
     const navigation = useNavigation<CompositeNavigationProp<
         BottomTabNavigationProp<MainTabParamList, 'Portfolio'>,
@@ -25,6 +26,35 @@ const PortfolioScreen = () => {
     const [newTrailingSL, setNewTrailingSL] = useState('');
     const [selectedOrder, setSelectedOrder] = useState<any>(null);
     const [account, setAccount] = useState<any>(null);
+    const { ticks, subscribe, unsubscribe } = useMarketData();
+
+    // Subscribe to all symbols in positions
+    React.useEffect(() => {
+        const symbols = [...new Set(positions.map(p => p.symbol))];
+        symbols.forEach(s => subscribe(s));
+        // We don't unsubscribe here because we want to keep listening as long as they are in the portfolio
+        // The MarketDataProvider cleanup will handle the actual socket closure if the provider unmounts
+    }, [positions, subscribe]);
+
+    // Apply live prices to positions for real-time P&L
+    const livePositions = React.useMemo(() => {
+        return positions.map(pos => {
+            const stock_code = pos.symbol.split('.')[0].toUpperCase();
+            const tick = ticks[`NSE:${stock_code}`];
+            if (tick) {
+                const current_ltp = tick.ltp;
+                const unrealized_pnl = (current_ltp - pos.average_price) * pos.quantity;
+                return {
+                    ...pos,
+                    current_ltp,
+                    unrealized_pnl,
+                    day_change_abs: tick.day_change_abs,
+                    day_change_perc: tick.day_change_perc
+                };
+            }
+            return pos;
+        });
+    }, [positions, ticks]);
 
     const fetchData = async () => {
         try {
@@ -59,21 +89,9 @@ const PortfolioScreen = () => {
 
     useFocusEffect(
         useCallback(() => {
-            let timer: any;
-            const init = async () => {
-                fetchData();
-                try {
-                    const msRes = await fetch(`${BREEZE_API_URL}/api/market-status`);
-                    const msData = await msRes.json();
-                    if (msData.is_open) {
-                        timer = setInterval(fetchData, 10000); // Poll every 10s for live P&L
-                    }
-                } catch (e) {
-                    timer = setInterval(fetchData, 10000);
-                }
-            };
-            init();
-            return () => timer && clearInterval(timer);
+            fetchData();
+            // No more manual polling for data, we use WebSockets for price
+            // and maybe just refresh on focus
         }, [activeTab])
     );
 
@@ -139,9 +157,9 @@ const PortfolioScreen = () => {
         }
     };
 
-    const totalUnrealizedPnL = positions.reduce((acc, pos) => acc + (pos.unrealized_pnl || 0), 0);
-    const totalInvested = positions.reduce((acc, pos) => acc + (pos.quantity * pos.average_price), 0);
-    const dayPnl = positions.reduce((acc, pos) => acc + ((pos.day_change_abs || 0) * pos.quantity), 0);
+    const totalUnrealizedPnL = livePositions.reduce((acc, pos) => acc + (pos.unrealized_pnl || 0), 0);
+    const totalInvested = livePositions.reduce((acc, pos) => acc + (pos.quantity * pos.average_price), 0);
+    const dayPnl = livePositions.reduce((acc, pos) => acc + ((pos.day_change_abs || 0) * pos.quantity), 0);
 
     // Total P&L is Today's Performance (Unrealized + Today's Realized)
     const today = new Date().toISOString().split('T')[0];
@@ -430,7 +448,7 @@ const PortfolioScreen = () => {
             {/* List */}
             {activeTab === 'POSITIONS' ? (
                 <FlatList
-                    data={positions}
+                    data={livePositions}
                     keyExtractor={(item) => `${item.symbol}-${item.position_id || ''}`}
                     contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
                     renderItem={renderPosition}

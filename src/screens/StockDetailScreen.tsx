@@ -8,6 +8,7 @@ import { BREEZE_API_URL, API_URL, TEST_USER_ID } from '../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Rect, Line, Defs, LinearGradient as SVGGradiant, Stop, Text as SvgText, Path, Polyline, G } from 'react-native-svg';
 import { Activity, Settings2, PencilLine, BarChart3, Calendar } from 'lucide-react-native';
+import { useLivePrice } from '../context/MarketDataContext';
 
 type StockDetailScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'StockDetail'>;
 
@@ -20,10 +21,20 @@ const StockDetailScreen = () => {
     const route = useRoute();
     const navigation = useNavigation<StockDetailScreenNavigationProp>();
     const [chartInterval, setChartInterval] = useState('1D');
-    const [stockData, setStockData] = useState<any>(null);
     const [history, setHistory] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [userId, setUserId] = useState<string>(TEST_USER_ID);
+
+    const params = route.params as { symbol: string } | undefined;
+    const symbol = params?.symbol || 'RELIANCE';
+
+    // Socket-based live price
+    const tick = useLivePrice(symbol);
+    const stockData = tick ? {
+        price: tick.ltp,
+        change: tick.day_change_abs,
+        change_percent: tick.day_change_perc
+    } : null;
 
     // Watchlist State
     const [isWatchlistModalVisible, setIsWatchlistModalVisible] = useState(false);
@@ -42,20 +53,6 @@ const StockDetailScreen = () => {
     const [drawings, setDrawings] = useState<any[]>([]);
     const [activeDrawing, setActiveDrawing] = useState<any>(null);
     const scrollRef = useRef<ScrollView>(null);
-
-    const params = route.params as { symbol: string } | undefined;
-    const symbol = params?.symbol || 'RELIANCE';
-
-    const fetchStockData = async () => {
-        try {
-            // Using API_URL (paper trading service) which fetches directly from Breeze
-            const response = await fetch(`${API_URL}/market/price?symbol=${symbol}`);
-            const data = await response.json();
-            setStockData(data);
-        } catch (error) {
-            console.error("Failed to fetch stock detail:", error);
-        }
-    };
 
     const fetchHistory = async () => {
         try {
@@ -99,27 +96,8 @@ const StockDetailScreen = () => {
     };
 
     useEffect(() => {
-        let timer: any;
-        const init = async () => {
-            // Always fetch once on load
-            fetchStockData();
-
-            try {
-                const msRes = await fetch(`${BREEZE_API_URL}/api/market-status`);
-                const msData = await msRes.json();
-
-                // Only poll if market is open
-                if (msData.is_open) {
-                    timer = setInterval(fetchStockData, 10000);
-                }
-            } catch (e) {
-                // Fallback to polling if check fails (but use slower interval)
-                timer = setInterval(fetchStockData, 10000);
-            }
-        };
-        init();
-        return () => timer && clearInterval(timer);
-    }, [symbol]);
+        fetchHistory();
+    }, [symbol, chartInterval, chartPeriod]);
 
     const fetchUserWatchlists = async () => {
         try {
@@ -607,9 +585,9 @@ const StockDetailScreen = () => {
                             </View>
                         ) : (
                             <View className="items-end">
-                                <View className={`px-2 py-1 rounded-lg ${stockData?.change >= 0 ? 'bg-success/10' : 'bg-error/10'}`}>
-                                    <Text className={`font-bold text-xs ${stockData?.change >= 0 ? 'text-success' : 'text-error'}`}>
-                                        {stockData?.change >= 0 ? 'ACTIVE' : 'BEARISH'}
+                                <View className={`px-2 py-1 rounded-lg ${(stockData?.change ?? 0) >= 0 ? 'bg-success/10' : 'bg-error/10'}`}>
+                                    <Text className={`font-bold text-xs ${(stockData?.change ?? 0) >= 0 ? 'text-success' : 'text-error'}`}>
+                                        {(stockData?.change ?? 0) >= 0 ? 'ACTIVE' : 'BEARISH'}
                                     </Text>
                                 </View>
                             </View>
@@ -621,14 +599,14 @@ const StockDetailScreen = () => {
                             ₹{stockData?.price?.toFixed(2) || '---'}
                         </Text>
                         <View className="flex-row items-center mt-2">
-                            <View className={`flex-row items-center px-3 py-1.5 rounded-xl mr-3 ${stockData?.change >= 0 ? 'bg-success/10 border border-success/20' : 'bg-error/10 border border-error/20'}`}>
-                                <TrendingUp size={16} color={stockData?.change >= 0 ? '#10B981' : '#EF4444'} />
-                                <Text className={`font-black text-base ml-2 ${stockData?.change >= 0 ? 'text-success' : 'text-error'}`}>
+                            <View className={`flex-row items-center px-3 py-1.5 rounded-xl mr-3 ${(stockData?.change ?? 0) >= 0 ? 'bg-success/10 border border-success/20' : 'bg-error/10 border border-error/20'}`}>
+                                <TrendingUp size={16} color={(stockData?.change ?? 0) >= 0 ? '#10B981' : '#EF4444'} />
+                                <Text className={`font-black text-base ml-2 ${(stockData?.change ?? 0) >= 0 ? 'text-success' : 'text-error'}`}>
                                     {stockData?.change_percent ? `${stockData.change_percent.toFixed(2)}%` : '0.00%'}
                                 </Text>
                             </View>
                             <Text className="text-text-muted font-bold text-sm tracking-tight">
-                                {stockData?.change ? `${stockData.change > 0 ? '+' : ''}${stockData.change.toFixed(2)}` : '0.00'} Since Open
+                                {stockData?.change !== undefined ? `${stockData.change > 0 ? '+' : ''}${stockData.change.toFixed(2)}` : '0.00'} Since Open
                             </Text>
                         </View>
                     </View>

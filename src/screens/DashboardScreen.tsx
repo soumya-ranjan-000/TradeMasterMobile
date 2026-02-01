@@ -8,6 +8,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RootStackParamList, MainTabParamList } from '../navigation/RootNavigator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useMarketData } from '../context/MarketDataContext';
 
 
 
@@ -34,6 +35,7 @@ const DashboardScreen = () => {
     const [watchlistQuotes, setWatchlistQuotes] = useState<Record<string, any>>({});
     const [watchLoading, setWatchLoading] = useState(false);
     const isFocused = useIsFocused();
+    const { ticks, subscribe } = useMarketData();
 
 
 
@@ -94,27 +96,26 @@ const DashboardScreen = () => {
         }
     };
 
-    const fetchWatchlistQuotes = async (symbols: string[]) => {
-        try {
-            const res = await fetch(`${BREEZE_API_URL}/api/batch-quotes`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symbols })
+    // We now use ticks from Context instead of manual batch polling
+    const liveWatchlistQuotes = React.useMemo(() => {
+        const quotes: Record<string, any> = {};
+        watchlists.forEach(wl => {
+            wl.symbols.forEach((sym: string) => {
+                const stock_code = sym.split('.')[0].toUpperCase();
+                const tick = ticks[`NSE:${stock_code}`];
+                if (tick) {
+                    quotes[sym] = {
+                        symbol: sym,
+                        price: tick.ltp,
+                        change: tick.day_change_perc
+                    };
+                    // Support clean symbol lookup too
+                    quotes[stock_code] = quotes[sym];
+                }
             });
-            const data = await res.json();
-            const quoteMap: Record<string, any> = {};
-            if (Array.isArray(data)) {
-                data.forEach((q: any) => {
-                    quoteMap[q.symbol] = q;
-                    // Also store by clean symbol for easier lookup
-                    quoteMap[q.symbol.split('.')[0]] = q;
-                });
-            }
-            setWatchlistQuotes(quoteMap);
-        } catch (error) {
-            console.error("Failed to fetch watchlist quotes:", error);
-        }
-    };
+        });
+        return quotes;
+    }, [watchlists, ticks]);
 
     const fetchWatchlists = async (id: string = userId) => {
         try {
@@ -124,10 +125,10 @@ const DashboardScreen = () => {
             const wLists = Array.isArray(data) ? data : [];
             setWatchlists(wLists);
 
-            // Get unique symbols across all watchlists
+            // Subscribe to unique symbols across all watchlists
             const allSymbols = Array.from(new Set(wLists.flatMap(wl => wl.symbols)));
             if (allSymbols.length > 0) {
-                fetchWatchlistQuotes(allSymbols);
+                allSymbols.forEach(s => subscribe(s));
             }
         } catch (error) {
             console.error("Failed to fetch watchlists:", error);
@@ -401,7 +402,7 @@ const DashboardScreen = () => {
                                             </View>
 
                                             {wl.symbols.length > 0 ? wl.symbols.map((sym: string, j: number) => {
-                                                const quote = watchlistQuotes[sym] || watchlistQuotes[sym + '.NS'];
+                                                const quote = liveWatchlistQuotes[sym] || liveWatchlistQuotes[sym + '.NS'];
                                                 return (
                                                     <Pressable
                                                         key={sym}

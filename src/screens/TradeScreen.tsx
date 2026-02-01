@@ -4,6 +4,7 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import { ChevronLeft, Info, HelpCircle, ShieldCheck } from 'lucide-react-native';
 import { API_URL, BREEZE_API_URL, TEST_USER_ID } from '../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useLivePrice } from '../context/MarketDataContext';
 import { RootStackParamList, MainTabParamList } from '../navigation/RootNavigator';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -24,7 +25,6 @@ const TradeScreen = () => {
     const [userId, setUserId] = useState<string>(TEST_USER_ID);
     const [side, setSide] = useState<'BUY' | 'SELL'>(params?.side || 'BUY');
     const [quantity, setQuantity] = useState('1');
-    const [livePrice, setLivePrice] = useState<number | null>(null);
     const [stopLoss, setStopLoss] = useState('');
     const [target, setTarget] = useState('');
     const [trailingStopLoss, setTrailingStopLoss] = useState('');
@@ -44,43 +44,16 @@ const TradeScreen = () => {
 
     const symbol = params?.symbol || 'UNKNOWN';
 
-    const fetchLivePrice = async () => {
-        try {
-            // Using API_URL (paper trading service) which fetches directly from Breeze
-            const response = await fetch(`${API_URL}/market/price?symbol=${symbol}`);
-            const data = await response.json();
-            setLivePrice(data.price);
-        } catch (error) {
-            console.error("Failed to fetch live price:", error);
-        }
-    };
+    // Use the new Socket mechanism for live price
+    const tick = useLivePrice(symbol);
+    const livePrice = tick?.ltp || null;
 
     React.useEffect(() => {
-        let timer: any;
         const init = async () => {
             const savedId = await AsyncStorage.getItem('USER_ID');
             if (savedId) setUserId(savedId);
-
-            // Check market status once
-            try {
-                const msRes = await fetch(`${BREEZE_API_URL}/api/market-status`);
-                const msData = await msRes.json();
-
-                // Always fetch once
-                fetchLivePrice();
-
-                // Only poll if open
-                if (msData.is_open) {
-                    timer = setInterval(fetchLivePrice, 10000);
-                }
-            } catch (e) {
-                // Fallback: poll anyway if check fails
-                fetchLivePrice();
-                timer = setInterval(fetchLivePrice, 10000);
-            }
         };
         init();
-        return () => timer && clearInterval(timer);
     }, [symbol]);
 
     const placeOrder = async () => {
