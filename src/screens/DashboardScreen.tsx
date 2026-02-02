@@ -234,7 +234,7 @@ const DashboardScreen = () => {
             fetchWatchlists(finalId);
         };
         init();
-        const timer = setInterval(fetchMarketStatus, 1800000); // 30 minutes
+        const timer = setInterval(fetchMarketStatus, 300000); // 5 minutes
         return () => clearInterval(timer);
     }, []);
 
