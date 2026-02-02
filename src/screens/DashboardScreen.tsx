@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, FlatList, TouchableOpacity, ActivityIndicator, ScrollView, RefreshControl, StatusBar, Pressable, Platform } from 'react-native';
-import { Plus, Search, Bell, Trash2, X, ChevronRight } from 'lucide-react-native';
+import { Plus, Search, Bell, Trash2, X, ChevronRight, Pause, Play } from 'lucide-react-native';
 import { API_URL, BREEZE_API_URL, TEST_USER_ID } from '../config';
 import { useNavigation, CompositeNavigationProp, useIsFocused } from '@react-navigation/native';
 import { Alert } from 'react-native';
@@ -34,6 +34,7 @@ const DashboardScreen = () => {
     const [watchlists, setWatchlists] = useState<any[]>([]);
     const [watchlistQuotes, setWatchlistQuotes] = useState<Record<string, any>>({});
     const [watchLoading, setWatchLoading] = useState(false);
+    const [isPaused, setIsPaused] = useState(false);
     const isFocused = useIsFocused();
     const { ticks, subscribe } = useMarketData();
 
@@ -209,6 +210,13 @@ const DashboardScreen = () => {
     };
 
     useEffect(() => {
+        if (activeCategory === 'Trending' && !isPaused && isFocused) {
+            const timer = setInterval(fetchTrends, 30000);
+            return () => clearInterval(timer);
+        }
+    }, [isPaused, activeCategory, isFocused]);
+
+    useEffect(() => {
         if (isFocused) {
             fetchWatchlists(userId);
         }
@@ -306,8 +314,17 @@ const DashboardScreen = () => {
             <View className="px-6 pt-10 pb-4 bg-background">
                 {activeCategory === 'Trending' && (
                     <View className="flex-row justify-between items-center">
-                        <View className="flex-1">
-                            <Text className="text-text-primary text-xl font-black">Market Trends</Text>
+                        <View className="flex-1 flex-row items-center">
+                            <Text className="text-text-primary text-xl font-black mr-3">Market Trends</Text>
+                            <TouchableOpacity
+                                onPress={() => setIsPaused(!isPaused)}
+                                className={`px-3 py-1.5 rounded-full flex-row items-center border ${isPaused ? 'bg-error/10 border-error/20' : 'bg-success/10 border-success/20'}`}
+                            >
+                                {isPaused ? <Play size={12} color="#EF4444" /> : <Pause size={12} color="#10B981" />}
+                                <Text className={`text-[10px] font-black uppercase ml-1.5 ${isPaused ? 'text-error' : 'text-success'}`}>
+                                    {isPaused ? 'Paused' : 'Live Sync'}
+                                </Text>
+                            </TouchableOpacity>
                         </View>
                         <TouchableOpacity onPress={() => navigation.navigate('Watchlist')} className="p-2">
                             <Plus size={24} color="#00E0A1" />

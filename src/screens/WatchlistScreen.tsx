@@ -27,22 +27,8 @@ const WatchlistScreen = () => {
     const [activeCategory, setActiveCategory] = useState('Equity');
     const [activeRegion, setActiveRegion] = useState('India');
 
-    const [trending, setTrending] = useState<any[]>([]);
 
-    const fetchTrending = async () => {
-        try {
-            // Updated to use Breeze Service movers endpoint
-            const response = await fetch(`${BREEZE_API_URL}/api/movers?filters=liquid`);
-            const data = await response.json();
-            setTrending(Array.isArray(data) ? data.slice(0, 10) : []);
-        } catch (error) {
-            console.error("Failed to fetch trending:", error);
-        }
-    };
 
-    React.useEffect(() => {
-        fetchTrending();
-    }, []);
 
     const searchStocks = async (text: string) => {
         setQuery(text);
@@ -154,47 +140,8 @@ const WatchlistScreen = () => {
                 </View>
             )}
 
-            {/* Trending List */}
-            <FlatList
-                data={trending}
-                keyExtractor={(item) => item.symbol}
-                className="px-4 pt-4"
-                ListHeaderComponent={<Text className="text-xl font-black text-text-primary mb-6 mt-4">Nifty 50 Movers</Text>}
-                renderItem={({ item, index }) => (
-                    <TouchableOpacity
-                        className="bg-surface p-6 rounded-[32px] border border-border mb-4 flex-row items-center justify-between active:scale-[0.98]"
-                        onPress={() => navigation.navigate('StockDetail', { symbol: item.symbol })}
-                    >
-                        <View className="flex-row items-center flex-1">
-                            <View className={`w-14 h-14 rounded-2xl items-center justify-center mr-4 ${item.change >= 0 ? 'bg-success/10' : 'bg-error/10'}`}>
-                                <Text className={`font-black text-xl ${item.change >= 0 ? 'text-success' : 'text-error'}`}>{item.symbol[0]}</Text>
-                            </View>
-                            <View className="flex-1">
-                                <Text className="text-text-primary font-black text-lg tracking-tight">{item.symbol.split('.')[0]}</Text>
-                                <View className="flex-row items-center mt-1">
-                                    <Text className="text-text-secondary text-xs font-medium" numberOfLines={1} style={{ maxWidth: 100 }}>{item.name} • </Text>
-                                    <Text className={`text-xs font-bold ${item.change >= 0 ? 'text-success' : 'text-error'}`}>
-                                        {item.change >= 0 ? '+' : ''}{item.change.toFixed(2)}%
-                                    </Text>
-                                </View>
-                            </View>
-                        </View>
-                        <View className="items-end">
-                            <Text className="text-text-primary font-black text-lg">₹{item.price.toFixed(2)}</Text>
-                            <View className="flex-row gap-1 mt-2 items-end h-6">
-                                {[1, 2, 3, 4, 5, 6, 7].map((s) => (
-                                    <View key={s} className={`w-1 rounded-full ${item.change >= 0 ? 'bg-success' : 'bg-error'}`} style={{ height: Math.abs(Math.sin(s + index)) * 15 + 5, opacity: 0.3 + (s / 10) }} />
-                                ))}
-                            </View>
-                        </View>
-                    </TouchableOpacity>
-                )}
-                ListFooterComponent={<View className="h-20" />}
-                ListEmptyComponent={<ActivityIndicator size="large" color="#00E0A1" className="mt-10" />}
-                refreshControl={
-                    <RefreshControl refreshing={false} onRefresh={fetchTrending} tintColor="#00E0A1" />
-                }
-            />
+            {/* Empty space at bottom */}
+            <View className="h-20" />
         </View>
     );
 };
