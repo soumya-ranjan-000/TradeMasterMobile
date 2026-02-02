@@ -13,6 +13,8 @@ const getBaseUrl = () => {
 };
 
 export const API_URL = getBaseUrl();
+export const ORCHESTRATOR_URL = process.env.EXPO_PUBLIC_ORCHESTRATOR_URL || "http://localhost:8000";
+export const ORCHESTRATOR_WS_URL = ORCHESTRATOR_URL.replace('https://', 'wss://').replace('http://', 'ws://');
 export const BREEZE_API_URL = process.env.EXPO_PUBLIC_BREEZE_API_URL || "https://icici-dirct-breeze-api-interface.onrender.com";
 export const BREEZE_WS_URL = BREEZE_API_URL.replace('https://', 'wss://').replace('http://', 'ws://') + '/ws/ticks';
 export const TEST_USER_ID = "test_user_123";

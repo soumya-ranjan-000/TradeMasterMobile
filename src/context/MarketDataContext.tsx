@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
-import { BREEZE_WS_URL, BREEZE_API_URL } from '../config';
+import { ORCHESTRATOR_WS_URL, BREEZE_API_URL } from '../config';
 
 interface Tick {
     stock_code: string;
@@ -35,51 +35,61 @@ export const MarketDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const connect = useCallback(() => {
         if (ws.current?.readyState === WebSocket.OPEN) return;
 
-        console.log('Connecting to Market Data WebSocket:', BREEZE_WS_URL);
-        const socket = new WebSocket(BREEZE_WS_URL);
+        const wsFullUrl = `${ORCHESTRATOR_WS_URL}/api/v1/market_data/ws`;
+        console.log('Connecting to Market Data Orchestrator:', wsFullUrl);
+        const socket = new WebSocket(wsFullUrl);
 
         socket.onopen = () => {
-            console.log('Market Data WebSocket Connected');
+            console.log('Market Data WebSocket Connected to:', wsFullUrl);
             setIsConnected(true);
             // Re-subscribe to all existing subscriptions on reconnect
-            subscriptions.current.forEach(key => {
-                const [exchange, stock_code] = key.split(':');
-                socket.send(JSON.stringify({
-                    type: 'subscribe',
-                    stock_code,
-                    exchange_code: exchange
-                }));
-            });
+            if (subscriptions.current.size > 0) {
+                console.log(`Re-subscribing to ${subscriptions.current.size} symbols...`);
+                subscriptions.current.forEach(key => {
+                    const [exchange, stock_code] = key.split(':');
+                    socket.send(JSON.stringify({
+                        type: 'subscribe',
+                        stock_code,
+                        exchange_code: exchange
+                    }));
+                });
+            }
         };
 
         socket.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
-                // Normalize tick data if needed
+                if (!data.symbol) return;
+
+                const symbol_base = data.symbol.split('.')[0].toUpperCase();
+                const exchange_type = data.symbol.includes('.BO') ? 'BSE' : 'NSE';
+
                 const tick: Tick = {
-                    stock_code: data.stock_code,
-                    exchange_code: data.exchange_code,
-                    ltp: parseFloat(data.ltp || data.last || data.price || 0),
+                    stock_code: symbol_base,
+                    exchange_code: exchange_type,
+                    ltp: parseFloat(data.price || data.ltp || 0),
                     open: parseFloat(data.open || 0),
                     high: parseFloat(data.high || 0),
                     low: parseFloat(data.low || 0),
-                    close: parseFloat(data.close || 0),
+                    close: parseFloat(data.price || 0),
                     volume: parseInt(data.volume || 0),
-                    ltt: data.ltt,
+                    ltt: data.timestamp || new Date().toISOString(),
                     previous_close: parseFloat(data.previous_close || 0),
                 };
 
-                // Calculate change if not provided
                 if (tick.previous_close > 0) {
                     tick.day_change_abs = tick.ltp - tick.previous_close;
                     tick.day_change_perc = (tick.day_change_abs / tick.previous_close) * 100;
                 }
 
                 const key = `${tick.exchange_code}:${tick.stock_code}`;
-                setTicks(prev => ({
-                    ...prev,
-                    [key]: tick
-                }));
+                setTicks(prev => {
+                    if (prev[key]?.ltp === tick.ltp && prev[key]?.volume === tick.volume) {
+                        return prev;
+                    }
+                    console.log(`Live Update: ${key} = ₹${tick.ltp}`);
+                    return { ...prev, [key]: tick };
+                });
             } catch (err) {
                 console.error('Error parsing tick data:', err);
             }
@@ -92,7 +102,6 @@ export const MarketDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         socket.onclose = () => {
             console.log('Market Data WebSocket Disconnected');
             setIsConnected(false);
-            // Reconnect after 5 seconds
             if (!reconnectTimeout.current) {
                 reconnectTimeout.current = setTimeout(() => {
                     reconnectTimeout.current = null;
