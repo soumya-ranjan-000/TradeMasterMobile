@@ -128,11 +128,8 @@ const DashboardScreen = () => {
             const wLists = Array.isArray(data) ? data : [];
             setWatchlists(wLists);
 
-            // Subscribe to unique symbols across all watchlists
-            const allSymbols = Array.from(new Set(wLists.flatMap(wl => wl.symbols)));
-            if (allSymbols.length > 0) {
-                allSymbols.forEach(s => subscribe(s));
-            }
+            // We no longer auto-subscribe to all symbols here to save bandwidth
+            // Users will see '---' until they refresh or we use the 'ticks' context specifically
         } catch (error) {
             console.error("Failed to fetch watchlists:", error);
         } finally {
@@ -228,8 +225,7 @@ const DashboardScreen = () => {
             fetchWatchlists(finalId);
         };
         init();
-        const timer = setInterval(fetchMarketStatus, 60000);
-        return () => clearInterval(timer);
+        // Removed setInterval for market status - user refreshes manually or on app open
     }, []);
 
     const formatCurrency = (value: number) => {
@@ -326,7 +322,15 @@ const DashboardScreen = () => {
                 refreshControl={
                     <RefreshControl
                         refreshing={loading}
-                        onRefresh={() => { fetchTrends(); fetchProfile(userId); fetchWatchlists(userId); }}
+                        onRefresh={() => {
+                            setLoading(true);
+                            Promise.all([
+                                fetchTrends(),
+                                fetchProfile(userId),
+                                fetchWatchlists(userId),
+                                fetchMarketStatus()
+                            ]).finally(() => setLoading(false));
+                        }}
                         tintColor="#00E0A1"
                         colors={["#00E0A1"]}
                     />

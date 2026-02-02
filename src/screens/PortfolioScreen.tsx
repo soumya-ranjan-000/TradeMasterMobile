@@ -28,13 +28,9 @@ const PortfolioScreen = () => {
     const [account, setAccount] = useState<any>(null);
     const { ticks, subscribe, unsubscribe } = useMarketData();
 
-    // Subscribe to all symbols in positions
-    React.useEffect(() => {
-        const symbols = [...new Set(positions.map(p => p.symbol))];
-        symbols.forEach(s => subscribe(s));
-        // We don't unsubscribe here because we want to keep listening as long as they are in the portfolio
-        // The MarketDataProvider cleanup will handle the actual socket closure if the provider unmounts
-    }, [positions, subscribe]);
+    // We no longer auto-subscribe to every position symbol globally to save bandwidth.
+    // Buying/Selling/Modifying will still work with PriceMonitor in the background.
+    // Realtime UI updates for prices are now primarily in StockDetail or on manual refresh here.
 
     // Apply live prices to positions for real-time P&L
     const livePositions = React.useMemo(() => {
@@ -455,7 +451,10 @@ const PortfolioScreen = () => {
                     refreshControl={
                         <RefreshControl
                             refreshing={loading}
-                            onRefresh={fetchData}
+                            onRefresh={() => {
+                                setLoading(true);
+                                fetchData().finally(() => setLoading(false));
+                            }}
                             tintColor="#00E0A1"
                             colors={["#00E0A1"]}
                         />
@@ -484,7 +483,10 @@ const PortfolioScreen = () => {
                     refreshControl={
                         <RefreshControl
                             refreshing={loading}
-                            onRefresh={fetchData}
+                            onRefresh={() => {
+                                setLoading(true);
+                                fetchData().finally(() => setLoading(false));
+                            }}
                             tintColor="#00E0A1"
                             colors={["#00E0A1"]}
                         />
