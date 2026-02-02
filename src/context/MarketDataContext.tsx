@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { ORCHESTRATOR_WS_URL, BREEZE_API_URL } from '../config';
+import { useIsFocused } from '@react-navigation/native';
 
 interface Tick {
     stock_code: string;
@@ -29,7 +30,7 @@ export const MarketDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const [ticks, setTicks] = useState<Record<string, Tick>>({});
     const [isConnected, setIsConnected] = useState(false);
     const ws = useRef<WebSocket | null>(null);
-    const subscriptions = useRef<Set<string>>(new Set());
+    const subscriptions = useRef<Map<string, number>>(new Map());
     const reconnectTimeout = useRef<NodeJS.Timeout | null>(null);
 
     const connect = useCallback(() => {
@@ -45,7 +46,7 @@ export const MarketDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             // Re-subscribe to all existing subscriptions on reconnect
             if (subscriptions.current.size > 0) {
                 console.log(`Re-subscribing to ${subscriptions.current.size} symbols...`);
-                subscriptions.current.forEach(key => {
+                subscriptions.current.forEach((count, key) => {
                     const [exchange, stock_code] = key.split(':');
                     socket.send(JSON.stringify({
                         type: 'subscribe',
@@ -189,9 +190,12 @@ export const MarketDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const stock_code = symbol.split('.')[0].toUpperCase();
         const key = `${exchange}:${stock_code}`;
 
-        if (!subscriptions.current.has(key)) {
-            subscriptions.current.add(key);
+        const currentCount = subscriptions.current.get(key) || 0;
+        subscriptions.current.set(key, currentCount + 1);
 
+        if (currentCount === 0) {
+            // New subscription
+            console.log(`Frontend: New subscription for ${key}`);
             // Fetch initial price so UI doesn't show '---'
             fetchInitialPrice(stock_code, exchange);
 
@@ -202,6 +206,8 @@ export const MarketDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                     exchange_code: exchange
                 }));
             }
+        } else {
+            console.log(`Frontend: Reusing subscription for ${key} (Refs: {currentCount + 1})`);
         }
     }, [fetchInitialPrice]);
 
@@ -209,14 +215,22 @@ export const MarketDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const stock_code = symbol.split('.')[0].toUpperCase();
         const key = `${exchange}:${stock_code}`;
 
-        if (subscriptions.current.has(key)) {
-            subscriptions.current.delete(key);
-            if (ws.current?.readyState === WebSocket.OPEN) {
-                ws.current.send(JSON.stringify({
-                    type: 'unsubscribe',
-                    stock_code,
-                    exchange_code: exchange
-                }));
+        const currentCount = subscriptions.current.get(key) || 0;
+        if (currentCount > 0) {
+            const newCount = currentCount - 1;
+            if (newCount === 0) {
+                subscriptions.current.delete(key);
+                console.log(`Frontend: Last reference for ${key} removed. Unsubscribing.`);
+                if (ws.current?.readyState === WebSocket.OPEN) {
+                    ws.current.send(JSON.stringify({
+                        type: 'unsubscribe',
+                        stock_code,
+                        exchange_code: exchange
+                    }));
+                }
+            } else {
+                subscriptions.current.set(key, newCount);
+                console.log(`Frontend: Decremented refs for ${key} (Remaining: ${newCount})`);
             }
         }
     }, []);
@@ -238,13 +252,14 @@ export const useMarketData = () => {
 
 export const useLivePrice = (symbol?: string, exchange: string = 'NSE') => {
     const { ticks, subscribe, unsubscribe } = useMarketData();
+    const isFocused = useIsFocused();
 
     useEffect(() => {
-        if (symbol && symbol !== 'UNKNOWN') {
+        if (isFocused && symbol && symbol !== 'UNKNOWN') {
             subscribe(symbol, exchange);
             return () => unsubscribe(symbol, exchange);
         }
-    }, [symbol, exchange, subscribe, unsubscribe]);
+    }, [symbol, exchange, subscribe, unsubscribe, isFocused]);
 
     if (!symbol || symbol === 'UNKNOWN') return null;
 
