@@ -233,7 +233,8 @@ const DashboardScreen = () => {
             fetchWatchlists(finalId);
         };
         init();
-        // Removed setInterval for market status - user refreshes manually or on app open
+        const timer = setInterval(fetchMarketStatus, 1800000); // 30 minutes
+        return () => clearInterval(timer);
     }, []);
 
     const formatCurrency = (value: number) => {
