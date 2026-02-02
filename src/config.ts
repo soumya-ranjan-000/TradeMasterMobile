@@ -13,7 +13,13 @@ const getBaseUrl = () => {
 };
 
 export const API_URL = getBaseUrl();
-export const ORCHESTRATOR_URL = process.env.EXPO_PUBLIC_ORCHESTRATOR_URL || "http://localhost:8000";
+
+// Orchestrator Selection
+const isCloud = process.env.EXPO_PUBLIC_APP_ENV === 'cloud';
+const localOrchestrator = process.env.EXPO_PUBLIC_LOCAL_ORCHESTRATOR_URL || "http://localhost:8000";
+const cloudOrchestrator = process.env.EXPO_PUBLIC_CLOUD_ORCHESTRATOR_URL || "https://trademasterbackend.onrender.com";
+
+export const ORCHESTRATOR_URL = isCloud ? cloudOrchestrator : localOrchestrator;
 export const ORCHESTRATOR_WS_URL = ORCHESTRATOR_URL.replace('https://', 'wss://').replace('http://', 'ws://');
 export const BREEZE_API_URL = process.env.EXPO_PUBLIC_BREEZE_API_URL || "https://icici-dirct-breeze-api-interface.onrender.com";
 export const BREEZE_WS_URL = BREEZE_API_URL.replace('https://', 'wss://').replace('http://', 'ws://') + '/ws/ticks';
