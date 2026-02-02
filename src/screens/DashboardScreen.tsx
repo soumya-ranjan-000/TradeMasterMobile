@@ -211,6 +211,7 @@ const DashboardScreen = () => {
 
     useEffect(() => {
         if (activeCategory === 'Trending' && !isPaused && isFocused) {
+            fetchTrends();
             const timer = setInterval(fetchTrends, 30000);
             return () => clearInterval(timer);
         }
@@ -387,8 +388,27 @@ const DashboardScreen = () => {
                                         </View>
                                     </View>
                                 </Pressable>
-                            )) : (
-                                <ActivityIndicator size="large" color="#2563eb" className="mt-10" />
+                            )) : isPaused ? (
+                                <View className="mt-20 items-center justify-center">
+                                    <View className="w-16 h-16 rounded-full bg-error/10 items-center justify-center mb-4 border border-error/20">
+                                        <Pause size={28} color="#EF4444" />
+                                    </View>
+                                    <Text className="text-text-primary font-black text-lg">Market Trends Paused</Text>
+                                    <Text className="text-text-muted text-[10px] font-bold mt-1 uppercase tracking-widest px-10 text-center leading-tight">
+                                        Live data synchronization is currently disabled. Resume to see real-time movers.
+                                    </Text>
+                                    <TouchableOpacity
+                                        onPress={() => setIsPaused(false)}
+                                        className="mt-6 bg-error/20 px-6 py-2.5 rounded-full border border-error/30 active:scale-95"
+                                    >
+                                        <Text className="text-error font-black text-[10px] uppercase tracking-widest">Resume Sync</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ) : (
+                                <View className="mt-20 items-center justify-center">
+                                    <ActivityIndicator size="large" color="#00E0A1" />
+                                    <Text className="text-text-muted font-bold mt-4 animate-pulse uppercase text-[10px] tracking-[4px]">Scanning</Text>
+                                </View>
                             )}
                         </View>
                     )
