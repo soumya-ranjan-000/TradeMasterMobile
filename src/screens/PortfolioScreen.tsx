@@ -91,17 +91,43 @@ const PortfolioScreen = () => {
     );
 
     // Subscription management for live P&L
+    const subscribedPositionSymbols = React.useRef<Set<string>>(new Set());
+
     React.useEffect(() => {
         if (isFocused && positions.length > 0) {
-            positions.forEach(pos => {
-                subscribe(pos.symbol);
+            const currentSymbols = new Set(positions.map(p => p.symbol));
+
+            // Subscribe to new positions
+            currentSymbols.forEach(sym => {
+                if (!subscribedPositionSymbols.current.has(sym)) {
+                    subscribe(sym);
+                    subscribedPositionSymbols.current.add(sym);
+                }
+            });
+
+            // Unsubscribe from closed positions
+            subscribedPositionSymbols.current.forEach(sym => {
+                if (!currentSymbols.has(sym)) {
+                    unsubscribe(sym);
+                    subscribedPositionSymbols.current.delete(sym);
+                }
             });
 
             return () => {
-                positions.forEach(pos => {
-                    unsubscribe(pos.symbol);
+                // Cleanup on blur or unmount
+                subscribedPositionSymbols.current.forEach(sym => {
+                    unsubscribe(sym);
                 });
+                subscribedPositionSymbols.current.clear();
             };
+        } else if (!isFocused || positions.length === 0) {
+            // Cleanup everything if not focused or no positions
+            if (subscribedPositionSymbols.current.size > 0) {
+                subscribedPositionSymbols.current.forEach(sym => {
+                    unsubscribe(sym);
+                });
+                subscribedPositionSymbols.current.clear();
+            }
         }
     }, [isFocused, positions, subscribe, unsubscribe]);
 
@@ -169,31 +195,46 @@ const PortfolioScreen = () => {
 
     const totalUnrealizedPnL = livePositions.reduce((acc, pos) => acc + (pos.unrealized_pnl || 0), 0);
     const totalInvested = livePositions.reduce((acc, pos) => acc + (pos.quantity * pos.average_price), 0);
-    const dayPnl = livePositions.reduce((acc, pos) => acc + ((pos.day_change_abs || 0) * pos.quantity), 0);
 
-    // Total P&L is Today's Performance (Unrealized + Today's Realized)
-    const today = new Date().toISOString().split('T')[0];
-    const todayRealizedPnL = orders.reduce((acc, ord) => {
-        if (!ord.created_at) return acc;
+    // Day's Unrealized Performance (Movement of open positions since last close)
+    const dayUnrealizedPnL = livePositions.reduce((acc, pos) => acc + ((pos.day_change_abs || 0) * pos.quantity), 0);
+
+    // Robust "Is Today" check for local timezone
+    const isToday = (dateString: string) => {
+        if (!dateString) return false;
         try {
-            const ordDate = new Date(ord.created_at).toISOString().split('T')[0];
-            if (ordDate === today && ord.realized_pnl) {
-                return acc + ord.realized_pnl;
-            }
+            const date = new Date(dateString);
+            const now = new Date();
+            return date.getDate() === now.getDate() &&
+                date.getMonth() === now.getMonth() &&
+                date.getFullYear() === now.getFullYear();
         } catch (e) {
-            console.error("Error parsing order date:", e);
+            return false;
+        }
+    };
+
+    // Today's Realized Gains (Closed positions today)
+    const todayRealizedPnL = orders.reduce((acc, ord) => {
+        if (isToday(ord.created_at) && ord.realized_pnl) {
+            return acc + ord.realized_pnl;
         }
         return acc;
     }, 0);
 
-    const totalPnLToday = (dayPnl || 0) + (todayRealizedPnL || 0);
+    // 1. "Today" Performance = Today's Realized + Today's Unrealized variation
+    const totalPnLToday = dayUnrealizedPnL + todayRealizedPnL;
+
+    // 2. "Total P&L" on summary card = Net Portfolio Status 
+    // This includes all open unrealized gains + what was closed TODAY.
+    // Historical realized from previous days is ignored for the "Current Portfolio" view.
+    const currentPortfolioPnL = totalUnrealizedPnL + todayRealizedPnL;
+    const currentPortfolioPerc = totalInvested !== 0 ? (currentPortfolioPnL / totalInvested) * 100 : 0;
+
     const currentVal = (totalInvested || 0) + (totalUnrealizedPnL || 0);
 
-    // Total Returns: Total Gain/Loss from all positions (Unrealized + All Realized)
+    // Keep lifetime stats for potential Analytics usage
     const allRealizedPnL = orders.reduce((acc, ord) => acc + (ord.realized_pnl || 0), 0);
-    const totalReturnsOverall = (totalUnrealizedPnL || 0) + allRealizedPnL;
-    const totalReturnsPerc = totalInvested !== 0 ? (totalReturnsOverall / totalInvested) * 100 : 0;
-
+    const lifetimeReturns = (totalUnrealizedPnL || 0) + allRealizedPnL;
     // --- Order Grouping Logic ---
     const [expandedTrades, setExpandedTrades] = useState<string[]>([]);
     const [expandedPositions, setExpandedPositions] = useState<string[]>([]);
@@ -419,8 +460,8 @@ const PortfolioScreen = () => {
                             <Text className="text-text-secondary text-[10px] font-bold uppercase tracking-widest">Total Value</Text>
                             <Text className="text-text-primary text-2xl font-black mt-0.5">₹{currentVal.toLocaleString()}</Text>
                         </View>
-                        <View className={`w-10 h-10 rounded-xl items-center justify-center ${totalReturnsOverall >= 0 ? 'bg-success/10' : 'bg-error/10'}`}>
-                            {totalReturnsOverall >= 0 ? <ArrowUpRight size={20} color="#10B981" /> : <ArrowDownRight size={20} color="#EF4444" />}
+                        <View className={`w-10 h-10 rounded-xl items-center justify-center ${currentPortfolioPnL >= 0 ? 'bg-success/10' : 'bg-error/10'}`}>
+                            {currentPortfolioPnL >= 0 ? <ArrowUpRight size={20} color="#10B981" /> : <ArrowDownRight size={20} color="#EF4444" />}
                         </View>
                     </View>
 
@@ -437,14 +478,14 @@ const PortfolioScreen = () => {
                     <View className="flex-row justify-between">
                         <View>
                             <Text className="text-text-muted text-[8px] font-bold uppercase mb-0.5">Total P&L</Text>
-                            <Text className={`text-sm font-black ${totalReturnsOverall >= 0 ? 'text-success' : 'text-error'}`}>
-                                {totalReturnsOverall >= 0 ? '+' : '-'}₹{Math.abs(totalReturnsOverall).toLocaleString()} ({totalReturnsPerc.toFixed(2)}%)
+                            <Text className={`text-sm font-black ${currentPortfolioPnL >= 0 ? 'text-success' : 'text-error'}`}>
+                                {currentPortfolioPnL >= 0 ? '+' : '-'}₹{Math.abs(currentPortfolioPnL).toLocaleString()} ({currentPortfolioPerc.toFixed(2)}%)
                             </Text>
                         </View>
                         <View className="items-end">
                             <Text className="text-text-muted text-[8px] font-bold uppercase mb-0.5">Today</Text>
-                            <Text className={`text-sm font-black ${todayRealizedPnL >= 0 ? 'text-success' : 'text-error'}`}>
-                                {todayRealizedPnL >= 0 ? '+' : '-'}₹{Math.abs(todayRealizedPnL).toLocaleString()}
+                            <Text className={`text-sm font-black ${totalPnLToday >= 0 ? 'text-success' : 'text-error'}`}>
+                                {totalPnLToday >= 0 ? '+' : '-'}₹{Math.abs(totalPnLToday).toLocaleString()}
                             </Text>
                         </View>
                     </View>

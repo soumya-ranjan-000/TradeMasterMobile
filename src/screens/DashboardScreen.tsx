@@ -223,23 +223,42 @@ const DashboardScreen = () => {
         }
     }, [isFocused, userId]);
 
+    const subscribedWatchlistSymbols = React.useRef<Set<string>>(new Set());
+
     useEffect(() => {
         if (isFocused && activeCategory === 'Watchlists' && watchlists.length > 0) {
-            // Bulk subscribe to all symbols in all watchlists when this view is active
+            // Get all symbols from all watchlists
+            const allSymbols = new Set<string>();
             watchlists.forEach(wl => {
                 wl.symbols?.forEach((sym: string) => {
-                    subscribe(sym);
+                    allSymbols.add(sym);
                 });
             });
 
+            // Subscribe to any new ones
+            allSymbols.forEach(sym => {
+                if (!subscribedWatchlistSymbols.current.has(sym)) {
+                    subscribe(sym);
+                    subscribedWatchlistSymbols.current.add(sym);
+                }
+            });
+
+            // Unsubscribe from any that are no longer in watchlists (or if we lose focus)
+            // But for now, we only cleanup on focus loss or category change for simplicity
             return () => {
-                // Cleanup subscriptions when leaving this category or losing focus
-                watchlists.forEach(wl => {
-                    wl.symbols?.forEach((sym: string) => {
-                        unsubscribe(sym);
-                    });
+                subscribedWatchlistSymbols.current.forEach(sym => {
+                    unsubscribe(sym);
                 });
+                subscribedWatchlistSymbols.current.clear();
             };
+        } else if (!isFocused || activeCategory !== 'Watchlists') {
+            // Force cleanup if we are not focused or not in watchlists
+            if (subscribedWatchlistSymbols.current.size > 0) {
+                subscribedWatchlistSymbols.current.forEach(sym => {
+                    unsubscribe(sym);
+                });
+                subscribedWatchlistSymbols.current.clear();
+            }
         }
     }, [isFocused, activeCategory, watchlists, subscribe, unsubscribe]);
 
