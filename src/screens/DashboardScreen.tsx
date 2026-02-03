@@ -36,7 +36,7 @@ const DashboardScreen = () => {
     const [watchLoading, setWatchLoading] = useState(false);
     const [isPaused, setIsPaused] = useState(false);
     const isFocused = useIsFocused();
-    const { ticks, subscribe } = useMarketData();
+    const { ticks, subscribe, unsubscribe } = useMarketData();
 
 
 
@@ -129,8 +129,8 @@ const DashboardScreen = () => {
             const wLists = Array.isArray(data) ? data : [];
             setWatchlists(wLists);
 
-            // We no longer auto-subscribe to all symbols here to save bandwidth
-            // Users will see '---' until they refresh or we use the 'ticks' context specifically
+            // Watchlist symbols are now automatically subscribed to in the useEffect below
+            // when the 'Watchlists' category is active.
         } catch (error) {
             console.error("Failed to fetch watchlists:", error);
         } finally {
@@ -222,6 +222,26 @@ const DashboardScreen = () => {
             fetchWatchlists(userId);
         }
     }, [isFocused, userId]);
+
+    useEffect(() => {
+        if (isFocused && activeCategory === 'Watchlists' && watchlists.length > 0) {
+            // Bulk subscribe to all symbols in all watchlists when this view is active
+            watchlists.forEach(wl => {
+                wl.symbols?.forEach((sym: string) => {
+                    subscribe(sym);
+                });
+            });
+
+            return () => {
+                // Cleanup subscriptions when leaving this category or losing focus
+                watchlists.forEach(wl => {
+                    wl.symbols?.forEach((sym: string) => {
+                        unsubscribe(sym);
+                    });
+                });
+            };
+        }
+    }, [isFocused, activeCategory, watchlists, subscribe, unsubscribe]);
 
     useEffect(() => {
         const init = async () => {
