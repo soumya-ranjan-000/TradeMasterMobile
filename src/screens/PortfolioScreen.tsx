@@ -9,35 +9,35 @@ import { Briefcase, ArrowUpRight, ArrowDownRight, History, Layers, Info, ShieldC
 import { API_URL, BREEZE_API_URL, TEST_USER_ID } from '../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMarketData } from '../context/MarketDataContext';
+import { usePositions } from '../context/PositionContext';
+
 const PortfolioScreen = () => {
     const navigation = useNavigation<CompositeNavigationProp<
         BottomTabNavigationProp<MainTabParamList, 'Portfolio'>,
         NativeStackNavigationProp<RootStackParamList>
     >>();
+    const { positions, loading: posLoading, refreshPositions } = usePositions();
     const [userId, setUserId] = useState<string>(TEST_USER_ID);
     const [activeTab, setActiveTab] = useState<'POSITIONS' | 'ORDERS'>('POSITIONS');
-    const [positions, setPositions] = useState<any[]>([]);
     const [orders, setOrders] = useState<any[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [modifyingPos, setModifyingPos] = useState<any>(null);
+    const [account, setAccount] = useState<any>(null);
     const [trades, setTrades] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    const [modifyingPos, setModifyingPos] = useState<any>(null);
     const [newSL, setNewSL] = useState('');
     const [newTarget, setNewTarget] = useState('');
     const [newTrailingSL, setNewTrailingSL] = useState('');
     const [selectedOrder, setSelectedOrder] = useState<any>(null);
-    const [account, setAccount] = useState<any>(null);
+
     const { ticks, subscribe, unsubscribe } = useMarketData();
     const isFocused = useIsFocused();
-
-    // We bulk subscribe to active position symbols when the screen is focused
-    // to show live P&L, and unsubscribe when leaving to save bandwidth.
 
     // Apply live prices to positions for real-time P&L
     const livePositions = React.useMemo(() => {
         return positions.map(pos => {
             const stock_code = pos.symbol.split('.')[0].toUpperCase();
-            // Robust lookup similar to Dashboard
-            const tick = ticks[`NSE:${stock_code}`] || ticks[`NSE:${pos.symbol.toUpperCase()}`] || ticks[pos.symbol.toUpperCase()];
+            const tick = ticks[`NSE:${stock_code}`];
             if (tick) {
                 const current_ltp = tick.ltp;
                 const unrealized_pnl = (current_ltp - pos.average_price) * pos.quantity;
@@ -60,23 +60,22 @@ const PortfolioScreen = () => {
             const uid = savedId || TEST_USER_ID;
             setUserId(uid);
 
-            // Always fetch all for accurate summary calculation
-            const [posRes, ordRes, accRes, tRes] = await Promise.all([
-                fetch(`${API_URL}/positions/${uid}`),
+            const [ordRes, accRes, tRes] = await Promise.all([
                 fetch(`${API_URL}/orders/${uid}`),
                 fetch(`${API_URL}/account/${uid}`),
                 fetch(`${API_URL}/trades/${uid}`)
             ]);
 
-            const posData = await posRes.json();
             const ordData = await ordRes.json();
             const accData = await accRes.json();
             const tData = await tRes.json();
 
-            setPositions(Array.isArray(posData) ? posData : []);
             setOrders(Array.isArray(ordData) ? ordData : []);
             setAccount(accData);
             setTrades(Array.isArray(tData) ? tData : []);
+
+            // Sync positions too
+            await refreshPositions();
         } catch (error) {
             console.error("Error fetching data:", error);
         } finally {
@@ -90,46 +89,9 @@ const PortfolioScreen = () => {
         }, [activeTab])
     );
 
-    // Subscription management for live P&L
-    const subscribedPositionSymbols = React.useRef<Set<string>>(new Set());
-
-    React.useEffect(() => {
-        if (isFocused && positions.length > 0) {
-            const currentSymbols = new Set(positions.map(p => p.symbol));
-
-            // Subscribe to new positions
-            currentSymbols.forEach(sym => {
-                if (!subscribedPositionSymbols.current.has(sym)) {
-                    subscribe(sym);
-                    subscribedPositionSymbols.current.add(sym);
-                }
-            });
-
-            // Unsubscribe from closed positions
-            subscribedPositionSymbols.current.forEach(sym => {
-                if (!currentSymbols.has(sym)) {
-                    unsubscribe(sym);
-                    subscribedPositionSymbols.current.delete(sym);
-                }
-            });
-
-            return () => {
-                // Cleanup on blur or unmount
-                subscribedPositionSymbols.current.forEach(sym => {
-                    unsubscribe(sym);
-                });
-                subscribedPositionSymbols.current.clear();
-            };
-        } else if (!isFocused || positions.length === 0) {
-            // Cleanup everything if not focused or no positions
-            if (subscribedPositionSymbols.current.size > 0) {
-                subscribedPositionSymbols.current.forEach(sym => {
-                    unsubscribe(sym);
-                });
-                subscribedPositionSymbols.current.clear();
-            }
-        }
-    }, [isFocused, positions, subscribe, unsubscribe]);
+    // Subscription management for live P&L is now partially handled by NotificationContext
+    // but we'll keep it here for screen-specific focus-based subscriptions if needed.
+    // Actually, NotificationProvider handles it globally now, so we can simplify.
 
     const updatePositionRisk = async () => {
         if (!modifyingPos) return;

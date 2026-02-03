@@ -144,11 +144,22 @@ const IntradayScreen = () => {
             const price = s.price;
             const min = parseFloat(minPrice) || 0;
             const max = parseFloat(maxPrice) || 999999;
-            return price >= min && price <= max;
+            const meetsPrice = price >= min && price <= max;
+            const isActionable = s.signal_type !== 'HOLD';
+            return meetsPrice && isActionable;
         });
 
-        // Sort
+        // Sort: Primary by Status (READY > WAITING), Secondary by User Selection
         result.sort((a, b) => {
+            const priorityMap = { 'READY': 2, 'WAITING': 1, 'HOLD': 0 };
+            const priorityA = priorityMap[a.signal_type] || 0;
+            const priorityB = priorityMap[b.signal_type] || 0;
+
+            if (priorityA !== priorityB) {
+                return priorityB - priorityA; // READY (2) comes before WAITING (1)
+            }
+
+            // Secondary sort based on user preference
             let valA = sortBy === 'price' ? a.price : a.confidence;
             let valB = sortBy === 'price' ? b.price : b.confidence;
 

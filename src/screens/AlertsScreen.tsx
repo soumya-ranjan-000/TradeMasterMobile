@@ -7,11 +7,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLivePrice } from '../context/MarketDataContext';
 
+import { useAlerts } from '../context/AlertContext';
+
 const AlertsScreen = () => {
     const navigation = useNavigation();
-    const [userId, setUserId] = useState(TEST_USER_ID);
-    const [alerts, setAlerts] = useState<any[]>([]);
-    const [loading, setLoading] = useState(false);
+    const { alerts, loading: contextLoading, createAlert, toggleAlert, deleteAlert } = useAlerts();
+    const [submitting, setSubmitting] = useState(false);
 
     // New Alert State
     const [showAddAlert, setShowAddAlert] = useState(false);
@@ -24,39 +25,6 @@ const AlertsScreen = () => {
     // Get live price for the selected symbol for validation
     const liveTick = useLivePrice(newSymbol);
     const currentPrice = liveTick?.ltp || 0;
-
-    const fetchAlerts = async () => {
-        try {
-            setLoading(true);
-            const savedId = await AsyncStorage.getItem('USER_ID');
-            const uid = savedId || TEST_USER_ID;
-            setUserId(uid);
-
-            const res = await fetch(`${API_URL}/alerts/${uid}`);
-            if (res.ok) {
-                const data = await res.json();
-                setAlerts(data.map((a: any) => ({
-                    id: a._id || a.id,
-                    symbol: a.symbol,
-                    price: a.price,
-                    condition: a.condition,
-                    active: a.active,
-                    isTriggered: a.is_triggered,
-                    triggeredAt: a.triggered_at,
-                    triggeredPrice: a.triggered_price,
-                    createdAt: a.created_at
-                })));
-            }
-        } catch (error) {
-            console.error("Failed to fetch alerts:", error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchAlerts();
-    }, []);
 
     const handleSearch = async (text: string) => {
         setNewSymbol(text);
@@ -82,39 +50,22 @@ const AlertsScreen = () => {
         setSearchResults([]);
     };
 
-    const toggleAlert = async (id: string, currentStatus: boolean) => {
-        try {
-            const res = await fetch(`${API_URL}/alerts`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    user_id: userId,
-                    alert_id: id,
-                    active: !currentStatus
-                })
-            });
-            if (res.ok) {
-                setAlerts(alerts.map(a => a.id === id ? { ...a, active: !currentStatus } : a));
-            }
-        } catch (error) {
-            Alert.alert("Error", "Failed to toggle alert");
-        }
+    const handleToggle = async (id: string, currentStatus: boolean) => {
+        await toggleAlert(id, !currentStatus);
     };
 
-    const deleteAlert = async (id: string) => {
-        try {
-            const res = await fetch(`${API_URL}/alerts/${userId}/${id}`, {
-                method: 'DELETE'
-            });
-            if (res.ok) {
-                setAlerts(alerts.filter(a => a.id !== id));
-            }
-        } catch (error) {
-            Alert.alert("Error", "Failed to delete alert");
-        }
+    const handleDelete = async (id: string) => {
+        Alert.alert(
+            "Delete Alert",
+            "Are you sure you want to remove this price alert?",
+            [
+                { text: "Cancel", style: "cancel" },
+                { text: "Delete", style: "destructive", onPress: () => deleteAlert(id) }
+            ]
+        );
     };
 
-    const createAlert = async () => {
+    const handleCreate = async () => {
         if (!newSymbol || !newPrice) {
             Alert.alert("Error", "Please fill all fields");
             return;
@@ -135,33 +86,22 @@ const AlertsScreen = () => {
         }
 
         try {
-            setLoading(true);
-            const res = await fetch(`${API_URL}/alerts`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    user_id: userId,
-                    symbol: newSymbol.toUpperCase(),
-                    price: triggerVal,
-                    condition
-                })
-            });
+            setSubmitting(true);
+            const success = await createAlert(newSymbol, triggerVal, condition);
 
-            if (res.ok) {
+            if (success) {
                 setShowAddAlert(false);
                 setNewSymbol('');
                 setNewPrice('');
                 setSearchResults([]);
-                fetchAlerts();
                 Alert.alert("Success", "Alert set successfully");
             } else {
-                const errData = await res.json();
-                Alert.alert("Error", errData.detail || "Failed to create alert");
+                Alert.alert("Error", "Failed to create alert");
             }
         } catch (error) {
             Alert.alert("Error", "Network error");
         } finally {
-            setLoading(false);
+            setSubmitting(false);
         }
     };
 
@@ -269,10 +209,11 @@ const AlertsScreen = () => {
                             </View>
 
                             <TouchableOpacity
-                                onPress={createAlert}
-                                className="bg-primary py-4 rounded-2xl items-center mt-4 shadow-lg shadow-primary/30"
+                                onPress={handleCreate}
+                                disabled={submitting}
+                                className={`py-4 rounded-2xl items-center mt-4 shadow-lg ${submitting ? 'bg-primary/50' : 'bg-primary shadow-primary/30'}`}
                             >
-                                <Text className="text-white font-black uppercase tracking-widest">Set Alert</Text>
+                                {submitting ? <ActivityIndicator size="small" color="white" /> : <Text className="text-white font-black uppercase tracking-widest">Set Alert</Text>}
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -283,7 +224,7 @@ const AlertsScreen = () => {
                     <View className="flex-1 h-px bg-border/50" />
                 </View>
 
-                {loading ? (
+                {contextLoading ? (
                     <ActivityIndicator color="#00E0A1" className="mt-10" />
                 ) : alerts.length > 0 ? (
                     alerts.map((alert) => (
@@ -304,7 +245,7 @@ const AlertsScreen = () => {
                                                 <Text className="text-success text-[10px] font-black ml-1 uppercase">Triggered @ ₹{alert.triggeredPrice?.toFixed(2)}</Text>
                                             </View>
                                             <Text className="text-text-muted text-[9px] mt-0.5 font-bold">
-                                                {new Date(alert.triggeredAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                {alert.triggeredAt ? new Date(alert.triggeredAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '---'}
                                             </Text>
                                         </View>
                                     ) : (
@@ -321,12 +262,12 @@ const AlertsScreen = () => {
                             <View className="flex-row items-center">
                                 <Switch
                                     value={alert.active}
-                                    onValueChange={() => toggleAlert(alert.id, alert.active)}
+                                    onValueChange={() => handleToggle(alert.id, alert.active)}
                                     trackColor={{ false: '#2A2E39', true: '#00E0A1' }}
                                     thumbColor={Platform.OS === 'ios' ? '#FFFFFF' : alert.active ? '#FFFFFF' : '#94A3B8'}
                                 />
                                 <TouchableOpacity
-                                    onPress={() => deleteAlert(alert.id)}
+                                    onPress={() => handleDelete(alert.id)}
                                     className="ml-4 p-2 bg-error/5 rounded-full"
                                 >
                                     <Trash2 size={18} color="#EF4444" />
