@@ -183,15 +183,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         return () => clearInterval(timer);
     }, []);
 
-    // 5. Periodic Sync
-    useEffect(() => {
-        const syncTimer = setInterval(() => {
-            refreshAlerts();
-            refreshPositions();
-        }, 120000);
-        return () => clearInterval(syncTimer);
-    }, [refreshAlerts, refreshPositions]);
-
     const clearNotification = () => setLastTriggeredAlert(null);
 
     return (
