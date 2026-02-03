@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, FlatList, RefreshControl, TouchableOpacity, ScrollView, StatusBar, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
-import { useFocusEffect, useNavigation, CompositeNavigationProp } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, CompositeNavigationProp, useIsFocused } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RootStackParamList, MainTabParamList } from '../navigation/RootNavigator';
@@ -27,16 +27,17 @@ const PortfolioScreen = () => {
     const [selectedOrder, setSelectedOrder] = useState<any>(null);
     const [account, setAccount] = useState<any>(null);
     const { ticks, subscribe, unsubscribe } = useMarketData();
+    const isFocused = useIsFocused();
 
-    // We no longer auto-subscribe to every position symbol globally to save bandwidth.
-    // Buying/Selling/Modifying will still work with PriceMonitor in the background.
-    // Realtime UI updates for prices are now primarily in StockDetail or on manual refresh here.
+    // We bulk subscribe to active position symbols when the screen is focused
+    // to show live P&L, and unsubscribe when leaving to save bandwidth.
 
     // Apply live prices to positions for real-time P&L
     const livePositions = React.useMemo(() => {
         return positions.map(pos => {
             const stock_code = pos.symbol.split('.')[0].toUpperCase();
-            const tick = ticks[`NSE:${stock_code}`];
+            // Robust lookup similar to Dashboard
+            const tick = ticks[`NSE:${stock_code}`] || ticks[`NSE:${pos.symbol.toUpperCase()}`] || ticks[pos.symbol.toUpperCase()];
             if (tick) {
                 const current_ltp = tick.ltp;
                 const unrealized_pnl = (current_ltp - pos.average_price) * pos.quantity;
@@ -86,10 +87,23 @@ const PortfolioScreen = () => {
     useFocusEffect(
         useCallback(() => {
             fetchData();
-            // No more manual polling for data, we use WebSockets for price
-            // and maybe just refresh on focus
         }, [activeTab])
     );
+
+    // Subscription management for live P&L
+    React.useEffect(() => {
+        if (isFocused && positions.length > 0) {
+            positions.forEach(pos => {
+                subscribe(pos.symbol);
+            });
+
+            return () => {
+                positions.forEach(pos => {
+                    unsubscribe(pos.symbol);
+                });
+            };
+        }
+    }, [isFocused, positions, subscribe, unsubscribe]);
 
     const updatePositionRisk = async () => {
         if (!modifyingPos) return;
@@ -182,10 +196,17 @@ const PortfolioScreen = () => {
 
     // --- Order Grouping Logic ---
     const [expandedTrades, setExpandedTrades] = useState<string[]>([]);
+    const [expandedPositions, setExpandedPositions] = useState<string[]>([]);
 
     const toggleTrade = (id: string) => {
         setExpandedTrades(prev =>
             prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]
+        );
+    };
+
+    const togglePosition = (id: string) => {
+        setExpandedPositions(prev =>
+            prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
         );
     };
 
@@ -211,109 +232,121 @@ const PortfolioScreen = () => {
 
     const tradeData = groupedTrades();
 
-    const renderPosition = ({ item }: { item: any }) => (
-        <View className="bg-surface p-5 rounded-[28px] border border-border mb-4">
-            <View className="flex-row justify-between items-center mb-4">
-                <View className="flex-row items-center">
-                    <View className={`w-10 h-10 rounded-2xl items-center justify-center mr-3 ${item.unrealized_pnl >= 0 ? 'bg-success/10' : 'bg-error/10'}`}>
-                        <Text className={`font-bold text-lg ${item.unrealized_pnl >= 0 ? 'text-success' : 'text-error'}`}>{item.symbol[0]}</Text>
+    const renderPosition = ({ item }: { item: any }) => {
+        const isExpanded = expandedPositions.includes(item.position_id);
+
+        return (
+            <View className="bg-surface rounded-[20px] border border-border mb-3 overflow-hidden">
+                <TouchableOpacity
+                    onPress={() => togglePosition(item.position_id)}
+                    activeOpacity={0.7}
+                    className="p-4"
+                >
+                    <View className="flex-row justify-between items-center">
+                        <View className="flex-row items-center">
+                            <View className={`w-8 h-8 rounded-xl items-center justify-center mr-3 ${item.unrealized_pnl >= 0 ? 'bg-success/10' : 'bg-error/10'}`}>
+                                <Text className={`font-bold text-base ${item.unrealized_pnl >= 0 ? 'text-success' : 'text-error'}`}>{item.symbol[0]}</Text>
+                            </View>
+                            <View>
+                                <Text className="text-text-primary font-bold text-sm">{item.symbol}</Text>
+                                <Text className="text-text-muted text-[9px] font-bold">Avg. ₹{(item.average_price || 0).toFixed(2)} • LTP: ₹{(item.current_ltp || 0).toFixed(2)}</Text>
+                            </View>
+                        </View>
+                        <View className="items-end">
+                            <Text className="text-text-primary font-bold text-sm">{item.quantity} {item.quantity === 1 ? 'Share' : 'Shares'}</Text>
+                            <View className="flex-row items-center mt-0.5">
+                                {(item.unrealized_pnl || 0) >= 0 ? <ArrowUpRight size={10} color="#10B981" /> : <ArrowDownRight size={10} color="#EF4444" />}
+                                <Text className={`text-[10px] font-bold ml-1 ${(item.unrealized_pnl || 0) >= 0 ? 'text-success' : 'text-error'}`}>
+                                    {(item.unrealized_pnl || 0) >= 0 ? '+' : '-'}₹{Math.abs(item.unrealized_pnl || 0).toFixed(2)}
+                                </Text>
+                            </View>
+                        </View>
                     </View>
-                    <View>
-                        <Text className="text-text-primary font-bold text-base">{item.symbol}</Text>
-                        <Text className="text-text-muted text-[10px] font-bold">Avg. Price: ₹{(item.average_price || 0).toFixed(2)}</Text>
-                        <Text className="text-text-muted text-[10px] font-bold">Avg. Market Price: ₹{(item.current_ltp || 0).toFixed(2)}</Text>
-                    </View>
-                </View>
-                <View className="items-end">
-                    <Text className="text-text-primary font-bold text-base">{item.quantity} Shares</Text>
-                    <View className="flex-row items-center mt-1">
-                        {(item.unrealized_pnl || 0) >= 0 ? <ArrowUpRight size={12} color="#10B981" /> : <ArrowDownRight size={12} color="#EF4444" />}
-                        <Text className={`text-xs font-bold ml-1 ${(item.unrealized_pnl || 0) >= 0 ? 'text-success' : 'text-error'}`}>
-                            {(item.unrealized_pnl || 0) >= 0 ? '+' : '-'}₹{Math.abs(item.unrealized_pnl || 0).toFixed(2)}
-                            {item.quantity !== 0 && item.average_price !== 0 && (
-                                ` (${(((item.unrealized_pnl || 0) / (Math.abs(item.quantity) * item.average_price)) * 100).toFixed(2)}%)`
+                </TouchableOpacity>
+
+                {isExpanded && (
+                    <View className="px-4 pb-4 pt-0">
+                        <View className="h-[1px] bg-border mb-3" />
+
+                        <View className="flex-row justify-between items-end mb-3">
+                            <View>
+                                <Text className="text-text-secondary text-[8px] uppercase font-bold tracking-widest">Invested</Text>
+                                <Text className="text-text-primary font-bold text-xs">₹{(item.quantity * item.average_price).toLocaleString()}</Text>
+                            </View>
+                            <View className="items-end">
+                                <Text className="text-text-secondary text-[8px] uppercase font-bold tracking-widest">Day Change</Text>
+                                <View className="flex-row items-center">
+                                    <Text className={`font-bold text-xs ${(item.day_change_perc || 0) >= 0 ? 'text-success' : 'text-error'}`}>
+                                        {(item.day_change_perc || 0) >= 0 ? '+' : '-'}{(item.day_change_perc || 0).toFixed(2)}%
+                                    </Text>
+                                    <Text className={`text-[9px] font-bold ml-1 ${(item.day_change_perc || 0) >= 0 ? 'text-success opacity-80' : 'text-error opacity-80'}`}>
+                                        ({(item.day_change_perc || 0) >= 0 ? '+' : '-'}₹{Math.abs((item.day_change_abs || 0) * item.quantity).toFixed(2)})
+                                    </Text>
+                                </View>
+                            </View>
+                        </View>
+
+                        <View className="flex-row gap-2 mb-3">
+                            <TouchableOpacity
+                                onPress={() => quickExit(item.symbol, item.current_ltp || item.average_price, item.position_id)}
+                                className="flex-1 bg-error/10 border border-error/20 py-2 rounded-lg items-center justify-center"
+                            >
+                                <Text className="text-error font-black text-[10px] uppercase tracking-wider">Quick Exit</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={() => {
+                                    setModifyingPos(item);
+                                    setNewSL(item.stop_loss?.toString() || '');
+                                    setNewTarget(item.target?.toString() || '');
+                                    setNewTrailingSL(item.trailing_sl?.toString() || '');
+                                }}
+                                className="flex-1 bg-surface border border-border py-2 rounded-lg items-center justify-center"
+                            >
+                                <Text className="text-text-primary font-bold text-[10px] uppercase tracking-wider">Modify</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        <View className="flex-row justify-between bg-background/50 rounded-lg p-2 px-3">
+                            <View className="flex-row items-center">
+                                <ShieldCheck size={10} color="#6B7280" />
+                                <Text className="text-text-muted text-[8px] font-bold ml-1 uppercase">SL: {item.stop_loss ? `₹${item.stop_loss}` : 'NONE'}</Text>
+                            </View>
+                            <View className="flex-row items-center">
+                                <Target size={10} color="#6B7280" />
+                                <Text className="text-text-muted text-[8px] font-bold ml-1 uppercase">TP: {item.target ? `₹${item.target.toFixed(2)}` : 'NONE'}</Text>
+                            </View>
+                            {item.trailing_sl && (
+                                <View className="flex-row items-center">
+                                    <History size={10} color="#6B7280" />
+                                    <Text className="text-text-muted text-[8px] font-bold ml-1 uppercase">TSL: {item.trailing_sl.toFixed(2)}</Text>
+                                </View>
                             )}
-                        </Text>
-                    </View>
-                </View>
-            </View>
-
-            <View className="h-[1px] bg-border mb-4" />
-
-            <View className="flex-row justify-between items-end mb-4">
-                <View>
-                    <Text className="text-text-secondary text-[10px] uppercase font-bold tracking-widest">Invested</Text>
-                    <Text className="text-text-primary font-bold text-sm">₹{(item.quantity * item.average_price).toLocaleString()}</Text>
-                </View>
-                <View className="items-end">
-                    <Text className="text-text-secondary text-[10px] uppercase font-bold tracking-widest">Day Change</Text>
-                    <Text className={`font-bold text-sm ${(item.day_change_perc || 0) >= 0 ? 'text-success' : 'text-error'}`}>
-                        {(item.day_change_perc || 0) >= 0 ? '+' : '-'}{(item.day_change_perc || 0).toFixed(2)}%
-                    </Text>
-                    <Text className={`text-[10px] font-bold ${(item.day_change_perc || 0) >= 0 ? 'text-success opacity-80' : 'text-error opacity-80'}`}>
-                        {(item.day_change_perc || 0) >= 0 ? '+' : '-'}₹{Math.abs((item.day_change_abs || 0) * item.quantity).toFixed(2)}
-                    </Text>
-                </View>
-            </View>
-
-            <View className="flex-row gap-3">
-                <TouchableOpacity
-                    onPress={() => quickExit(item.symbol, item.current_ltp || item.average_price, item.position_id)}
-                    className="flex-1 bg-error/10 border border-error/20 py-3 rounded-xl items-center justify-center"
-                >
-                    <Text className="text-error font-black text-xs uppercase tracking-wider" numberOfLines={1}>Quick Exit</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    onPress={() => {
-                        setModifyingPos(item);
-                        setNewSL(item.stop_loss?.toString() || '');
-                        setNewTarget(item.target?.toString() || '');
-                        setNewTrailingSL(item.trailing_sl?.toString() || '');
-                    }}
-                    className="flex-1 bg-surface border border-border py-3 rounded-xl items-center justify-center"
-                >
-                    <Text className="text-text-primary font-bold text-xs uppercase tracking-wider" numberOfLines={1}>Modify</Text>
-                </TouchableOpacity>
-            </View>
-
-            <View className="flex-row justify-between mt-4 bg-background/50 rounded-xl p-2 px-3">
-                <View className="flex-row items-center">
-                    <ShieldCheck size={10} color="#6B7280" />
-                    <Text className="text-text-muted text-[10px] font-bold ml-1 uppercase">SL: {item.stop_loss ? `₹${item.stop_loss}` : 'NONE'}</Text>
-                </View>
-                <View className="flex-row items-center">
-                    <Target size={10} color="#6B7280" />
-                    <Text className="text-text-muted text-[10px] font-bold ml-1 uppercase">TP: {item.target ? `₹${item.target.toFixed(2)}` : 'NONE'}</Text>
-                </View>
-                {item.trailing_sl && (
-                    <View className="flex-row items-center">
-                        <History size={10} color="#6B7280" />
-                        <Text className="text-text-muted text-[10px] font-bold ml-1 uppercase">TSL: ₹{item.trailing_sl.toFixed(2)}</Text>
+                        </View>
                     </View>
                 )}
             </View>
-        </View>
-    );
+        );
+    };
 
     const renderOrder = ({ item }: { item: any }) => {
         const isExpanded = expandedTrades.includes(item.id);
         const hasPnL = item.realized_pnl !== 0;
 
         return (
-            <View className="bg-surface rounded-[28px] border border-border mb-4 overflow-hidden">
+            <View className="bg-surface rounded-2xl border border-border mb-3 overflow-hidden">
                 <TouchableOpacity
                     onPress={() => toggleTrade(item.id)}
                     activeOpacity={0.7}
-                    className="p-5"
+                    className="p-4"
                 >
                     <View className="flex-row justify-between items-center">
                         <View className="flex-row items-center">
-                            <View className={`w-8 h-8 rounded-xl items-center justify-center mr-3 ${item.status === 'CLOSED' ? 'bg-primary/20' : 'bg-success/10'}`}>
-                                <Briefcase size={14} color={item.status === 'CLOSED' ? '#00E0A1' : '#10B981'} />
+                            <View className={`w-7 h-7 rounded-lg items-center justify-center mr-3 ${item.status === 'CLOSED' ? 'bg-primary/20' : 'bg-success/10'}`}>
+                                <Briefcase size={12} color={item.status === 'CLOSED' ? '#00E0A1' : '#10B981'} />
                             </View>
                             <View>
-                                <Text className="text-text-primary font-bold text-base">{item.symbol}</Text>
-                                <Text className="text-text-muted text-[10px] font-bold uppercase tracking-widest mt-0.5">
+                                <Text className="text-text-primary font-bold text-sm">{item.symbol}</Text>
+                                <Text className="text-text-muted text-[8px] font-bold uppercase tracking-widest">
                                     {item.status} TRADE • {item.orders.length} EXECUTIONS
                                 </Text>
                             </View>
@@ -322,9 +355,9 @@ const PortfolioScreen = () => {
                             <Text className={`font-black text-sm ${item.realized_pnl >= 0 ? 'text-success' : 'text-error'}`}>
                                 {item.realized_pnl >= 0 ? '+' : '-'}₹{Math.abs(item.realized_pnl).toFixed(2)}
                             </Text>
-                            <View className="flex-row items-center mt-1">
-                                <Text className="text-text-muted text-[10px] mr-1">{new Date(item.timestamp).toLocaleDateString()}</Text>
-                                {isExpanded ? <ChevronDown size={14} color="#6B7280" /> : <ChevronRight size={14} color="#6B7280" />}
+                            <View className="flex-row items-center">
+                                <Text className="text-text-muted text-[8px] mr-1">{new Date(item.timestamp).toLocaleDateString()}</Text>
+                                {isExpanded ? <ChevronDown size={12} color="#6B7280" /> : <ChevronRight size={12} color="#6B7280" />}
                             </View>
                         </View>
                     </View>
@@ -366,51 +399,51 @@ const PortfolioScreen = () => {
     };
 
     return (
-        <View className="flex-1 bg-background pt-12">
+        <View className="flex-1 bg-background pt-10">
             <StatusBar barStyle="light-content" backgroundColor="#0E1116" />
 
-            <View className="px-4 mb-6">
-                <Text className="text-3xl font-black text-text-primary">Portfolio</Text>
+            <View className="px-4 mb-3">
+                <Text className="text-2xl font-black text-text-primary">Portfolio</Text>
             </View>
 
-            {/* Summary Card */}
-            <View className="px-4 mb-8">
+            {/* Compact Summary Card */}
+            <View className="px-4 mb-4">
                 <LinearGradient
                     colors={['#151921', '#0B0E11']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
-                    className="rounded-[32px] p-6 border border-border/50 shadow-2xl relative overflow-hidden"
+                    className="rounded-[24px] p-4 border border-border/50 shadow-lg relative overflow-hidden"
                 >
-                    <View className="flex-row justify-between mb-4">
+                    <View className="flex-row justify-between mb-3">
                         <View>
-                            <Text className="text-text-secondary text-xs font-bold uppercase tracking-widest">Total Value</Text>
-                            <Text className="text-text-primary text-3xl font-black mt-1">₹{currentVal.toLocaleString()}</Text>
+                            <Text className="text-text-secondary text-[10px] font-bold uppercase tracking-widest">Total Value</Text>
+                            <Text className="text-text-primary text-2xl font-black mt-0.5">₹{currentVal.toLocaleString()}</Text>
                         </View>
-                        <View className={`w-12 h-12 rounded-2xl items-center justify-center ${totalReturnsOverall >= 0 ? 'bg-success/10' : 'bg-error/10'}`}>
-                            {totalReturnsOverall >= 0 ? <ArrowUpRight size={24} color="#10B981" /> : <ArrowDownRight size={24} color="#EF4444" />}
+                        <View className={`w-10 h-10 rounded-xl items-center justify-center ${totalReturnsOverall >= 0 ? 'bg-success/10' : 'bg-error/10'}`}>
+                            {totalReturnsOverall >= 0 ? <ArrowUpRight size={20} color="#10B981" /> : <ArrowDownRight size={20} color="#EF4444" />}
                         </View>
                     </View>
 
                     <TouchableOpacity
                         onPress={() => navigation.navigate('Performance')}
-                        className="bg-white/10 py-3 rounded-2xl items-center mb-6 border border-white/10"
+                        className="bg-white/10 py-2 rounded-xl items-center mb-4 border border-white/10"
                     >
                         <View className="flex-row items-center">
-                            <BarChart3 size={14} color="#00E0A1" className="mr-2" />
-                            <Text className="text-white text-xs font-black uppercase tracking-widest">Show Analytics</Text>
+                            <BarChart3 size={12} color="#00E0A1" className="mr-2" />
+                            <Text className="text-white text-[10px] font-black uppercase tracking-widest">Analytics</Text>
                         </View>
                     </TouchableOpacity>
 
                     <View className="flex-row justify-between">
                         <View>
-                            <Text className="text-text-muted text-[10px] font-bold uppercase mb-1">Total P&L</Text>
-                            <Text className={`text-base font-black ${totalReturnsOverall >= 0 ? 'text-success' : 'text-error'}`}>
+                            <Text className="text-text-muted text-[8px] font-bold uppercase mb-0.5">Total P&L</Text>
+                            <Text className={`text-sm font-black ${totalReturnsOverall >= 0 ? 'text-success' : 'text-error'}`}>
                                 {totalReturnsOverall >= 0 ? '+' : '-'}₹{Math.abs(totalReturnsOverall).toLocaleString()} ({totalReturnsPerc.toFixed(2)}%)
                             </Text>
                         </View>
                         <View className="items-end">
-                            <Text className="text-text-muted text-[10px] font-bold uppercase mb-1">Realized (Today)</Text>
-                            <Text className={`text-base font-black ${todayRealizedPnL >= 0 ? 'text-success' : 'text-error'}`}>
+                            <Text className="text-text-muted text-[8px] font-bold uppercase mb-0.5">Today</Text>
+                            <Text className={`text-sm font-black ${todayRealizedPnL >= 0 ? 'text-success' : 'text-error'}`}>
                                 {todayRealizedPnL >= 0 ? '+' : '-'}₹{Math.abs(todayRealizedPnL).toLocaleString()}
                             </Text>
                         </View>
@@ -421,22 +454,22 @@ const PortfolioScreen = () => {
                 </LinearGradient>
             </View>
 
-            {/* Premium Selector */}
-            <View className="px-4 mb-6">
-                <View className="bg-surface p-1.5 rounded-2xl flex-row border border-border">
+            {/* Compact Premium Selector */}
+            <View className="px-4 mb-4">
+                <View className="bg-surface p-1.5 rounded-xl flex-row border border-border">
                     <TouchableOpacity
                         onPress={() => setActiveTab('POSITIONS')}
-                        className={`flex-1 py-3.5 rounded-[14px] flex-row items-center justify-center ${activeTab === 'POSITIONS' ? 'bg-background border border-border' : ''}`}
+                        className={`flex-1 py-2.5 rounded-lg flex-row items-center justify-center ${activeTab === 'POSITIONS' ? 'bg-background border border-border/50' : ''}`}
                     >
-                        <Layers size={16} color={activeTab === 'POSITIONS' ? '#00E0A1' : '#6B7280'} className="mr-2" />
-                        <Text className={`font-bold text-sm ${activeTab === 'POSITIONS' ? 'text-text-primary' : 'text-text-muted'}`}>Positions</Text>
+                        <Layers size={14} color={activeTab === 'POSITIONS' ? '#00E0A1' : '#6B7280'} className="mr-2" />
+                        <Text className={`font-bold text-xs ${activeTab === 'POSITIONS' ? 'text-text-primary' : 'text-text-muted'}`}>Positions</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                         onPress={() => setActiveTab('ORDERS')}
-                        className={`flex-1 py-3.5 rounded-[14px] flex-row items-center justify-center ${activeTab === 'ORDERS' ? 'bg-background border border-border' : ''}`}
+                        className={`flex-1 py-2.5 rounded-lg flex-row items-center justify-center ${activeTab === 'ORDERS' ? 'bg-background border border-border/50' : ''}`}
                     >
-                        <History size={16} color={activeTab === 'ORDERS' ? '#00E0A1' : '#6B7280'} className="mr-2" />
-                        <Text className={`font-bold text-sm ${activeTab === 'ORDERS' ? 'text-text-primary' : 'text-text-muted'}`}>Orders</Text>
+                        <History size={14} color={activeTab === 'ORDERS' ? '#00E0A1' : '#6B7280'} className="mr-2" />
+                        <Text className={`font-bold text-xs ${activeTab === 'ORDERS' ? 'text-text-primary' : 'text-text-muted'}`}>Orders</Text>
                     </TouchableOpacity>
                 </View>
             </View>
