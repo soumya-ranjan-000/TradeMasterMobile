@@ -3,10 +3,12 @@ import { View } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Home, PieChart, Activity, BookOpen, User } from 'lucide-react-native';
+import { Home, PieChart, Activity, BookOpen, User, Zap } from 'lucide-react-native';
 
 import DashboardScreen from '../screens/DashboardScreen';
 import WatchlistScreen from '../screens/WatchlistScreen';
+import IntradayScreen from '../screens/IntradayScreen';
+import DetailedAnalysisScreen from '../screens/DetailedAnalysisScreen';
 import PortfolioScreen from '../screens/PortfolioScreen';
 import StockDetailScreen from '../screens/StockDetailScreen';
 import TradeScreen from '../screens/TradeScreen';
@@ -24,11 +26,13 @@ export type RootStackParamList = {
     Trade: { symbol: string; side: 'BUY' | 'SELL' };
     Alerts: undefined;
     Performance: undefined;
+    DetailedAnalysis: { symbol: string; analysis: any };
 };
 
 export type MainTabParamList = {
     Dashboard: undefined;
     Watchlist: undefined;
+    Intraday: undefined;
     Portfolio: undefined;
     Journal: undefined;
     Profile: undefined;
@@ -36,6 +40,7 @@ export type MainTabParamList = {
     Trade: { symbol: string; side: 'BUY' | 'SELL' };
     Alerts: undefined;
     Performance: undefined;
+    DetailedAnalysis: { symbol: string; analysis: any };
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -62,6 +67,7 @@ const MainTabs = () => {
                     let Icon;
                     if (route.name === 'Dashboard') Icon = Home;
                     else if (route.name === 'Watchlist') Icon = Activity;
+                    else if (route.name === 'Intraday') Icon = Zap;
                     else if (route.name === 'Portfolio') Icon = PieChart;
                     else if (route.name === 'Journal') Icon = BookOpen;
                     else if (route.name === 'Profile') Icon = User;
@@ -100,6 +106,7 @@ const MainTabs = () => {
         >
             <Tab.Screen name="Dashboard" component={DashboardScreen} />
             <Tab.Screen name="Watchlist" component={WatchlistScreen} />
+            <Tab.Screen name="Intraday" component={IntradayScreen} />
             <Tab.Screen name="Journal" component={CalendarScreen} />
             <Tab.Screen name="Portfolio" component={PortfolioScreen} />
 
@@ -114,6 +121,13 @@ const MainTabs = () => {
             <Tab.Screen
                 name="Trade"
                 component={TradeScreen}
+                options={{
+                    tabBarItemStyle: { display: 'none' },
+                }}
+            />
+            <Tab.Screen
+                name="DetailedAnalysis"
+                component={DetailedAnalysisScreen}
                 options={{
                     tabBarItemStyle: { display: 'none' },
                 }}
@@ -170,6 +184,11 @@ const RootNavigator = () => {
                 <Stack.Screen
                     name="MainTabs"
                     component={MainTabs}
+                    options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                    name="DetailedAnalysis"
+                    component={DetailedAnalysisScreen}
                     options={{ headerShown: false }}
                 />
                 <Stack.Screen
