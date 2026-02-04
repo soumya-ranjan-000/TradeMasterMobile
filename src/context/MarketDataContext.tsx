@@ -126,65 +126,62 @@ export const MarketDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         };
     }, [connect]);
 
-    const fetchInitialPrice = useCallback(async (stock_code: string, exchange: string) => {
+    const pendingBatch = useRef<Set<string>>(new Set());
+    const batchTimer = useRef<NodeJS.Timeout | null>(null);
+
+    const processBatch = useCallback(async () => {
+        if (pendingBatch.current.size === 0) return;
+
+        const symbolsToFetch = Array.from(pendingBatch.current);
+        pendingBatch.current.clear();
+        console.log(`🚀 Batch Fetching initial prices for ${symbolsToFetch.length} symbols...`);
+
         try {
-            console.log(`Fetching initial quote for ${exchange}:${stock_code}...`);
-            const response = await fetch(`${BREEZE_API_URL}/api/quotes`, {
+            const response = await fetch(`${BREEZE_API_URL}/api/batch-quotes`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    stock_code,
-                    exchange_code: exchange,
-                    product_type: 'cash'
-                })
+                body: JSON.stringify({ symbols: symbolsToFetch })
             });
-            const data = await response.json();
+            const results = await response.json();
 
-            if (data.Status === 422) {
-                console.error('Breeze Quote Error: Invalid request parameters (422)');
-                return;
-            }
+            if (Array.isArray(results)) {
+                const newTicks: Record<string, Tick> = {};
+                results.forEach((quote: any) => {
+                    const ltp = parseFloat(quote.price || 0);
+                    const stock_code = quote.name || quote.symbol?.split('.')[0];
+                    const exchange = quote.symbol?.includes('.BO') ? 'BSE' : 'NSE';
+                    const key = `${exchange}:${stock_code}`;
 
-            // Breeze returns Success array
-            if (data.Success && data.Success.length > 0) {
-                const quote = data.Success[0];
-                const ltp = parseFloat(quote.ltp || quote.last || quote.price || quote.LTP || quote.lastPrice || 0);
-                console.log(`Initial quote received for ${stock_code}: ₹${ltp}`);
+                    const tick: Tick = {
+                        stock_code,
+                        exchange_code: exchange,
+                        ltp: ltp,
+                        open: 0,
+                        high: 0,
+                        low: 0,
+                        close: ltp,
+                        volume: 0,
+                        ltt: new Date().toISOString(),
+                        previous_close: ltp / (1 + (quote.change || 0) / 100),
+                        day_change_perc: quote.change || 0,
+                        day_change_abs: ltp - (ltp / (1 + (quote.change || 0) / 100)),
+                    };
+                    newTicks[key] = tick;
+                });
 
-                const tick: Tick = {
-                    stock_code: quote.stock_code || stock_code,
-                    exchange_code: quote.exchange_code || exchange,
-                    ltp: ltp,
-                    open: parseFloat(quote.open || quote.Open || 0),
-                    high: parseFloat(quote.high || quote.High || 0),
-                    low: parseFloat(quote.low || quote.Low || 0),
-                    close: parseFloat(quote.close || quote.Close || 0),
-                    volume: parseInt(quote.volume || quote.Volume || 0),
-                    ltt: quote.ltt || quote.LTT || quote.last_traded_time,
-                    previous_close: parseFloat(quote.previous_close || quote.PreviousClose || quote.prev_close || 0),
-                };
-
-                if (tick.previous_close > 0) {
-                    tick.day_change_abs = tick.ltp - tick.previous_close;
-                    tick.day_change_perc = (tick.day_change_abs / tick.previous_close) * 100;
-                } else if (quote.change_percent || quote.change) {
-                    // Fallback to pre-calculated change if available
-                    tick.day_change_perc = parseFloat(quote.change_percent || 0);
-                    tick.day_change_abs = parseFloat(quote.change || 0);
-                }
-
-                const key = `${exchange}:${stock_code}`;
-                setTicks(prev => ({
-                    ...prev,
-                    [key]: tick
-                }));
-            } else {
-                console.warn(`No quote success for ${stock_code}:`, data);
+                setTicks(prev => ({ ...prev, ...newTicks }));
+                console.log(`✅ Batch update complete for ${Object.keys(newTicks).length} symbols`);
             }
         } catch (error) {
-            console.error('Error fetching initial price:', error);
+            console.error('Batch fetch failed:', error);
         }
     }, []);
+
+    const queueInitialFetch = useCallback((symbol: string) => {
+        pendingBatch.current.add(symbol);
+        if (batchTimer.current) clearTimeout(batchTimer.current);
+        batchTimer.current = setTimeout(processBatch, 300); // 300ms buffer
+    }, [processBatch]);
 
     const subscribe = useCallback((symbol: string, exchange: string = 'NSE') => {
         const stock_code = symbol.split('.')[0].toUpperCase();
@@ -196,8 +193,11 @@ export const MarketDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (currentCount === 0) {
             // New subscription
             console.log(`Frontend: New subscription for ${key}`);
-            // Fetch initial price so UI doesn't show '---'
-            fetchInitialPrice(stock_code, exchange);
+            
+            // Only fetch if we don't have valid data already
+            if (!ticks[key] || ticks[key].ltp === 0) {
+                queueInitialFetch(stock_code);
+            }
 
             if (ws.current?.readyState === WebSocket.OPEN) {
                 ws.current.send(JSON.stringify({
@@ -207,9 +207,9 @@ export const MarketDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 }));
             }
         } else {
-            console.log(`Frontend: Reusing subscription for ${key} (Refs: {currentCount + 1})`);
+            console.log(`Frontend: Reusing subscription for ${key} (Refs: ${currentCount + 1})`);
         }
-    }, [fetchInitialPrice]);
+    }, [queueInitialFetch, ticks]);
 
     const unsubscribe = useCallback((symbol: string, exchange: string = 'NSE') => {
         const stock_code = symbol.split('.')[0].toUpperCase();
