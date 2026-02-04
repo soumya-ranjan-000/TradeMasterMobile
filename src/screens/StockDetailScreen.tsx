@@ -13,7 +13,7 @@ import { useLivePrice } from '../context/MarketDataContext';
 type StockDetailScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'StockDetail'>;
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CHART_HEIGHT = 280;
+const CHART_HEIGHT = 220;
 const CANDLE_WIDTH_BASE = 12;
 const CANDLE_SPACING = 16;
 
@@ -550,7 +550,7 @@ const StockDetailScreen = () => {
 
             {/* Premium Header */}
             <View className="flex-row justify-between items-center px-6 pt-12 pb-4">
-                <TouchableOpacity onPress={() => navigation.goBack()} className="p-2 -ml-2 bg-white/5 rounded-full">
+                <TouchableOpacity onPress={() => navigation.navigate('Watchlist' as any)} className="p-2 -ml-2 bg-white/5 rounded-full">
                     <ChevronLeft size={24} color="#E1E7ED" />
                 </TouchableOpacity>
                 <View className="flex-row gap-3">
@@ -706,13 +706,7 @@ const StockDetailScreen = () => {
                 {/* Action Section */}
                 <View className="px-6 mt-2 pb-12">
                     <View className="bg-surface/20 p-5 rounded-[32px] border border-border/40">
-                        <View className="flex-row justify-between items-center mb-4">
-                            <View>
-                                <Text className="text-text-muted text-[10px] font-bold uppercase tracking-[3px]">Buying Power</Text>
-                                <Text className="text-text-primary font-black text-xl mt-1">₹84,250.00</Text>
-                            </View>
-                            <Text className="text-primary font-bold text-xs">RELOAD</Text>
-                        </View>
+
 
                         <View className="flex-row gap-3">
                             <TouchableOpacity

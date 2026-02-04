@@ -30,7 +30,7 @@ const DashboardScreen = () => {
     const [trends, setTrends] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [marketStatus, setMarketStatus] = useState<{ is_open: boolean; message: string } | null>(null);
-    const [activeCategory, setActiveCategory] = useState('Trending');
+    const [activeCategory, setActiveCategory] = useState('Watchlists');
     const [watchlists, setWatchlists] = useState<any[]>([]);
     const [watchlistQuotes, setWatchlistQuotes] = useState<Record<string, any>>({});
     const [watchLoading, setWatchLoading] = useState(false);
@@ -40,16 +40,7 @@ const DashboardScreen = () => {
 
 
 
-    const fetchTrends = async () => {
-        try {
-            // Updated to use Breeze Service movers endpoint
-            const response = await fetch(`${BREEZE_API_URL}/api/movers?filters=liquid`);
-            const data = await response.json();
-            setTrends(Array.isArray(data) ? data.slice(0, 5) : []);
-        } catch (error) {
-            console.error("Failed to fetch trends:", error);
-        }
-    };
+
 
     const fetchProfile = async (id: string = userId) => {
         try {
@@ -209,13 +200,7 @@ const DashboardScreen = () => {
         }
     };
 
-    useEffect(() => {
-        if (activeCategory === 'Trending' && !isPaused && isFocused) {
-            fetchTrends();
-            const timer = setInterval(fetchTrends, 30000);
-            return () => clearInterval(timer);
-        }
-    }, [isPaused, activeCategory, isFocused]);
+
 
     useEffect(() => {
         if (isFocused) {
@@ -267,7 +252,7 @@ const DashboardScreen = () => {
             const savedId = await AsyncStorage.getItem('USER_ID');
             const finalId = savedId || TEST_USER_ID;
             setUserId(finalId);
-            fetchTrends();
+            // fetchTrends();
             fetchProfile(finalId);
             fetchMarketStatus();
             fetchWatchlists(finalId);
@@ -342,7 +327,7 @@ const DashboardScreen = () => {
             {/* Category Selector (Trending, News, Top Market) */}
             <View className="mt-8 px-4 bg-background">
                 <View className="flex-row gap-6 items-center">
-                    {['Trending', 'Watchlists', 'News', 'Top Market'].map((cat, i) => (
+                    {['Watchlists', 'News', 'Top Market'].map((cat, i) => (
                         <TouchableOpacity key={cat} onPress={() => setActiveCategory(cat)}>
                             <Text className={`text-base font-bold ${activeCategory === cat ? 'text-text-primary' : 'text-text-muted'}`}>{cat}</Text>
                             {activeCategory === cat && <View className="h-1 bg-primary rounded-full w-1/3 mt-1" />}
@@ -351,28 +336,7 @@ const DashboardScreen = () => {
                 </View>
             </View>
 
-            {/* Fixed Section Header (Market Trends / Extra padding) */}
-            <View className="px-6 pt-10 pb-4 bg-background">
-                {activeCategory === 'Trending' && (
-                    <View className="flex-row justify-between items-center">
-                        <View className="flex-1 flex-row items-center">
-                            <Text className="text-text-primary text-xl font-black mr-3">Market Trends</Text>
-                            <TouchableOpacity
-                                onPress={() => setIsPaused(!isPaused)}
-                                className={`px-3 py-1.5 rounded-full flex-row items-center border ${isPaused ? 'bg-error/10 border-error/20' : 'bg-success/10 border-success/20'}`}
-                            >
-                                {isPaused ? <Play size={12} color="#EF4444" /> : <Pause size={12} color="#10B981" />}
-                                <Text className={`text-[10px] font-black uppercase ml-1.5 ${isPaused ? 'text-error' : 'text-success'}`}>
-                                    {isPaused ? 'Paused' : 'Live Sync'}
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
-                        <TouchableOpacity onPress={() => navigation.navigate('Watchlist')} className="p-2">
-                            <Plus size={24} color="#00E0A1" />
-                        </TouchableOpacity>
-                    </View>
-                )}
-            </View>
+
 
             <ScrollView
                 className="flex-1"
@@ -383,7 +347,7 @@ const DashboardScreen = () => {
                         onRefresh={() => {
                             setLoading(true);
                             Promise.all([
-                                fetchTrends(),
+
                                 fetchProfile(userId),
                                 fetchWatchlists(userId),
                                 fetchMarketStatus()
@@ -395,63 +359,7 @@ const DashboardScreen = () => {
                 }
             >
 
-                {
-                    activeCategory === 'Trending' && (
-                        <View className="px-4 pb-20">
-                            {trends.length > 0 ? trends.map((asset, i) => (
-                                <Pressable
-                                    key={i}
-                                    onPress={() => navigation.navigate('StockDetail', { symbol: asset.symbol })}
-                                    className="bg-surface p-6 rounded-[32px] border border-border mb-4 flex-row items-center justify-between active:scale-95 transition-transform"
-                                >
-                                    <View className="flex-row items-center">
-                                        <View className={`w-14 h-14 rounded-2xl items-center justify-center mr-4 ${asset.change >= 0 ? 'bg-success/10' : 'bg-error/10'}`}>
-                                            <Text className={`font-black text-xl ${asset.change >= 0 ? 'text-success' : 'text-error'}`}>{asset.symbol[0]}</Text>
-                                        </View>
-                                        <View>
-                                            <Text className="text-text-primary font-black text-lg tracking-tight">{asset.symbol.split('.')[0]}</Text>
-                                            <View className="flex-row items-center mt-1">
-                                                <Text className="text-text-secondary text-xs font-medium" numberOfLines={1} style={{ maxWidth: 120 }}>{asset.name} • </Text>
-                                                <Text className={`text-xs font-bold ${asset.change >= 0 ? 'text-success' : 'text-error'}`}>
-                                                    {asset.change >= 0 ? '+' : ''}{asset.change.toFixed(2)}%
-                                                </Text>
-                                            </View>
-                                        </View>
-                                    </View>
-                                    <View className="items-end">
-                                        <Text className="text-text-primary font-black text-lg">₹{asset.price.toFixed(2)}</Text>
-                                        <View className="flex-row gap-1 mt-2 items-end h-6">
-                                            {[1, 2, 3, 4, 5, 6, 7].map((s) => (
-                                                <View key={s} className={`w-1 rounded-full ${asset.change >= 0 ? 'bg-success' : 'bg-error'}`} style={{ height: Math.abs(Math.sin(s + i)) * 15 + 5, opacity: 0.3 + (s / 10) }} />
-                                            ))}
-                                        </View>
-                                    </View>
-                                </Pressable>
-                            )) : isPaused ? (
-                                <View className="mt-20 items-center justify-center">
-                                    <View className="w-16 h-16 rounded-full bg-error/10 items-center justify-center mb-4 border border-error/20">
-                                        <Pause size={28} color="#EF4444" />
-                                    </View>
-                                    <Text className="text-text-primary font-black text-lg">Market Trends Paused</Text>
-                                    <Text className="text-text-muted text-[10px] font-bold mt-1 uppercase tracking-widest px-10 text-center leading-tight">
-                                        Live data synchronization is currently disabled. Resume to see real-time movers.
-                                    </Text>
-                                    <TouchableOpacity
-                                        onPress={() => setIsPaused(false)}
-                                        className="mt-6 bg-error/20 px-6 py-2.5 rounded-full border border-error/30 active:scale-95"
-                                    >
-                                        <Text className="text-error font-black text-[10px] uppercase tracking-widest">Resume Sync</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            ) : (
-                                <View className="mt-20 items-center justify-center">
-                                    <ActivityIndicator size="large" color="#00E0A1" />
-                                    <Text className="text-text-muted font-bold mt-4 animate-pulse uppercase text-[10px] tracking-[4px]">Scanning</Text>
-                                </View>
-                            )}
-                        </View>
-                    )
-                }
+
 
                 {
                     activeCategory === 'Watchlists' && (

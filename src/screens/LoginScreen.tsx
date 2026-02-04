@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Image, Linking } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ShieldCheck, User, Zap, ArrowRight, Lock, Key } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -19,6 +19,25 @@ const LoginScreen = () => {
     const [token, setToken] = useState('');
     const [pin, setPin] = useState('');
     const [realUser, setRealUser] = useState<any>(null);
+    const [apiKey, setApiKey] = useState('');
+
+    const fetchApiKey = async () => {
+        try {
+            const res = await fetch(`${BREEZE_API_URL}/api/api-key`);
+            const data = await res.json();
+            if (data.api_key) {
+                setApiKey(data.api_key);
+            }
+        } catch (error) {
+            console.error("Failed to fetch API key:", error);
+        }
+    };
+
+    useEffect(() => {
+        if (view === 'TOKEN') {
+            fetchApiKey();
+        }
+    }, [view]);
 
     const checkExistingSession = async () => {
         try {
@@ -154,16 +173,33 @@ const LoginScreen = () => {
                 <Text className="text-primary font-bold">← Back to Selection</Text>
             </TouchableOpacity>
 
-            <View className="mb-10">
+            <View className="mb-8">
                 <Text className="text-text-primary text-3xl font-black">Session Expired</Text>
-                <Text className="text-text-muted mt-2 font-medium">Please provide a new session token from your ICICI Direct portal to establish a real connection.</Text>
+                <Text className="text-text-muted mt-2 font-medium">To connect your Breeze account, you need a fresh session token. Click below to login and retrieve it.</Text>
             </View>
 
-            <View className="bg-surface border border-border rounded-2xl p-4 flex-row items-center mb-6">
-                <Key size={20} color="#6B7280" />
+            <TouchableOpacity
+                onPress={() => {
+                    if (apiKey) {
+                        Linking.openURL(`https://api.icicidirect.com/apiuser/login?api_key=${apiKey}`);
+                    } else {
+                        Alert.alert("Error", "API Key not loaded yet. Please try again in a moment.");
+                    }
+                }}
+                className="bg-primary shadow-lg shadow-primary/20 py-4 rounded-2xl items-center mb-8 active:scale-95 transition-transform"
+            >
+                <Text className="text-white font-black uppercase tracking-widest">1. Get Session Token</Text>
+            </TouchableOpacity>
+
+            <View className="mb-4">
+                <Text className="text-text-muted text-xs font-bold uppercase tracking-widest text-center">Then come back and paste it below</Text>
+            </View>
+
+            <View className="bg-surface border border-border rounded-2xl p-4 flex-row items-center mb-6 shadow-sm">
+                <Key size={20} color="#00E0A1" />
                 <TextInput
                     className="flex-1 ml-3 text-text-primary font-bold"
-                    placeholder="Enter Session Token"
+                    placeholder="2. Paste Session Token"
                     placeholderTextColor="#6B7280"
                     value={token}
                     onChangeText={setToken}

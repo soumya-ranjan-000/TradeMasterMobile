@@ -29,12 +29,34 @@ const MarketDataContext = createContext<MarketDataContextType | undefined>(undef
 export const MarketDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [ticks, setTicks] = useState<Record<string, Tick>>({});
     const [isConnected, setIsConnected] = useState(false);
+    const [marketStatus, setMarketStatus] = useState<{ is_open: boolean }>({ is_open: true });
+
     const ws = useRef<WebSocket | null>(null);
     const subscriptions = useRef<Map<string, number>>(new Map());
     const reconnectTimeout = useRef<NodeJS.Timeout | null>(null);
 
-    const connect = useCallback(() => {
+    const checkMarketStatus = useCallback(async () => {
+        try {
+            const res = await fetch(`${BREEZE_API_URL}/api/market-status`);
+            const data = await res.json();
+            setMarketStatus(data);
+            return data.is_open;
+        } catch (error) {
+            console.error('Failed to check market status:', error);
+            return true; // Default to open to avoid blocking if API fails
+        }
+    }, []);
+
+    const connect = useCallback(async () => {
         if (ws.current?.readyState === WebSocket.OPEN) return;
+
+        // Check if market is open before connecting WS
+        const isOpen = await checkMarketStatus();
+        if (!isOpen) {
+            console.log('Market is CLOSED. Skipping WebSocket connection to reduce server load.');
+            setIsConnected(false);
+            return;
+        }
 
         const wsFullUrl = `${ORCHESTRATOR_WS_URL}/api/v1/market_data/ws`;
         console.log('Connecting to Market Data Orchestrator:', wsFullUrl);
@@ -193,7 +215,7 @@ export const MarketDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (currentCount === 0) {
             // New subscription
             console.log(`Frontend: New subscription for ${key}`);
-            
+
             // Only fetch if we don't have valid data already
             if (!ticks[key] || ticks[key].ltp === 0) {
                 queueInitialFetch(stock_code);

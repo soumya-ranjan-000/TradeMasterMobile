@@ -61,9 +61,7 @@ const IntradayScreen = () => {
     const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'bullish' | 'bearish'>('bullish');
 
-    // Filters & Sorting
-    const [minPrice, setMinPrice] = useState<string>('0');
-    const [maxPrice, setMaxPrice] = useState<string>('10000');
+    const [signalFilter, setSignalFilter] = useState<'ALL' | 'READY' | 'WAITING'>('ALL');
     const [sortBy, setSortBy] = useState<'confidence' | 'price'>('confidence');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
@@ -141,30 +139,34 @@ const IntradayScreen = () => {
     const processStocks = (stocks: StockSignal[]) => {
         // Filter
         let result = stocks.filter(s => {
-            const price = s.price;
-            const min = parseFloat(minPrice) || 0;
-            const max = parseFloat(maxPrice) || 999999;
-            const meetsPrice = price >= min && price <= max;
+            const matchesSignal = signalFilter === 'ALL' || s.signal_type === signalFilter;
             const isActionable = s.signal_type !== 'HOLD';
-            return meetsPrice && isActionable;
+            return matchesSignal && isActionable;
         });
 
-        // Sort: Primary by Status (READY > WAITING), Secondary by User Selection
+        // Sort: Primary by Confidence (High to Low), Secondary by Status (READY > WAITING)
         result.sort((a, b) => {
+            // 1. Primary Sort: Confidence
+            if (b.confidence !== a.confidence) {
+                return b.confidence - a.confidence;
+            }
+
+            // 2. Secondary Sort: Status Priority
             const priorityMap = { 'READY': 2, 'WAITING': 1, 'HOLD': 0 };
             const priorityA = priorityMap[a.signal_type] || 0;
             const priorityB = priorityMap[b.signal_type] || 0;
 
             if (priorityA !== priorityB) {
-                return priorityB - priorityA; // READY (2) comes before WAITING (1)
+                return priorityB - priorityA;
             }
 
-            // Secondary sort based on user preference
-            let valA = sortBy === 'price' ? a.price : a.confidence;
-            let valB = sortBy === 'price' ? b.price : b.confidence;
+            // 3. Tertiary Sort: User selection (Price)
+            if (sortBy === 'price') {
+                if (sortOrder === 'asc') return a.price - b.price;
+                return b.price - a.price;
+            }
 
-            if (sortOrder === 'asc') return valA - valB;
-            return valB - valA;
+            return 0;
         });
 
         return result;
@@ -307,15 +309,15 @@ const IntradayScreen = () => {
                 </TouchableOpacity>
             </View>
 
-            {/* Price Filter & Sort UI */}
+            {/* Signal Filter */}
             <View className="px-6 mb-4 flex-row items-center">
                 <View className="bg-surface rounded-xl flex-1 flex-row items-center px-3 py-2 border border-border/30 mr-2">
-                    <Text className="text-text-muted text-[10px] font-bold mr-2 uppercase">Min ₹</Text>
+                    <Text className="text-text-muted text-[10px] font-bold mr-2 uppercase">Signal</Text>
                     <View className="flex-1">
                         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                            {['0', '500', '1000', '2000', '5000'].map(p => (
-                                <TouchableOpacity key={p} onPress={() => setMinPrice(p)} className={`px-3 py-1 rounded-lg mr-1 ${minPrice === p ? 'bg-primary' : 'bg-background/50'}`}>
-                                    <Text className={`text-[10px] font-bold ${minPrice === p ? 'text-white' : 'text-text-muted'}`}>{p}</Text>
+                            {['ALL', 'READY', 'WAITING'].map(sig => (
+                                <TouchableOpacity key={sig} onPress={() => setSignalFilter(sig as any)} className={`px-4 py-1 rounded-lg mr-1 ${signalFilter === sig ? 'bg-primary' : 'bg-background/50'}`}>
+                                    <Text className={`text-[10px] font-black ${signalFilter === sig ? 'text-white' : 'text-text-muted'}`}>{sig}</Text>
                                 </TouchableOpacity>
                             ))}
                         </ScrollView>

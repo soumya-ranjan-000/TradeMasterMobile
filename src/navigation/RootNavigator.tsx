@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Home, PieChart, Activity, BookOpen, User, Zap } from 'lucide-react-native';
+import { Home, PieChart, Activity, BookOpen, User, Zap, Search } from 'lucide-react-native';
 
 import DashboardScreen from '../screens/DashboardScreen';
 import WatchlistScreen from '../screens/WatchlistScreen';
@@ -66,7 +66,7 @@ const MainTabs = () => {
                 tabBarIcon: ({ color, size, focused }) => {
                     let Icon;
                     if (route.name === 'Dashboard') Icon = Home;
-                    else if (route.name === 'Watchlist') Icon = Activity;
+                    else if (route.name === 'Watchlist') Icon = Search;
                     else if (route.name === 'Intraday') Icon = Zap;
                     else if (route.name === 'Portfolio') Icon = PieChart;
                     else if (route.name === 'Journal') Icon = BookOpen;

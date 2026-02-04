@@ -233,7 +233,36 @@ const PortfolioScreen = () => {
         });
     }, [trades, orders]);
 
-    const tradeData = groupedTrades();
+    const tradeData = useCallback(() => {
+        const rawTrades = groupedTrades();
+        const openTrades = rawTrades.filter(t => t.status !== 'CLOSED');
+        const closedTrades = rawTrades.filter(t => t.status === 'CLOSED');
+
+        // Group closed trades by date
+        const groupedByDate: Record<string, any[]> = {};
+        closedTrades.forEach(t => {
+            const date = new Date(t.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+            if (!groupedByDate[date]) groupedByDate[date] = [];
+            groupedByDate[date].push(t);
+        });
+
+        const sections: any[] = [];
+        if (openTrades.length > 0) {
+            sections.push({ itemType: 'HEADER', title: 'Open Trades', count: openTrades.length });
+            openTrades.forEach(t => sections.push({ itemType: 'TRADE', ...t }));
+        }
+
+        if (closedTrades.length > 0) {
+            // Sort dates descending
+            const sortedDates = Object.keys(groupedByDate).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+            sortedDates.forEach(date => {
+                sections.push({ itemType: 'HEADER', title: date, count: groupedByDate[date].length });
+                groupedByDate[date].forEach(t => sections.push({ itemType: 'TRADE', ...t }));
+            });
+        }
+
+        return sections;
+    }, [trades, orders])();
 
     const renderPosition = ({ item }: { item: any }) => {
         const isExpanded = expandedPositions.includes(item.position_id);
@@ -332,8 +361,18 @@ const PortfolioScreen = () => {
     };
 
     const renderOrder = ({ item }: { item: any }) => {
+        if (item.itemType === 'HEADER') {
+            return (
+                <View className="py-4 px-2 flex-row justify-between items-center">
+                    <Text className="text-text-muted font-black text-[10px] uppercase tracking-[2px]">{item.title}</Text>
+                    <View className="bg-surface px-2 py-0.5 rounded-md border border-border/50">
+                        <Text className="text-text-muted text-[8px] font-bold">{item.count} {item.count === 1 ? 'Trade' : 'Trades'}</Text>
+                    </View>
+                </View>
+            );
+        }
+
         const isExpanded = expandedTrades.includes(item.id);
-        const hasPnL = item.realized_pnl !== 0;
 
         return (
             <View className="bg-surface rounded-2xl border border-border mb-3 overflow-hidden">
@@ -359,7 +398,7 @@ const PortfolioScreen = () => {
                                 {item.realized_pnl >= 0 ? '+' : '-'}₹{Math.abs(item.realized_pnl).toFixed(2)}
                             </Text>
                             <View className="flex-row items-center">
-                                <Text className="text-text-muted text-[8px] mr-1">{new Date(item.timestamp).toLocaleDateString()}</Text>
+                                <Text className="text-text-muted text-[8px] mr-1">{new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
                                 {isExpanded ? <ChevronDown size={12} color="#6B7280" /> : <ChevronRight size={12} color="#6B7280" />}
                             </View>
                         </View>
@@ -513,7 +552,7 @@ const PortfolioScreen = () => {
             ) : (
                 <FlatList
                     data={tradeData}
-                    keyExtractor={(item) => item.id}
+                    keyExtractor={(item, index) => item.itemType === 'HEADER' ? `header-${item.title}-${index}` : item.id}
                     contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
                     renderItem={renderOrder}
                     refreshControl={
