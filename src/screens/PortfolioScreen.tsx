@@ -238,21 +238,30 @@ const PortfolioScreen = () => {
         const openTrades = rawTrades.filter(t => t.status !== 'CLOSED');
         const closedTrades = rawTrades.filter(t => t.status === 'CLOSED');
 
-        // Group closed trades by date
-        const groupedByDate: Record<string, any[]> = {};
-        closedTrades.forEach(t => {
-            const date = new Date(t.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-            if (!groupedByDate[date]) groupedByDate[date] = [];
-            groupedByDate[date].push(t);
-        });
+        // Find pending orders (not yet part of any trade/position)
+        const pendingOrders = orders.filter(o => o.status === 'PENDING');
 
         const sections: any[] = [];
+
+        if (pendingOrders.length > 0) {
+            sections.push({ itemType: 'HEADER', title: 'Pending Orders', count: pendingOrders.length });
+            pendingOrders.forEach(o => sections.push({ itemType: 'PENDING_ORDER', ...o }));
+        }
+
         if (openTrades.length > 0) {
             sections.push({ itemType: 'HEADER', title: 'Open Trades', count: openTrades.length });
             openTrades.forEach(t => sections.push({ itemType: 'TRADE', ...t }));
         }
 
         if (closedTrades.length > 0) {
+            // Group closed trades by date
+            const groupedByDate: Record<string, any[]> = {};
+            closedTrades.forEach(t => {
+                const date = new Date(t.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+                if (!groupedByDate[date]) groupedByDate[date] = [];
+                groupedByDate[date].push(t);
+            });
+
             // Sort dates descending
             const sortedDates = Object.keys(groupedByDate).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
             sortedDates.forEach(date => {
@@ -276,8 +285,8 @@ const PortfolioScreen = () => {
                 >
                     <View className="flex-row justify-between items-center">
                         <View className="flex-row items-center">
-                            <View className={`w-8 h-8 rounded-xl items-center justify-center mr-3 ${item.unrealized_pnl >= 0 ? 'bg-success/10' : 'bg-error/10'}`}>
-                                <Text className={`font-bold text-base ${item.unrealized_pnl >= 0 ? 'text-success' : 'text-error'}`}>{item.symbol[0]}</Text>
+                            <View className={`w-8 h-8 rounded-xl items-center justify-center mr-3 ${(item.unrealized_pnl || 0) >= -0.005 ? 'bg-success/10' : 'bg-error/10'}`}>
+                                <Text className={`font-bold text-base ${(item.unrealized_pnl || 0) >= -0.005 ? 'text-success' : 'text-error'}`}>{item.symbol[0]}</Text>
                             </View>
                             <View>
                                 <Text className="text-text-primary font-bold text-sm">{item.symbol}</Text>
@@ -287,9 +296,9 @@ const PortfolioScreen = () => {
                         <View className="items-end">
                             <Text className="text-text-primary font-bold text-sm">{item.quantity} {item.quantity === 1 ? 'Share' : 'Shares'}</Text>
                             <View className="flex-row items-center mt-0.5">
-                                {(item.unrealized_pnl || 0) >= 0 ? <ArrowUpRight size={10} color="#10B981" /> : <ArrowDownRight size={10} color="#EF4444" />}
-                                <Text className={`text-[10px] font-bold ml-1 ${(item.unrealized_pnl || 0) >= 0 ? 'text-success' : 'text-error'}`}>
-                                    {(item.unrealized_pnl || 0) >= 0 ? '+' : '-'}₹{Math.abs(item.unrealized_pnl || 0).toFixed(2)}
+                                {(item.unrealized_pnl || 0) >= -0.005 ? <ArrowUpRight size={10} color="#10B981" /> : <ArrowDownRight size={10} color="#EF4444" />}
+                                <Text className={`text-[10px] font-bold ml-1 ${(item.unrealized_pnl || 0) >= -0.005 ? 'text-success' : 'text-error'}`}>
+                                    {(item.unrealized_pnl || 0) >= -0.005 ? '+' : '-'}₹{Math.abs(item.unrealized_pnl || 0).toFixed(2)}
                                 </Text>
                             </View>
                         </View>
@@ -372,6 +381,39 @@ const PortfolioScreen = () => {
             );
         }
 
+        if (item.itemType === 'PENDING_ORDER') {
+            return (
+                <View className="bg-surface rounded-2xl border border-secondary/30 mb-3 overflow-hidden shadow-sm shadow-secondary/5">
+                    <TouchableOpacity
+                        onPress={() => setSelectedOrder(item)}
+                        activeOpacity={0.7}
+                        className="p-4"
+                    >
+                        <View className="flex-row justify-between items-center">
+                            <View className="flex-row items-center">
+                                <View className={`w-7 h-7 rounded-lg items-center justify-center mr-3 bg-secondary/10`}>
+                                    <TrendingUp size={12} color="#00E0A1" />
+                                </View>
+                                <View>
+                                    <Text className="text-text-primary font-bold text-sm">{item.symbol}</Text>
+                                    <Text className="text-primary text-[8px] font-black uppercase tracking-widest">
+                                        PENDING {item.order_type} ORDER
+                                    </Text>
+                                </View>
+                            </View>
+                            <View className="items-end">
+                                <View className={`px-2 py-0.5 rounded-md mb-1 ${item.side === 'BUY' ? 'bg-success/10' : 'bg-error/10'}`}>
+                                    <Text className={`text-[8px] font-black ${item.side === 'BUY' ? 'text-success' : 'text-error'}`}>{item.side}</Text>
+                                </View>
+                                <Text className="text-text-primary font-black text-xs">₹{item.price?.toFixed(2)}</Text>
+                                <Text className="text-text-muted text-[8px] mt-0.5">{new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                            </View>
+                        </View>
+                    </TouchableOpacity>
+                </View>
+            );
+        }
+
         const isExpanded = expandedTrades.includes(item.id);
 
         return (
@@ -427,9 +469,9 @@ const PortfolioScreen = () => {
                                         </View>
                                     </View>
                                 </View>
-                                {ord.realized_pnl ? (
-                                    <Text className={`text-[10px] font-black ${ord.realized_pnl >= 0 ? 'text-success' : 'text-error'}`}>
-                                        {ord.realized_pnl >= 0 ? '+' : '-'}₹{Math.abs(ord.realized_pnl).toFixed(2)}
+                                {ord.realized_pnl !== undefined && ord.realized_pnl !== null ? (
+                                    <Text className={`text-[10px] font-black ${(ord.realized_pnl || 0) >= -0.005 ? 'text-success' : 'text-error'}`}>
+                                        {(ord.realized_pnl || 0) >= -0.005 ? '+' : '-'}₹{Math.abs(ord.realized_pnl || 0).toFixed(2)}
                                     </Text>
                                 ) : null}
                             </TouchableOpacity>
@@ -461,8 +503,8 @@ const PortfolioScreen = () => {
                             <Text className="text-text-secondary text-[10px] font-bold uppercase tracking-widest">Total Value</Text>
                             <Text className="text-text-primary text-2xl font-black mt-0.5">₹{currentVal.toLocaleString()}</Text>
                         </View>
-                        <View className={`w-10 h-10 rounded-xl items-center justify-center ${currentPortfolioPnL >= 0 ? 'bg-success/10' : 'bg-error/10'}`}>
-                            {currentPortfolioPnL >= 0 ? <ArrowUpRight size={20} color="#10B981" /> : <ArrowDownRight size={20} color="#EF4444" />}
+                        <View className={`w-10 h-10 rounded-xl items-center justify-center ${(currentPortfolioPnL || 0) >= -0.005 ? 'bg-success/10' : 'bg-error/10'}`}>
+                            {(currentPortfolioPnL || 0) >= -0.005 ? <ArrowUpRight size={20} color="#10B981" /> : <ArrowDownRight size={20} color="#EF4444" />}
                         </View>
                     </View>
 
@@ -479,14 +521,14 @@ const PortfolioScreen = () => {
                     <View className="flex-row justify-between">
                         <View>
                             <Text className="text-text-muted text-[8px] font-bold uppercase mb-0.5">Total P&L</Text>
-                            <Text className={`text-sm font-black ${currentPortfolioPnL >= 0 ? 'text-success' : 'text-error'}`}>
-                                {currentPortfolioPnL >= 0 ? '+' : '-'}₹{Math.abs(currentPortfolioPnL).toLocaleString()} ({currentPortfolioPerc.toFixed(2)}%)
+                            <Text className={`text-sm font-black ${(currentPortfolioPnL || 0) >= -0.005 ? 'text-success' : 'text-error'}`}>
+                                {(currentPortfolioPnL || 0) >= -0.005 ? '+' : '-'}₹{Math.abs(currentPortfolioPnL || 0).toLocaleString()} ({currentPortfolioPerc.toFixed(2)}%)
                             </Text>
                         </View>
                         <View className="items-end">
                             <Text className="text-text-muted text-[8px] font-bold uppercase mb-0.5">Today</Text>
-                            <Text className={`text-sm font-black ${totalPnLToday >= 0 ? 'text-success' : 'text-error'}`}>
-                                {totalPnLToday >= 0 ? '+' : '-'}₹{Math.abs(totalPnLToday).toLocaleString()}
+                            <Text className={`text-sm font-black ${(totalPnLToday || 0) >= -0.005 ? 'text-success' : 'text-error'}`}>
+                                {(totalPnLToday || 0) >= -0.005 ? '+' : '-'}₹{Math.abs(totalPnLToday || 0).toLocaleString()}
                             </Text>
                         </View>
                     </View>
@@ -756,21 +798,28 @@ const PortfolioScreen = () => {
                             <View className="flex-row justify-between items-center bg-background/50 p-5 rounded-3xl border border-border/50">
                                 <View>
                                     <Text className="text-text-secondary text-[10px] uppercase font-bold tracking-widest mb-1">Quantity</Text>
-                                    <Text className="text-text-primary text-xl font-black">{selectedOrder?.filled_quantity} Shares</Text>
+                                    <Text className="text-text-primary text-xl font-black">
+                                        {selectedOrder?.status === 'PENDING' ? selectedOrder?.quantity : selectedOrder?.filled_quantity} Shares
+                                    </Text>
                                 </View>
                                 <View className="items-end">
-                                    <Text className="text-text-secondary text-[10px] uppercase font-bold tracking-widest mb-1">Avg. Market Price</Text>
-                                    <Text className="text-text-primary text-xl font-black">₹{selectedOrder?.average_fill_price.toFixed(2)}</Text>
+                                    <Text className="text-text-secondary text-[10px] uppercase font-bold tracking-widest mb-1">
+                                        {selectedOrder?.status === 'PENDING' ? 'Limit Price' : 'Avg. Fill Price'}
+                                    </Text>
+                                    <Text className="text-text-primary text-xl font-black">
+                                        ₹{(selectedOrder?.status === 'PENDING' ? selectedOrder?.price : selectedOrder?.average_fill_price)?.toFixed(2)}
+                                    </Text>
                                 </View>
                             </View>
 
                             <View className="p-6 gap-4 bg-surface rounded-3xl border border-border">
                                 <View className="flex-row justify-between">
                                     <Text className="text-text-secondary font-bold">
-                                        {selectedOrder?.side === 'BUY' ? 'Total Investment' : 'Transaction Value'}
+                                        {selectedOrder?.side === 'BUY' ? 'Estimated Investment' : 'Target Value'}
                                     </Text>
                                     <Text className="text-text-primary font-black">
-                                        ₹{(selectedOrder?.filled_quantity * selectedOrder?.average_fill_price).toLocaleString()}
+                                        ₹{((selectedOrder?.status === 'PENDING' ? selectedOrder?.quantity : (selectedOrder?.filled_quantity || 0)) *
+                                            (selectedOrder?.status === 'PENDING' ? selectedOrder?.price : (selectedOrder?.average_fill_price || 0))).toLocaleString()}
                                     </Text>
                                 </View>
                                 <View className="flex-row justify-between">
