@@ -60,6 +60,8 @@ const IntradayScreen = () => {
     const [refreshing, setRefreshing] = useState(false);
     const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'bullish' | 'bearish'>('bullish');
+    const [scanning, setScanning] = useState(false);
+    const [scanStatus, setScanStatus] = useState<any>(null);
 
     const [signalFilter, setSignalFilter] = useState<'ALL' | 'READY' | 'WAITING'>('ALL');
     const [sortBy, setSortBy] = useState<'confidence' | 'price'>('confidence');
@@ -67,6 +69,7 @@ const IntradayScreen = () => {
 
     const fetchSignals = async () => {
         try {
+            setRefreshing(true);
             const [bullRes, bearRes] = await Promise.all([
                 fetch(`${WATCHLIST_API_URL}/watchlist/bullish`),
                 fetch(`${WATCHLIST_API_URL}/watchlist/bearish`)
@@ -85,9 +88,44 @@ const IntradayScreen = () => {
         }
     };
 
+    const fetchScanStatus = async () => {
+        try {
+            const res = await fetch(`${WATCHLIST_API_URL}/watchlist/status`);
+            if (res.ok) {
+                const status = await res.json();
+                setScanStatus(status);
+
+                if (status.status === 'running') {
+                    setScanning(true);
+                } else {
+                    if (status.status === 'completed' && scanning) {
+                        fetchSignals();
+                    }
+                    setScanning(false);
+                }
+            }
+        } catch (error) {
+            console.error("Failed to fetch scan status:", error);
+        }
+    };
+
     useEffect(() => {
         fetchSignals();
+        fetchScanStatus();
     }, []);
+
+    // Polling effect for scan progress
+    useEffect(() => {
+        let interval: any;
+        if (scanning) {
+            interval = setInterval(fetchScanStatus, 2000);
+        } else {
+            if (interval) clearInterval(interval);
+        }
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [scanning]);
 
     const onRefresh = () => {
         setRefreshing(true);
@@ -96,20 +134,21 @@ const IntradayScreen = () => {
 
     const triggerNewScan = async () => {
         try {
-            setLoading(true);
+            setScanning(true);
             const response = await fetch(`${WATCHLIST_API_URL}/watchlist/trigger`, {
                 method: 'POST'
             });
             if (response.ok) {
-                Alert.alert("Scan Triggered", "AI scanning has started in the background. Please wait a few minutes and reload.");
+                // Let polling handle UI updates
+                fetchScanStatus();
             } else {
                 Alert.alert("Error", "Failed to start new scan.");
+                setScanning(false);
             }
         } catch (error) {
             console.error("Scan trigger failed:", error);
             Alert.alert("Error", "Network error while triggering scan.");
-        } finally {
-            setLoading(false);
+            setScanning(false);
         }
     };
 
@@ -292,6 +331,26 @@ const IntradayScreen = () => {
                     </TouchableOpacity>
                 </View>
             </View>
+
+            {/* Scan Progress Bar */}
+            {scanning && scanStatus?.status === 'running' && (
+                <View className="px-6 py-3 bg-surface border-y border-border/20 mb-4">
+                    <View className="flex-row justify-between items-center mb-2">
+                        <Text className="text-primary text-[10px] font-black uppercase tracking-widest">
+                            {scanStatus.step || "AI Scanning..."}
+                        </Text>
+                        <Text className="text-text-primary text-[10px] font-black">
+                            {Math.round(scanStatus.progress || 0)}%
+                        </Text>
+                    </View>
+                    <View className="w-full h-2 bg-background rounded-full overflow-hidden border border-border/10">
+                        <View
+                            className="h-full bg-primary rounded-full"
+                            style={{ width: `${scanStatus.progress || 0}%` }}
+                        />
+                    </View>
+                </View>
+            )}
 
             {/* Tab Switcher */}
             <View className="flex-row px-6 mb-4">
