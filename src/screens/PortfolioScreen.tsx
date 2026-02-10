@@ -155,6 +155,28 @@ const PortfolioScreen = () => {
         }
     };
 
+    const cancelOrder = async (orderId: string) => {
+        try {
+            setLoading(true);
+            const response = await fetch(`${API_URL}/orders/${userId}/${orderId}`, {
+                method: 'DELETE',
+            });
+            if (response.ok) {
+                Alert.alert("Order Cancelled", "Your limit order has been successfully cancelled.");
+                setSelectedOrder(null);
+                fetchData();
+            } else {
+                const err = await response.json();
+                Alert.alert("Cancellation Failed", err.detail || "Could not cancel order");
+            }
+        } catch (error) {
+            console.error("Cancel order failed:", error);
+            Alert.alert("Error", "Network error");
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const totalUnrealizedPnL = livePositions.reduce((acc, pos) => acc + (pos.unrealized_pnl || 0), 0);
     const totalInvested = livePositions.reduce((acc, pos) => acc + (pos.quantity * pos.average_price), 0);
 
@@ -852,6 +874,29 @@ const PortfolioScreen = () => {
                                 )}
                             </View>
                         </View>
+
+                        {selectedOrder?.status === 'PENDING' && (
+                            <TouchableOpacity
+                                disabled={loading}
+                                onPress={() => {
+                                    Alert.alert(
+                                        "Cancel Order",
+                                        "Are you sure you want to cancel this pending order?",
+                                        [
+                                            { text: "No", style: "cancel" },
+                                            { text: "Yes, Cancel", style: "destructive", onPress: () => cancelOrder(selectedOrder.order_id) }
+                                        ]
+                                    );
+                                }}
+                                className={`mt-6 ${loading ? 'bg-error/5' : 'bg-error/10'} border border-error/20 py-4 rounded-2xl items-center`}
+                            >
+                                {loading ? (
+                                    <ActivityIndicator size="small" color="#EF4444" />
+                                ) : (
+                                    <Text className="text-error font-black text-xs uppercase tracking-widest">Cancel Pending Order</Text>
+                                )}
+                            </TouchableOpacity>
+                        )}
 
                         {/* Summary Footer */}
                         <View className="mt-8 flex-row items-center justify-center gap-2 opacity-50">
