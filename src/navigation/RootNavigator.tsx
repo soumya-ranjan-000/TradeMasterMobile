@@ -17,6 +17,7 @@ import LoginScreen from '../screens/LoginScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import AlertsScreen from '../screens/AlertsScreen';
 import PerformanceScreen from '../screens/PerformanceScreen';
+import ScannerScreen from '../screens/ScannerScreen';
 
 // Types for Navigation
 export type RootStackParamList = {
@@ -26,6 +27,7 @@ export type RootStackParamList = {
     Trade: { symbol: string; side: 'BUY' | 'SELL' };
     Alerts: undefined;
     Performance: undefined;
+    Scanner: undefined;
     DetailedAnalysis: { symbol: string; analysis: any };
 };
 
@@ -40,6 +42,7 @@ export type MainTabParamList = {
     Trade: { symbol: string; side: 'BUY' | 'SELL' };
     Alerts: undefined;
     Performance: undefined;
+    Scanner: undefined;
     DetailedAnalysis: { symbol: string; analysis: any };
 };
 
@@ -142,6 +145,13 @@ const MainTabs = () => {
             <Tab.Screen
                 name="Performance"
                 component={PerformanceScreen}
+                options={{
+                    tabBarItemStyle: { display: 'none' },
+                }}
+            />
+            <Tab.Screen
+                name="Scanner"
+                component={ScannerScreen}
                 options={{
                     tabBarItemStyle: { display: 'none' },
                 }}

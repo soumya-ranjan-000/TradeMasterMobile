@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, FlatList, TouchableOpacity, ActivityIndicator, ScrollView, RefreshControl, StatusBar, Pressable, Platform } from 'react-native';
-import { Plus, Search, Bell, Trash2, X, ChevronRight, Pause, Play } from 'lucide-react-native';
-import { API_URL, BREEZE_API_URL, TEST_USER_ID } from '../config';
+import { Plus, Search, Bell, Trash2, X, ChevronRight, Pause, Play, Radar } from 'lucide-react-native';
+import { API_URL, TEST_USER_ID } from '../config';
+import { getMarketStatus } from '../api';
 import { useNavigation, CompositeNavigationProp, useIsFocused } from '@react-navigation/native';
 import { Alert } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -49,42 +50,9 @@ const DashboardScreen = () => {
             if (res.ok) {
                 const data = await res.json();
                 setProfile(data);
-
-                // 2. Try to sync with Breeze if name is generic or every few loads
-                if (data.full_name === "Trader" || !data.full_name) {
-                    syncWithBreeze(id);
-                }
             }
         } catch (error) {
             console.error("Failed to fetch profile:", error);
-        }
-    };
-
-    const syncWithBreeze = async (id: string = userId) => {
-        try {
-            const breezeRes = await fetch(`${BREEZE_API_URL}/api/customer-details`);
-            const breezeData = await breezeRes.json();
-
-            // Breeze can return Success as an array or an object
-            if (breezeData.Success) {
-                const breezeUser = Array.isArray(breezeData.Success) ? breezeData.Success[0] : breezeData.Success;
-                const fullName = breezeUser.idirect_user_name || breezeUser.name || breezeUser.idirect_userid;
-
-                // Update our DB
-                await fetch(`${API_URL}/profile`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        user_id: id,
-                        full_name: fullName,
-                        email: breezeUser.email || ""
-                    })
-                });
-
-                setProfile({ full_name: fullName, email: breezeUser.email });
-            }
-        } catch (error) {
-            console.log("Breeze sync failed (likely no session):", error);
         }
     };
 
@@ -131,9 +99,7 @@ const DashboardScreen = () => {
 
     const fetchMarketStatus = async () => {
         try {
-            const res = await fetch(`${BREEZE_API_URL}/api/market-status`);
-            const data = await res.json();
-            setMarketStatus(data);
+            setMarketStatus(await getMarketStatus());
         } catch (e) {
             console.log("Failed to fetch market status");
         }
@@ -309,6 +275,12 @@ const DashboardScreen = () => {
                         </View>
                     )}
                     <View className="flex-row items-center gap-3">
+                        <TouchableOpacity
+                            className="bg-surface w-12 h-12 items-center justify-center rounded-2xl border border-border shadow-sm active:scale-95"
+                            onPress={() => navigation.navigate('Scanner')}
+                        >
+                            <Radar size={22} color="#00E0A1" />
+                        </TouchableOpacity>
                         <TouchableOpacity
                             className="bg-surface w-12 h-12 items-center justify-center rounded-2xl border border-border shadow-sm active:scale-95"
                             onPress={() => navigation.navigate('Alerts')}

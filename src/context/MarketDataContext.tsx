@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
-import { ORCHESTRATOR_WS_URL, BREEZE_API_URL } from '../config';
+import { getMarketStatus, getQuotes, marketWsUrl } from '../api';
 import { useIsFocused } from '@react-navigation/native';
 
 interface Tick {
@@ -37,8 +37,7 @@ export const MarketDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     const checkMarketStatus = useCallback(async () => {
         try {
-            const res = await fetch(`${BREEZE_API_URL}/api/market-status`);
-            const data = await res.json();
+            const data = await getMarketStatus();
             setMarketStatus(data);
             return data.is_open;
         } catch (error) {
@@ -58,12 +57,12 @@ export const MarketDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             return;
         }
 
-        const wsFullUrl = `${ORCHESTRATOR_WS_URL}/api/v1/market_data/ws`;
-        console.log('Connecting to Market Data Orchestrator:', wsFullUrl);
+        const wsFullUrl = marketWsUrl();
+        console.log('Connecting to Market Data Orchestrator:', wsFullUrl.split('?')[0]);
         const socket = new WebSocket(wsFullUrl);
 
         socket.onopen = () => {
-            console.log('Market Data WebSocket Connected to:', wsFullUrl);
+            console.log('Market Data WebSocket Connected');
             setIsConnected(true);
             // Re-subscribe to all existing subscriptions on reconnect
             if (subscriptions.current.size > 0) {
@@ -122,7 +121,13 @@ export const MarketDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             console.error('Market Data WebSocket Error:', error);
         };
 
-        socket.onclose = () => {
+        socket.onclose = (event) => {
+            // 1008 = the backend refused the API key: retrying cannot help.
+            if (event.code === 1008) {
+                console.warn('Market data socket rejected (1008): check EXPO_PUBLIC_BACKEND_API_KEY.');
+                setIsConnected(false);
+                return;
+            }
             console.log('Market Data WebSocket Disconnected');
             setIsConnected(false);
             if (!reconnectTimeout.current) {
@@ -159,12 +164,7 @@ export const MarketDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         console.log(`🚀 Batch Fetching initial prices for ${symbolsToFetch.length} symbols...`);
 
         try {
-            const response = await fetch(`${BREEZE_API_URL}/api/batch-quotes`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symbols: symbolsToFetch })
-            });
-            const results = await response.json();
+            const results = await getQuotes(symbolsToFetch);
 
             if (Array.isArray(results)) {
                 const newTicks: Record<string, Tick> = {};

@@ -4,7 +4,8 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/RootNavigator';
 import { ChevronLeft, Share2, Star, TrendingUp, Plus, X, Search, ListPlus } from 'lucide-react-native';
-import { BREEZE_API_URL, API_URL, TEST_USER_ID } from '../config';
+import { API_URL, TEST_USER_ID } from '../config';
+import { getHistory } from '../api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Rect, Line, Defs, LinearGradient as SVGGradiant, Stop, Text as SvgText, Path, Polyline, G } from 'react-native-svg';
 import { Activity, Settings2, PencilLine, BarChart3, Calendar } from 'lucide-react-native';
@@ -80,9 +81,7 @@ const StockDetailScreen = () => {
                 }
             }
 
-            const response = await fetch(`${BREEZE_API_URL}/api/history?symbol=${symbol}&period=${period}&interval=${intervalValue}`);
-            const data = await response.json();
-            setHistory(Array.isArray(data) ? data : []);
+            setHistory(await getHistory(symbol, period, intervalValue));
 
             setTimeout(() => {
                 scrollRef.current?.scrollToEnd({ animated: false });

@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Switch, TextInput, Alert, ActivityIndicator, StatusBar, Platform } from 'react-native';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { ChevronLeft, Bell, BellPlus, Trash2, TrendingUp, AlertCircle, Clock, Smartphone } from 'lucide-react-native';
-import { API_URL, BREEZE_API_URL, TEST_USER_ID } from '../config';
+import { API_URL, TEST_USER_ID } from '../config';
+import { searchSymbols } from '../api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLivePrice } from '../context/MarketDataContext';
@@ -35,8 +36,7 @@ const AlertsScreen = () => {
 
         try {
             setSearchLoading(true);
-            const res = await fetch(`${BREEZE_API_URL}/api/search?q=${text}`);
-            const data = await res.json();
+            const data = await searchSymbols(text);
             setSearchResults(Array.isArray(data) ? data : []);
         } catch (error) {
             console.error("Symbol search failed:", error);

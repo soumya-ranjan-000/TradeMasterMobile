@@ -23,35 +23,29 @@ const PerformanceScreen = () => {
             const savedId = await AsyncStorage.getItem('USER_ID');
             const uid = savedId || TEST_USER_ID;
 
-            // Simulating analytics data
-            // In a real app, this would be a dedicated backend endpoint
-            // const res = await fetch(`${API_URL}/analytics/${uid}`);
-
-            setTimeout(() => {
-                setStats({
-                    winRate: 68.5,
-                    profitFactor: 2.4,
-                    avgWin: 1250,
-                    avgLoss: 450,
-                    totalTrades: 42,
-                    winningTrades: 29,
-                    totalProfit: 18500,
-                    maxDrawdown: 12.4
-                });
-
-                // Generate a mock equity curve
-                const curve = [];
-                let balance = 100000;
-                for (let i = 0; i < 20; i++) {
-                    balance += (Math.random() - 0.3) * 2000;
-                    curve.push(balance);
-                }
-                setEquityCurve(curve);
-                setLoading(false);
-            }, 1000);
+            // Closed trades, NET of charges (paper service /analytics).
+            const res = await fetch(`${API_URL}/analytics/${encodeURIComponent(uid)}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const a = await res.json();
+            setStats({
+                winRate: a.win_rate ?? 0,
+                profitFactor: a.profit_factor ?? null,      // null = no losing trades yet
+                avgWin: Math.round(a.avg_win ?? 0),
+                avgLoss: Math.round(Math.abs(a.avg_loss ?? 0)),
+                totalTrades: a.total_trades ?? 0,
+                winningTrades: a.winning_trades ?? 0,
+                totalProfit: a.net_pnl ?? 0,
+                totalCharges: a.total_charges ?? 0,
+                expectancy: a.expectancy ?? 0,
+                maxDrawdown: a.max_drawdown_pct ?? 0,
+                returnPct: a.return_pct ?? 0,
+            });
+            setEquityCurve((a.equity_curve || []).map((p: any) => p.equity));
+            setLoading(false);
 
         } catch (error) {
             console.error("Failed to fetch analytics:", error);
+            setStats(null);
             setLoading(false);
         }
     };
@@ -133,6 +127,13 @@ const PerformanceScreen = () => {
                     <ActivityIndicator size="large" color="#00E0A1" />
                     <Text className="text-text-muted font-bold mt-4">Analyzing your trades...</Text>
                 </View>
+            ) : !stats ? (
+                <View className="flex-1 items-center justify-center px-8">
+                    <Text className="text-text-muted font-bold text-center">Could not load analytics from the paper trading service.</Text>
+                    <TouchableOpacity onPress={fetchAnalytics} className="mt-4 px-6 py-3 bg-primary rounded-xl">
+                        <Text className="text-white font-black uppercase text-xs">Retry</Text>
+                    </TouchableOpacity>
+                </View>
             ) : (
                 <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false}>
 
@@ -156,7 +157,7 @@ const PerformanceScreen = () => {
                                 <TrendingUp size={14} color="#00E0A1" />
                                 <Text className="text-text-muted text-[10px] font-bold uppercase ml-2">Profit Factor</Text>
                             </View>
-                            <Text className="text-text-primary text-2xl font-black">{stats.profitFactor}</Text>
+                            <Text className="text-text-primary text-2xl font-black">{stats.profitFactor ?? '—'}</Text>
                             <Text className="text-success text-[10px] font-bold mt-1">Excellent Range</Text>
                         </View>
 
@@ -198,14 +199,17 @@ const PerformanceScreen = () => {
                         </View>
 
                         <View className="flex-row h-4 bg-background rounded-full overflow-hidden border border-border">
-                            <View style={{ width: `${(stats.winningTrades / stats.totalTrades) * 100}%` }} className="bg-success" />
+                            <View style={{ width: `${stats.totalTrades ? (stats.winningTrades / stats.totalTrades) * 100 : 0}%` }} className="bg-success" />
                             <View className="flex-1 bg-error" />
                         </View>
 
                         <View className="mt-8 p-4 bg-primary/5 rounded-2xl border border-primary/10 flex-row items-center">
                             <Info size={18} color="#00E0A1" />
                             <Text className="text-text-muted text-[11px] font-bold flex-1 ml-3 leading-tight">
-                                Your Risk-to-Reward ratio is 1:{(stats.avgWin / stats.avgLoss).toFixed(1)}. This is a statistically edge-positive trading system.
+                                {stats.totalTrades === 0
+                                    ? 'No closed trades yet. Stats are net of brokerage, taxes and slippage.'
+                                    : `Net P&L ₹${Math.round(stats.totalProfit).toLocaleString()} after ₹${Math.round(stats.totalCharges).toLocaleString()} charges • Expectancy ₹${Math.round(stats.expectancy)}/trade • Max drawdown ${stats.maxDrawdown}%` +
+                                      (stats.avgLoss > 0 ? ` • Avg win/loss ${(stats.avgWin / stats.avgLoss).toFixed(1)}x` : '')}
                             </Text>
                         </View>
                     </View>

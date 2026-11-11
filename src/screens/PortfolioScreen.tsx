@@ -6,7 +6,7 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RootStackParamList, MainTabParamList } from '../navigation/RootNavigator';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Briefcase, ArrowUpRight, ArrowDownRight, History, Layers, Info, ShieldCheck, X, Target, TrendingUp, ChevronDown, ChevronRight, BarChart3 } from 'lucide-react-native';
-import { API_URL, BREEZE_API_URL, TEST_USER_ID } from '../config';
+import { API_URL, TEST_USER_ID } from '../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMarketData } from '../context/MarketDataContext';
 import { usePositions } from '../context/PositionContext';
@@ -22,6 +22,8 @@ const PortfolioScreen = () => {
     const [orders, setOrders] = useState<any[]>([]);
     const [account, setAccount] = useState<any>(null);
     const [trades, setTrades] = useState<any[]>([]);
+    // {IST date: realized P&L NET of charges}, from the paper service.
+    const [dailyPnl, setDailyPnl] = useState<Record<string, number>>({});
     const [loading, setLoading] = useState(false);
 
     const [modifyingPos, setModifyingPos] = useState<any>(null);
@@ -60,19 +62,22 @@ const PortfolioScreen = () => {
             const uid = savedId || TEST_USER_ID;
             setUserId(uid);
 
-            const [ordRes, accRes, tRes] = await Promise.all([
+            const [ordRes, accRes, tRes, dRes] = await Promise.all([
                 fetch(`${API_URL}/orders/${uid}`),
                 fetch(`${API_URL}/account/${uid}`),
-                fetch(`${API_URL}/trades/${uid}`)
+                fetch(`${API_URL}/trades/${uid}`),
+                fetch(`${API_URL}/stats/daily/${uid}`)
             ]);
 
             const ordData = await ordRes.json();
             const accData = await accRes.json();
             const tData = await tRes.json();
+            const dData = dRes.ok ? await dRes.json() : {};
 
             setOrders(Array.isArray(ordData) ? ordData : []);
             setAccount(accData);
             setTrades(Array.isArray(tData) ? tData : []);
+            setDailyPnl(dData && typeof dData === 'object' && !Array.isArray(dData) ? dData : {});
 
             // Sync positions too
             await refreshPositions();
@@ -178,32 +183,17 @@ const PortfolioScreen = () => {
     };
 
     const totalUnrealizedPnL = livePositions.reduce((acc, pos) => acc + (pos.unrealized_pnl || 0), 0);
-    const totalInvested = livePositions.reduce((acc, pos) => acc + (pos.quantity * pos.average_price), 0);
+    // Shorts carry a negative quantity: exposure is the absolute value.
+    const totalInvested = livePositions.reduce((acc, pos) => acc + (Math.abs(pos.quantity) * pos.average_price), 0);
 
     // Day's Unrealized Performance (Movement of open positions since last close)
     const dayUnrealizedPnL = livePositions.reduce((acc, pos) => acc + ((pos.day_change_abs || 0) * pos.quantity), 0);
 
-    // Robust "Is Today" check for local timezone
-    const isToday = (dateString: string) => {
-        if (!dateString) return false;
-        try {
-            const date = new Date(dateString);
-            const now = new Date();
-            return date.getDate() === now.getDate() &&
-                date.getMonth() === now.getMonth() &&
-                date.getFullYear() === now.getFullYear();
-        } catch (e) {
-            return false;
-        }
-    };
-
-    // Today's Realized Gains (Closed positions today)
-    const todayRealizedPnL = orders.reduce((acc, ord) => {
-        if (isToday(ord.created_at) && ord.realized_pnl) {
-            return acc + ord.realized_pnl;
-        }
-        return acc;
-    }, 0);
+    // Today's realized P&L, NET of charges, for the IST trading day. Order
+    // realized_pnl is gross (charges are separate), so it is not summed here.
+    const istToday = new Date(Date.now() + (new Date().getTimezoneOffset() + 330) * 60000);
+    const istKey = `${istToday.getFullYear()}-${String(istToday.getMonth() + 1).padStart(2, '0')}-${String(istToday.getDate()).padStart(2, '0')}`;
+    const todayRealizedPnL = dailyPnl[istKey] || 0;
 
     // 1. "Today" Performance = Today's Realized + Today's Unrealized variation
     const totalPnLToday = dayUnrealizedPnL + todayRealizedPnL;
@@ -311,7 +301,17 @@ const PortfolioScreen = () => {
                                 <Text className={`font-bold text-base ${(item.unrealized_pnl || 0) >= -0.005 ? 'text-success' : 'text-error'}`}>{item.symbol[0]}</Text>
                             </View>
                             <View>
-                                <Text className="text-text-primary font-bold text-sm">{item.symbol}</Text>
+                                <View className="flex-row items-center">
+                                    <Text className="text-text-primary font-bold text-sm">{item.symbol}</Text>
+                                    <Text className="text-text-muted text-[8px] font-black ml-2 px-1.5 py-0.5 rounded bg-background border border-border">
+                                        {item.product === 'DELIVERY' ? 'CNC' : 'MIS'}{item.quantity < 0 ? ' • SHORT' : ''}
+                                    </Text>
+                                    {item.source === 'scanner' && (
+                                        <Text className="text-primary text-[8px] font-black ml-1 px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">
+                                            SCANNER{item.strategy ? ` • ${item.strategy}` : ''}
+                                        </Text>
+                                    )}
+                                </View>
                                 <Text className="text-text-muted text-[9px] font-bold">Avg. ₹{(item.average_price || 0).toFixed(2)} • LTP: ₹{(item.current_ltp || 0).toFixed(2)}</Text>
                             </View>
                         </View>
@@ -853,11 +853,23 @@ const PortfolioScreen = () => {
                                     <Text className="text-primary font-black">{selectedOrder?.status}</Text>
                                 </View>
 
-                                {selectedOrder?.side === 'SELL' && (
+                                {(selectedOrder?.charges || 0) > 0 && (
+                                    <View className="flex-row justify-between">
+                                        <Text className="text-text-secondary font-bold">Charges</Text>
+                                        <Text className="text-text-primary font-bold">₹{Number(selectedOrder?.charges).toFixed(2)}</Text>
+                                    </View>
+                                )}
+                                {selectedOrder?.source && selectedOrder?.source !== 'manual' && (
+                                    <View className="flex-row justify-between">
+                                        <Text className="text-text-secondary font-bold">Source</Text>
+                                        <Text className="text-text-primary font-bold uppercase">{selectedOrder?.source}{selectedOrder?.strategy ? ` • ${selectedOrder?.strategy}` : ''}</Text>
+                                    </View>
+                                )}
+                                {selectedOrder?.realized_pnl !== undefined && selectedOrder?.realized_pnl !== null && (
                                     <>
                                         <View className="h-[1px] bg-border my-2" />
                                         <View className="flex-row justify-between">
-                                            <Text className="text-text-secondary font-bold">Realized P&L</Text>
+                                            <Text className="text-text-secondary font-bold">Realized P&L (gross)</Text>
                                             <Text className={`font-black ${(selectedOrder?.realized_pnl || 0) >= 0 ? 'text-success' : 'text-error'}`}>
                                                 {(selectedOrder?.realized_pnl || 0) >= 0 ? '+' : '-'}₹{Math.abs(selectedOrder?.realized_pnl || 0).toFixed(2)}
                                             </Text>

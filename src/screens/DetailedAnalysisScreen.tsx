@@ -14,14 +14,14 @@ import {
 
 const DetailedAnalysisScreen = () => {
     const route = useRoute();
-    const navigation = useNavigation();
+    const navigation = useNavigation<any>();
     const { symbol, analysis } = route.params as { symbol: string; analysis: any };
 
     if (!analysis) {
         return (
             <View className="flex-1 bg-background items-center justify-center p-6">
                 <Text className="text-text-primary text-xl font-bold">No analysis data available</Text>
-                <TouchableOpacity onPress={() => navigation.navigate('Intraday' as any)} className="mt-4 bg-primary px-6 py-2 rounded-full">
+                <TouchableOpacity onPress={() => navigation.navigate('Intraday')} className="mt-4 bg-primary px-6 py-2 rounded-full">
                     <Text className="text-white font-bold">Go Back</Text>
                 </TouchableOpacity>
             </View>
@@ -57,7 +57,7 @@ const DetailedAnalysisScreen = () => {
 
             {/* Header */}
             <View className="px-6 pt-14 pb-6 flex-row items-center">
-                <TouchableOpacity onPress={() => navigation.navigate('Intraday' as any)} className="p-2 bg-white/5 rounded-full mr-4">
+                <TouchableOpacity onPress={() => navigation.navigate('Intraday')} className="p-2 bg-white/5 rounded-full mr-4">
                     <ChevronLeft size={24} color="#E1E7ED" />
                 </TouchableOpacity>
                 <View>

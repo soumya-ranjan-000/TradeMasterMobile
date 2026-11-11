@@ -55,12 +55,29 @@ If you are using a physical phone, you need to point the app to your computer's 
 1. Find your local IP address (e.g., `192.168.1.5`):
    - **Windows**: Run `ipconfig` in Command Prompt.
    - **Mac/Linux**: Run `ifconfig` or `ip addr`.
-2. Open the `.env` file in the `TradeMasterMobile` directory.
-3. Update `EXPO_PUBLIC_PAPER_BACKEND_URL` with your IP:
+2. Copy `.env.example` to `.env` in the `TradeMasterMobile` directory (`.env` is gitignored).
+3. Point the services at your IP:
 
    ```bash
-   EXPO_PUBLIC_PAPER_BACKEND_URL=http://your-ip:8001/api/v1
+   EXPO_PUBLIC_APP_ENV=local
+   EXPO_PUBLIC_LOCAL_ORCHESTRATOR_URL=http://your-ip:8000      # TradeMasterBackend
+   EXPO_PUBLIC_PAPER_BACKEND_URL=http://your-ip:8001/api/v1    # paper trading
    ```
+4. Set `EXPO_PUBLIC_BACKEND_API_KEY` to the `SERVICE_API_KEY` of that backend.
+   Every market-data call (search, charts, quotes, status, live ticks) goes
+   through TradeMasterBackend with this key. Without it the backend answers
+   401 and the live-price socket closes with code 1008.
+
+The app never calls the Breeze service directly: its key controls the real
+ICICI account, and anything compiled into the app can be extracted from it.
+
+### Logging in
+
+- **My Account**: enter your Trader ID (then PIN `0000`). It names your paper
+  account; use the same ID everywhere. To have scanner trades land in it, set
+  `portfolio.paper_user_id` to this ID in
+  `TradeMasterBackend/config/scanner/scanner.yaml`.
+- **Test User**: a shared demo paper account.
 
 ## ✨ Features
 

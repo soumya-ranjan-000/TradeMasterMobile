@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Image, Linking } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ShieldCheck, User, Zap, ArrowRight, Lock, Key } from 'lucide-react-native';
+import { User, Zap, ArrowRight, Lock, Key } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BREEZE_API_URL, API_URL, TEST_USER_ID } from '../config';
+import { API_URL, TEST_USER_ID } from '../config';
 import { RootStackParamList } from '../navigation/RootNavigator';
 
 const Logo = require('../../assets/icon.png');
@@ -14,93 +14,44 @@ type LoginScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, '
 
 const LoginScreen = () => {
     const navigation = useNavigation<LoginScreenNavigationProp>();
-    const [view, setView] = useState<'CHOICE' | 'TOKEN' | 'PIN'>('CHOICE');
+    const [view, setView] = useState<'CHOICE' | 'ID' | 'PIN'>('CHOICE');
     const [loading, setLoading] = useState(false);
-    const [token, setToken] = useState('');
+    const [traderId, setTraderId] = useState('');
     const [pin, setPin] = useState('');
     const [realUser, setRealUser] = useState<any>(null);
-    const [apiKey, setApiKey] = useState('');
 
-    const fetchApiKey = async () => {
-        try {
-            const res = await fetch(`${BREEZE_API_URL}/api/api-key`);
-            const data = await res.json();
-            if (data.api_key) {
-                setApiKey(data.api_key);
-            }
-        } catch (error) {
-            console.error("Failed to fetch API key:", error);
-        }
+    // The app no longer reads the broker session (that needs the Breeze key,
+    // which must not ship inside the app). Your Trader ID names your paper
+    // account: use the same one as before (your ICICI user id, if the app used
+    // to log you in through Breeze) to keep your history, and set it as
+    // portfolio.paper_user_id in the backend scanner config so scanner trades
+    // land in this account.
+    const startAccountLogin = async () => {
+        const last = await AsyncStorage.getItem('LAST_TRADER_ID');
+        if (last) setTraderId(last);
+        setView('ID');
     };
 
-    useEffect(() => {
-        if (view === 'TOKEN') {
-            fetchApiKey();
+    const continueWithId = async () => {
+        const id = traderId.trim();
+        if (!id) return Alert.alert("Error", "Please enter your Trader ID");
+        if (!/^[A-Za-z0-9_.@-]{3,64}$/.test(id)) {
+            return Alert.alert("Error", "Use 3-64 letters, digits or . _ @ -");
         }
-    }, [view]);
-
-    const checkExistingSession = async () => {
         try {
             setLoading(true);
-            const response = await fetch(`${BREEZE_API_URL}/api/customer-details`);
-            const data = await response.json();
-
-            if (data.Success) {
-                // Handle both array (typical Breeze SDK) and object (direct API return)
-                const user = Array.isArray(data.Success) ? data.Success[0] : data.Success;
-                if (user) {
-                    setRealUser({
-                        id: user.idirect_userid || user.id,
-                        name: user.idirect_user_name || user.name,
-                        email: user.email
-                    });
-                    setView('PIN');
-                } else {
-                    setView('TOKEN');
+            let name = id;
+            try {
+                const res = await fetch(`${API_URL}/profile/${encodeURIComponent(id)}`);
+                if (res.ok) {
+                    const p = await res.json();
+                    if (p.full_name && p.full_name !== 'Trader') name = p.full_name;
                 }
-            } else {
-                setView('TOKEN');
+            } catch {
+                // Profile lookup is cosmetic; the PIN step works without it.
             }
-        } catch (error) {
-            console.log("Session check failed, need token");
-            setView('TOKEN');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleLoginWithToken = async () => {
-        if (!token) return Alert.alert("Error", "Please provide a session token");
-
-        try {
-            setLoading(true);
-            const response = await fetch(`${BREEZE_API_URL}/api/login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ session_token: token })
-            });
-
-            if (response.ok) {
-                // Now get details
-                const detailRes = await fetch(`${BREEZE_API_URL}/api/customer-details`);
-                const detailData = await detailRes.json();
-
-                if (detailData.Success) {
-                    const user = Array.isArray(detailData.Success) ? detailData.Success[0] : detailData.Success;
-                    setRealUser({
-                        id: user.idirect_userid || user.id,
-                        name: user.idirect_user_name || user.name,
-                        email: user.email
-                    });
-                    setView('PIN');
-                } else {
-                    Alert.alert("Error", "Login successful but failed to retrieve details. Try again.");
-                }
-            } else {
-                Alert.alert("Login Failed", "Invalid token or session expired.");
-            }
-        } catch (error) {
-            Alert.alert("Error", "Connection to Breeze API failed.");
+            setRealUser({ id, name });
+            setView('PIN');
         } finally {
             setLoading(false);
         }
@@ -111,6 +62,7 @@ const LoginScreen = () => {
         if (pinToVerify === '0000') {
             const userId = realUser?.id || "real_user";
             await AsyncStorage.setItem('USER_ID', userId);
+            await AsyncStorage.setItem('LAST_TRADER_ID', userId);
             await AsyncStorage.setItem('IS_REAL', 'true');
             navigation.replace('MainTabs');
         } else {
@@ -138,15 +90,15 @@ const LoginScreen = () => {
             </View>
 
             <TouchableOpacity
-                onPress={checkExistingSession}
+                onPress={startAccountLogin}
                 className="bg-surface border border-border/50 p-6 rounded-[32px] mb-4 flex-row items-center active:scale-95 transition-transform"
             >
                 <View className="w-14 h-14 bg-primary/10 rounded-2xl items-center justify-center mr-4">
                     <Zap size={28} color="#00E0A1" />
                 </View>
                 <View className="flex-1">
-                    <Text className="text-text-primary font-black text-xl">Real Trading</Text>
-                    <Text className="text-text-muted text-xs font-bold uppercase mt-1">Live Market • Breeze API</Text>
+                    <Text className="text-text-primary font-black text-xl">My Account</Text>
+                    <Text className="text-text-muted text-xs font-bold uppercase mt-1">Live Market • Your Paper Portfolio</Text>
                 </View>
                 <ArrowRight size={20} color="#6B7280" />
             </TouchableOpacity>
@@ -167,52 +119,37 @@ const LoginScreen = () => {
         </View>
     );
 
-    const renderTokenInput = () => (
+    const renderIdInput = () => (
         <View className="flex-1 justify-center px-6">
             <TouchableOpacity onPress={() => setView('CHOICE')} className="mb-8">
                 <Text className="text-primary font-bold">← Back to Selection</Text>
             </TouchableOpacity>
 
             <View className="mb-8">
-                <Text className="text-text-primary text-3xl font-black">Session Expired</Text>
-                <Text className="text-text-muted mt-2 font-medium">To connect your Breeze account, you need a fresh session token. Click below to login and retrieve it.</Text>
-            </View>
-
-            <TouchableOpacity
-                onPress={() => {
-                    if (apiKey) {
-                        Linking.openURL(`https://api.icicidirect.com/apiuser/login?api_key=${apiKey}`);
-                    } else {
-                        Alert.alert("Error", "API Key not loaded yet. Please try again in a moment.");
-                    }
-                }}
-                className="bg-primary shadow-lg shadow-primary/20 py-4 rounded-2xl items-center mb-8 active:scale-95 transition-transform"
-            >
-                <Text className="text-white font-black uppercase tracking-widest">1. Get Session Token</Text>
-            </TouchableOpacity>
-
-            <View className="mb-4">
-                <Text className="text-text-muted text-xs font-bold uppercase tracking-widest text-center">Then come back and paste it below</Text>
+                <Text className="text-text-primary text-3xl font-black">Your Trader ID</Text>
+                <Text className="text-text-muted mt-2 font-medium">Your paper portfolio, orders and scanner trades are stored under this ID. Use the same ID on every device.</Text>
             </View>
 
             <View className="bg-surface border border-border rounded-2xl p-4 flex-row items-center mb-6 shadow-sm">
                 <Key size={20} color="#00E0A1" />
                 <TextInput
                     className="flex-1 ml-3 text-text-primary font-bold"
-                    placeholder="2. Paste Session Token"
+                    placeholder="Trader ID"
                     placeholderTextColor="#6B7280"
-                    value={token}
-                    onChangeText={setToken}
+                    value={traderId}
+                    onChangeText={setTraderId}
                     autoCapitalize="none"
+                    autoCorrect={false}
+                    onSubmitEditing={continueWithId}
                 />
             </View>
 
             <TouchableOpacity
-                onPress={handleLoginWithToken}
+                onPress={continueWithId}
                 disabled={loading}
                 className={`py-5 rounded-2xl items-center ${loading ? 'bg-primary/50' : 'bg-primary shadow-xl shadow-primary/30'}`}
             >
-                {loading ? <ActivityIndicator color="white" /> : <Text className="text-white font-black text-lg uppercase">Link Account</Text>}
+                {loading ? <ActivityIndicator color="white" /> : <Text className="text-white font-black text-lg uppercase">Continue</Text>}
             </TouchableOpacity>
         </View>
     );
@@ -224,7 +161,7 @@ const LoginScreen = () => {
                     <Lock size={30} color="#E1E7ED" />
                 </View>
                 <Text className="text-text-primary text-3xl font-black">Security Pin</Text>
-                <Text className="text-text-muted mt-2 text-center">Hello {realUser?.id || 'Trader'}, enter your app PIN to continue.</Text>
+                <Text className="text-text-muted mt-2 text-center">Hello {realUser?.name || realUser?.id || 'Trader'}, enter your app PIN to continue.</Text>
             </View>
 
             <TextInput
@@ -266,7 +203,7 @@ const LoginScreen = () => {
                     showsVerticalScrollIndicator={false}
                 >
                     {view === 'CHOICE' && renderChoice()}
-                    {view === 'TOKEN' && renderTokenInput()}
+                    {view === 'ID' && renderIdInput()}
                     {view === 'PIN' && renderPinPad()}
                 </ScrollView>
 

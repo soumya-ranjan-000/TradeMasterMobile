@@ -39,3 +39,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# local env: holds EXPO_PUBLIC_BACKEND_API_KEY
+.env
+.env.local

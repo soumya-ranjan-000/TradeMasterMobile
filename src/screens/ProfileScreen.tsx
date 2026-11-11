@@ -12,7 +12,7 @@ import {
     Wallet,
     ChevronLeft
 } from 'lucide-react-native';
-import { API_URL, BREEZE_API_URL, TEST_USER_ID } from '../config';
+import { API_URL, TEST_USER_ID } from '../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';

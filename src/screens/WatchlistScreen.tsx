@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, FlatList, TouchableOpacity, ActivityIndicator, ScrollView, RefreshControl } from 'react-native';
 import { Search, Globe, Coins, Briefcase, ChevronRight, TrendingUp, Clock, X } from 'lucide-react-native';
-import { BREEZE_API_URL } from '../config';
+import { searchSymbols } from '../api';
 import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -71,8 +71,7 @@ const WatchlistScreen = () => {
         try {
             setLoading(true);
             // Updated to use Breeze Service search endpoint
-            const response = await fetch(`${BREEZE_API_URL}/api/search?q=${text}`);
-            const data = await response.json();
+            const data = await searchSymbols(text);
             setResults(Array.isArray(data) ? data : []);
         } catch (error) {
             console.error("Search failed:", error);

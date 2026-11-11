@@ -10,7 +10,7 @@ import Animated, {
     interpolate,
     Extrapolate
 } from 'react-native-reanimated';
-import { API_URL, BREEZE_API_URL, TEST_USER_ID } from '../config';
+import { API_URL, TEST_USER_ID } from '../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLivePrice } from '../context/MarketDataContext';
 import { RootStackParamList, MainTabParamList } from '../navigation/RootNavigator';
@@ -40,6 +40,12 @@ const TradeScreen = () => {
     const [showRiskPanel, setShowRiskPanel] = useState(false);
     const [orderType, setOrderType] = useState<'MARKET' | 'LIMIT'>('MARKET');
     const [limitPrice, setLimitPrice] = useState('');
+    // INTRADAY: squared off automatically at 15:15 IST, shorts allowed.
+    // DELIVERY: held overnight, long only (a SELL can only reduce holdings).
+    const [product, setProduct] = useState<'INTRADAY' | 'DELIVERY'>('INTRADAY');
+    // Idempotency key: a retry after a timeout returns the original order
+    // instead of placing a second one. Renewed after every completed attempt.
+    const clientOrderId = React.useRef<string>('');
 
     // Context Awareness: Sync state with navigation params
     React.useEffect(() => {
@@ -52,6 +58,7 @@ const TradeScreen = () => {
         setShowRiskPanel(false);
         setOrderType('MARKET');
         setLimitPrice('');
+        setProduct('INTRADAY');
     }, [params?.symbol, params?.side]);
 
     const symbol = params?.symbol || 'UNKNOWN';
@@ -69,8 +76,9 @@ const TradeScreen = () => {
     }, [symbol]);
 
     const placeOrder = async () => {
-        if (orderType === 'MARKET' && !livePrice) {
-            Alert.alert("Error", "Market price not available yet");
+        const qty = parseInt(quantity);
+        if (!qty || qty <= 0) {
+            Alert.alert("Error", "Please enter a valid quantity");
             return;
         }
         if (orderType === 'LIMIT' && (!limitPrice || parseFloat(limitPrice) <= 0)) {
@@ -79,16 +87,22 @@ const TradeScreen = () => {
         }
         try {
             setLoading(true);
+            if (!clientOrderId.current) {
+                clientOrderId.current = `m-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+            }
             const orderPayload = {
                 user_id: userId,
                 symbol: symbol,
                 side: side,
-                quantity: parseInt(quantity),
+                quantity: qty,
                 order_type: orderType,
+                // MARKET fills at the server's live quote; our price is only its fallback.
                 price: orderType === 'LIMIT' ? parseFloat(limitPrice) : livePrice,
                 stop_loss: stopLoss ? parseFloat(stopLoss) : null,
                 target: target ? parseFloat(target) : null,
-                trailing_sl: trailingStopLoss ? parseFloat(trailingStopLoss) : null
+                trailing_sl: trailingStopLoss ? parseFloat(trailingStopLoss) : null,
+                product: product,
+                client_order_id: clientOrderId.current
             };
 
             const response = await fetch(`${API_URL}/orders`, {
@@ -98,15 +112,21 @@ const TradeScreen = () => {
             });
 
             if (response.ok) {
-                const message = orderType === 'MARKET'
-                    ? `Successfully ${side.toLowerCase()}ed ${quantity} ${symbol}`
-                    : `${side} Limit Order for ${quantity} ${symbol} placed at ₹${limitPrice}`;
+                clientOrderId.current = '';
+                const order = await response.json();
+                const charges = order.charges ? ` • Charges ₹${Number(order.charges).toFixed(2)}` : '';
+                const message = order.status === 'FILLED'
+                    ? `${side === 'BUY' ? 'Bought' : 'Sold'} ${order.filled_quantity || quantity} ${symbol} @ ₹${Number(order.average_fill_price).toFixed(2)} (${product})${charges}`
+                    : `${side} Limit Order for ${quantity} ${symbol} placed at ₹${limitPrice} (${product})`;
                 Alert.alert("Order Placed", message);
                 // Navigate to Portfolio (sibling tab)
                 navigation.navigate('Portfolio' as any);
             } else {
-                const err = await response.json();
-                Alert.alert("Execution Failed", err.detail || "Error processing order");
+                // A business rejection is final: the next attempt is a new order.
+                clientOrderId.current = '';
+                const err = await response.json().catch(() => ({}));
+                const detail = Array.isArray(err.detail) ? err.detail.map((d: any) => d.msg).join(', ') : err.detail;
+                Alert.alert("Execution Failed", detail || "Error processing order");
             }
         } catch (error) {
             Alert.alert("Error", "Network error");
@@ -200,6 +220,26 @@ const TradeScreen = () => {
                             ))}
                         </View>
                     </View>
+                </View>
+
+                {/* Product Selector */}
+                <View className="px-6 mt-6">
+                    <View className="bg-surface p-1 rounded-2xl flex-row border border-border">
+                        {(['INTRADAY', 'DELIVERY'] as const).map(p => (
+                            <TouchableOpacity
+                                key={p}
+                                onPress={() => setProduct(p)}
+                                className={`flex-1 py-3.5 rounded-xl items-center ${product === p ? 'bg-primary-blue shadow-lg shadow-primary-blue/20' : ''}`}
+                            >
+                                <Text className={`text-xs font-black tracking-widest ${product === p ? 'text-white' : 'text-text-muted'}`}>{p}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                    <Text className="text-text-muted text-[10px] mt-2 text-center">
+                        {product === 'INTRADAY'
+                            ? 'Auto square-off at 15:15 IST • Short selling allowed'
+                            : 'Held overnight • Sell only what you hold'}
+                    </Text>
                 </View>
 
                 {/* Order Type Selector */}
@@ -368,6 +408,10 @@ const TradeScreen = () => {
                         <View className="flex-row justify-between">
                             <Text className="text-text-secondary font-medium">Order Type</Text>
                             <Text className="text-text-primary font-bold">{orderType === 'MARKET' ? 'Market Order' : 'Limit Order'}</Text>
+                        </View>
+                        <View className="flex-row justify-between">
+                            <Text className="text-text-secondary font-medium">Product</Text>
+                            <Text className="text-text-primary font-bold">{product === 'INTRADAY' ? 'Intraday' : 'Delivery'}</Text>
                         </View>
                         {orderType === 'LIMIT' && (
                             <View className="flex-row justify-between">
