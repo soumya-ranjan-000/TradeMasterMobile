@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, FlatList, TouchableOpacity, ActivityIndicator, ScrollView, RefreshControl, StatusBar, Pressable, Platform } from 'react-native';
-import { Plus, Search, Bell, Trash2, X, ChevronRight, Pause, Play, Radar } from 'lucide-react-native';
+import { Plus, Bell, Trash2, X, ChevronRight, Pause, Play } from 'lucide-react-native';
 import { API_URL, TEST_USER_ID } from '../config';
 import { getMarketStatus } from '../api';
 import { useNavigation, CompositeNavigationProp, useIsFocused } from '@react-navigation/native';
@@ -259,7 +259,7 @@ const DashboardScreen = () => {
                     </View>
                     <View className="flex-1">
                         <Text className="text-text-muted text-[10px] font-bold uppercase tracking-widest">{getGreeting()}</Text>
-                        <Text className="text-text-primary font-black text-xl leading-tight">
+                        <Text className="text-text-primary font-black text-xl leading-tight" numberOfLines={2}>
                             {profile?.full_name || 'Trader'}
                         </Text>
                     </View>
@@ -274,26 +274,13 @@ const DashboardScreen = () => {
                             </Text>
                         </View>
                     )}
-                    <View className="flex-row items-center gap-3">
-                        <TouchableOpacity
-                            className="bg-surface w-12 h-12 items-center justify-center rounded-2xl border border-border shadow-sm active:scale-95"
-                            onPress={() => navigation.navigate('Scanner')}
-                        >
-                            <Radar size={22} color="#00E0A1" />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            className="bg-surface w-12 h-12 items-center justify-center rounded-2xl border border-border shadow-sm active:scale-95"
-                            onPress={() => navigation.navigate('Alerts')}
-                        >
-                            <Bell size={22} color="#00E0A1" />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            className="bg-surface w-12 h-12 items-center justify-center rounded-2xl border border-border shadow-sm active:scale-95"
-                            onPress={() => navigation.navigate('Watchlist')}
-                        >
-                            <Search size={22} color="#E1E7ED" />
-                        </TouchableOpacity>
-                    </View>
+                    {/* Scanner and Search are tabs in the bottom bar; Alerts has no tab. */}
+                    <TouchableOpacity
+                        className="bg-surface w-12 h-12 items-center justify-center rounded-2xl border border-border shadow-sm active:scale-95"
+                        onPress={() => navigation.navigate('Alerts')}
+                    >
+                        <Bell size={22} color="#00E0A1" />
+                    </TouchableOpacity>
                 </View>
             </View>
             {/* Category Selector (Trending, News, Top Market) */}
