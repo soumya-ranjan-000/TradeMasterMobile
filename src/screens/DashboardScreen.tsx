@@ -12,7 +12,8 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RootStackParamList, MainTabParamList } from '../navigation/RootNavigator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMarketData } from '../context/MarketDataContext';
-import { IconButton, Segmented, Skeleton, SkeletonRow, EmptyState, confirmAction } from '../ui';
+import { IconButton, Segmented, Skeleton, SkeletonRow, EmptyState, FadeIn, confirmAction } from '../ui';
+import { haptic } from '../haptics';
 import { colors, signColor } from '../theme';
 import { inr, pct, ago, bareSymbol } from '../format';
 
@@ -50,6 +51,9 @@ const DashboardScreen = () => {
     const [watchlists, setWatchlists] = useState<any[]>([]);
     const [watchLoading, setWatchLoading] = useState(false);
     const [cached, setCached] = useState<{ at: number; quotes: Record<string, Quote> } | null>(null);
+    const [pricesAt, setPricesAt] = useState<number | null>(null);
+    const [, setTick] = useState(0);
+    useEffect(() => { const id = setInterval(() => setTick(t => t + 1), 30_000); return () => clearInterval(id); }, []);
     const isFocused = useIsFocused();
     const { ticks, subscribe, unsubscribe } = useMarketData();
 
@@ -81,6 +85,7 @@ const DashboardScreen = () => {
     useEffect(() => {
         if (!Object.keys(liveQuotes).length) return;
         const next = { at: Date.now(), quotes: { ...(cached?.quotes || {}), ...liveQuotes } };
+        setPricesAt(next.at);
         AsyncStorage.setItem(QUOTE_CACHE_KEY, JSON.stringify(next)).catch(() => { });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [liveQuotes]);
@@ -200,7 +205,7 @@ const DashboardScreen = () => {
             <Pressable
                 key={sym}
                 onPress={() => navigation.navigate('StockDetail', { symbol: sym })}
-                onLongPress={() => removeFromWatchlist(wl._id || wl.id, wl.name, sym)}
+                onLongPress={() => { haptic.light(); removeFromWatchlist(wl._id || wl.id, wl.name, sym); }}
                 delayLongPress={450}
                 accessibilityRole="button"
                 accessibilityLabel={`${code}${quote ? `, ${inr(quote.price)}, ${pct(quote.change)}` : ''}`}
@@ -237,39 +242,39 @@ const DashboardScreen = () => {
         <View className="flex-1 bg-background">
             <StatusBar barStyle="light-content" backgroundColor={colors.background} />
 
-            {/* Header: who, market state, alerts */}
-            <View className="flex-row items-center px-5 pb-4" style={{ paddingTop: Math.max(insets.top, 12) + 14 }}>
-                <Pressable onPress={() => navigation.navigate('Profile')} accessibilityRole="button" accessibilityLabel="Open profile"
-                    className="flex-row items-center flex-1 mr-3 active:opacity-70">
-                    <View className="w-11 h-11 rounded-full bg-surface border border-border items-center justify-center mr-3">
-                        <Text className="text-text-primary font-black text-[15px]">{initials}</Text>
-                    </View>
-                    <View className="flex-1">
-                        <Text className="text-text-muted text-[13px] font-semibold" numberOfLines={1}>{greeting()}</Text>
-                        <Text className="text-text-primary font-black text-xl" numberOfLines={1}>{firstName}</Text>
-                    </View>
-                </Pressable>
-                <View className="flex-row items-center px-2.5 py-1.5 rounded-full mr-2 border" accessibilityLabel={statusText}
-                    style={{ borderColor: `${statusColor}55`, backgroundColor: `${statusColor}14` }}>
-                    <View className="w-1.5 h-1.5 rounded-full mr-1.5" style={{ backgroundColor: statusColor }} />
-                    <Text className="text-xs font-bold" style={{ color: statusColor }}>{statusText.replace('Market ', '').replace(/^./, c => c.toUpperCase())}</Text>
-                </View>
-                <IconButton label="Alerts" onPress={() => navigation.navigate('Alerts')}>
-                    <Bell size={20} color={colors.primary} />
-                </IconButton>
-            </View>
-
-            <View className="px-5 pb-3">
-                <Segmented options={TABS} value={activeCategory} onChange={setActiveCategory} />
-            </View>
-
             <ScrollView
                 className="flex-1"
                 showsVerticalScrollIndicator={false}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
+                stickyHeaderIndices={[1]}
             >
+                {/* Header: who, market state, alerts */}
+                <View className="flex-row items-center px-5 pb-4" style={{ paddingTop: Math.max(insets.top, 12) + 14 }}>
+                    <Pressable onPress={() => navigation.navigate('Profile')} accessibilityRole="button" accessibilityLabel="Open profile"
+                        className="flex-row items-center flex-1 mr-3 active:opacity-70">
+                        <View className="w-11 h-11 rounded-full bg-surface border border-border items-center justify-center mr-3">
+                            <Text className="text-text-primary font-black text-[15px]">{initials}</Text>
+                        </View>
+                        <View className="flex-1">
+                            <Text className="text-text-muted text-[13px] font-semibold" numberOfLines={1}>{greeting()}</Text>
+                            <Text className="text-text-primary font-black text-xl" numberOfLines={1}>{firstName}</Text>
+                        </View>
+                    </Pressable>
+                    <View className="flex-row items-center px-2.5 py-1.5 rounded-full mr-2 border" accessibilityLabel={statusText}
+                        style={{ borderColor: `${statusColor}55`, backgroundColor: `${statusColor}14` }}>
+                        <View className="w-1.5 h-1.5 rounded-full mr-1.5" style={{ backgroundColor: statusColor }} />
+                        <Text className="text-xs font-bold" style={{ color: statusColor }}>{statusText.replace('Market ', '').replace(/^./, c => c.toUpperCase())}</Text>
+                    </View>
+                    <IconButton label="Alerts" onPress={() => navigation.navigate('Alerts')}>
+                        <Bell size={20} color={colors.primary} />
+                    </IconButton>
+                </View>
+                <View className="px-5 pt-1 pb-3 bg-background">
+                    <Segmented options={TABS} value={activeCategory} onChange={setActiveCategory} />
+                </View>
+
                 {activeCategory === 'Watchlists' && (
-                    <View className="px-5 pt-1 pb-10">
+                    <FadeIn key="w"><View className="px-5 pt-1 pb-10">
                         {watchLoading && watchlists.length === 0 ? (
                             <>
                                 <Skeleton w={120} h={18} style={{ marginBottom: 14, marginTop: 6 }} />
@@ -277,9 +282,11 @@ const DashboardScreen = () => {
                             </>
                         ) : watchlists.length > 0 ? (
                             <>
-                                {!anyLive && cached && (
+                                {anyLive && pricesAt ? (
+                                    <Text className="text-text-muted text-xs font-semibold mb-2">Prices updated {ago(pricesAt)} · pull down to refresh</Text>
+                                ) : cached ? (
                                     <Text className="text-text-muted text-xs font-semibold mb-2">Last prices from {ago(cached.at)} · updating…</Text>
-                                )}
+                                ) : null}
                                 {watchlists.map(wl => (
                                     <View key={wl._id || wl.id} className="mb-6">
                                         <View className="flex-row justify-between items-center mb-3 mt-1">
@@ -311,18 +318,18 @@ const DashboardScreen = () => {
                                 onAction={() => navigation.navigate('Watchlist')}
                             />
                         )}
-                    </View>
+                    </View></FadeIn>
                 )}
 
                 {activeCategory === 'Market' && (
-                    <View className="px-5 pt-1 pb-8">
+                    <FadeIn key="m"><View className="px-5 pt-1 pb-8">
                         <MarketPulse active={isFocused && activeCategory === 'Market'} />
-                    </View>
+                    </View></FadeIn>
                 )}
                 {activeCategory === 'Events' && (
-                    <View className="px-5 pt-1 pb-8">
+                    <FadeIn key="e"><View className="px-5 pt-1 pb-8">
                         <TradingStatusPanel active={isFocused && activeCategory === 'Events'} />
-                    </View>
+                    </View></FadeIn>
                 )}
             </ScrollView>
         </View>

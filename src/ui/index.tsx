@@ -7,6 +7,7 @@ import { View, Text, Pressable, Animated, ViewStyle, StyleProp, Platform, Alert 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, RefreshCw, CloudOff } from 'lucide-react-native';
 import { colors } from '../theme';
+import { haptic } from '../haptics';
 
 // --- Screen header ----------------------------------------------------------------
 /**
@@ -79,7 +80,7 @@ export function Segmented<T extends string>({ options, value, onChange, labels }
             {options.map(o => {
                 const on = o === value;
                 return (
-                    <Pressable key={o} onPress={() => onChange(o)} accessibilityRole="tab" accessibilityState={{ selected: on }}
+                    <Pressable key={o} onPress={() => { if (o !== value) haptic.select(); onChange(o); }} accessibilityRole="tab" accessibilityState={{ selected: on }}
                         className={`flex-1 items-center py-2 rounded-xl ${on ? 'bg-surfaceHighlight' : ''}`}>
                         <Text className={`text-[13px] font-bold ${on ? 'text-text-primary' : 'text-text-muted'}`}>{labels?.[o] ?? o}</Text>
                     </Pressable>
@@ -160,3 +161,17 @@ export const confirmAction = (title: string, message: string, yes: string, onYes
     }
     Alert.alert(title, message, [{ text: 'Cancel', style: 'cancel' }, { text: yes, style: destructive ? 'destructive' : 'default', onPress: onYes }]);
 };
+
+// --- Motion ---------------------------------------------------------------------------
+/** Fades and lifts its children in on mount (180 ms). Give it a `key` to replay on content change. */
+export function FadeIn({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
+    const a = useRef(new Animated.Value(0)).current;
+    useEffect(() => {
+        Animated.timing(a, { toValue: 1, duration: 180, delay, useNativeDriver: true }).start();
+    }, [a, delay]);
+    return (
+        <Animated.View style={{ opacity: a, transform: [{ translateY: a.interpolate({ inputRange: [0, 1], outputRange: [6, 0] }) }] }}>
+            {children}
+        </Animated.View>
+    );
+}

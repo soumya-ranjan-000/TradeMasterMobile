@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Switch, TextInput, Alert, ActivityIndicator, StatusBar, Platform } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Switch, TextInput, ActivityIndicator, StatusBar, Platform, RefreshControl } from 'react-native';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { Bell, BellPlus, BellRing, Trash2, Smartphone } from 'lucide-react-native';
 import { ScreenHeader, IconButton, SectionLabel, EmptyState, confirmAction } from '../ui';
 import { colors } from '../theme';
+import { haptic } from '../haptics';
 import { inr, istDateTime, bareSymbol } from '../format';
 import { API_URL, TEST_USER_ID } from '../config';
 import { searchSymbols } from '../api';
@@ -14,7 +15,8 @@ import { useAlerts } from '../context/AlertContext';
 
 const AlertsScreen = () => {
     const navigation = useNavigation();
-    const { alerts, loading: contextLoading, createAlert, toggleAlert, deleteAlert } = useAlerts();
+    const { alerts, loading: contextLoading, createAlert, toggleAlert, deleteAlert, refreshAlerts } = useAlerts();
+    const [pulling, setPulling] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
     // New Alert State
@@ -54,6 +56,7 @@ const AlertsScreen = () => {
     };
 
     const handleToggle = async (id: string, currentStatus: boolean) => {
+        haptic.light();
         await toggleAlert(id, !currentStatus);
     };
 
@@ -87,6 +90,7 @@ const AlertsScreen = () => {
             const success = await createAlert(newSymbol, triggerVal, condition);
 
             if (success) {
+                haptic.success();
                 setShowAddAlert(false);
                 setNewSymbol('');
                 setNewPrice('');
@@ -115,7 +119,9 @@ const AlertsScreen = () => {
                 </IconButton>}
             />
 
-            <ScrollView className="flex-1 px-5 pt-2" showsVerticalScrollIndicator={false}>
+            <ScrollView className="flex-1 px-5 pt-2" showsVerticalScrollIndicator={false}
+                refreshControl={<RefreshControl refreshing={pulling} tintColor={colors.primary}
+                    onRefresh={() => { setPulling(true); refreshAlerts().finally(() => setPulling(false)); }} />}>
                 {showAddAlert && (
                     <View className="bg-surface rounded-[32px] border border-primary/30 p-6 mb-8 shadow-2xl">
                         <Text className="text-lg font-black text-text-primary mb-6">Create Price Alert</Text>

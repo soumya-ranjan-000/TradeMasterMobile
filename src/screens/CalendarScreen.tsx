@@ -53,13 +53,13 @@ const CalendarScreen = () => {
                     <Text className="text-2xl font-black text-text-primary">{monthYear}</Text>
                 </View>
                 <View className="flex-row gap-2">
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Previous month"
                         onPress={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}
                         className="w-10 h-10 bg-surface rounded-xl items-center justify-center border border-border"
                     >
                         <ChevronLeft size={20} color="#E1E7ED" />
                     </TouchableOpacity>
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Next month"
                         onPress={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}
                         className="w-10 h-10 bg-surface rounded-xl items-center justify-center border border-border"
                     >

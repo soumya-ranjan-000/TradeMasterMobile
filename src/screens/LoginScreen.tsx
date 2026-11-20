@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { haptic } from '../haptics';
 import { View, Text, TouchableOpacity, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { User, Zap, ArrowRight, Lock, Key } from 'lucide-react-native';
@@ -12,6 +13,9 @@ const Logo = require('../../assets/icon.png');
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
+const firstNameOf = (n: string) => { const f = (n || '').trim().split(/\s+/)[0] || ''; return f.charAt(0).toUpperCase() + f.slice(1).toLowerCase(); };
+const initialsOf = (n: string) => (n || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+
 const LoginScreen = () => {
     const navigation = useNavigation<LoginScreenNavigationProp>();
     const [view, setView] = useState<'CHOICE' | 'ID' | 'PIN'>('CHOICE');
@@ -21,6 +25,30 @@ const LoginScreen = () => {
     const [pinError, setPinError] = useState<string | null>(null);
     const [idError, setIdError] = useState<string | null>(null);
     const [realUser, setRealUser] = useState<any>(null);
+    const [lastAccount, setLastAccount] = useState<{ id: string; name: string } | null>(null);
+
+    // Offer "Continue as …" for the account used last on this device.
+    useEffect(() => {
+        (async () => {
+            const id = await AsyncStorage.getItem('LAST_TRADER_ID');
+            if (!id || id === 'real_user') return;
+            let name = (await AsyncStorage.getItem('LAST_TRADER_NAME')) || id;
+            setLastAccount({ id, name });
+            try {
+                const res = await fetch(`${API_URL}/profile/${encodeURIComponent(id)}`);
+                if (res.ok) {
+                    const p = await res.json();
+                    if (p.full_name && p.full_name !== 'Trader') {
+                        name = p.full_name;
+                        setLastAccount({ id, name });
+                        AsyncStorage.setItem('LAST_TRADER_NAME', name).catch(() => { });
+                    }
+                }
+            } catch {
+                // Name is cosmetic.
+            }
+        })();
+    }, []);
 
     // The app no longer reads the broker session (that needs the Breeze key,
     // which must not ship inside the app). Your Trader ID names your paper
@@ -54,6 +82,7 @@ const LoginScreen = () => {
                 // Profile lookup is cosmetic; the PIN step works without it.
             }
             setRealUser({ id, name });
+            AsyncStorage.setItem('LAST_TRADER_NAME', name).catch(() => { });
             setView('PIN');
         } finally {
             setLoading(false);
@@ -63,12 +92,14 @@ const LoginScreen = () => {
     const verifyPin = async (enteredPin?: string) => {
         const pinToVerify = enteredPin || pin;
         if (pinToVerify === '0000') {
+            haptic.success();
             const userId = realUser?.id || "real_user";
             await AsyncStorage.setItem('USER_ID', userId);
             await AsyncStorage.setItem('LAST_TRADER_ID', userId);
             await AsyncStorage.setItem('IS_REAL', 'true');
             navigation.replace('MainTabs');
         } else {
+            haptic.error();
             setPinError('Incorrect PIN. Try again.');
             setPin('');
         }
@@ -80,44 +111,56 @@ const LoginScreen = () => {
         navigation.replace('MainTabs');
     };
 
+    const continueAsLast = () => {
+        if (!lastAccount) return;
+        setRealUser(lastAccount);
+        setPin(''); setPinError(null);
+        setView('PIN');
+    };
+
     const renderChoice = () => (
         <View className="flex-1 justify-center px-6">
             <View className="mb-12 items-center">
                 <Image
                     source={Logo}
-                    style={{ width: 100, height: 100, borderRadius: 50 }}
-                    className="mb-6 shadow-2xl"
+                    style={{ width: 96, height: 96, borderRadius: 48 }}
+                    className="mb-5"
                 />
                 <Text className="text-text-primary text-4xl font-black text-center tracking-tighter">TradeMaster</Text>
-                <Text className="text-text-muted text-center mt-2 font-medium">Master the Markets</Text>
+                <Text className="text-text-muted text-center mt-2 font-medium">Paper trading for NSE, with live market context</Text>
             </View>
+
+            {lastAccount ? (
+                <TouchableOpacity onPress={continueAsLast} accessibilityRole="button"
+                    className="bg-primary p-5 rounded-3xl mb-3 flex-row items-center active:opacity-80">
+                    <View className="w-12 h-12 bg-background/20 rounded-2xl items-center justify-center mr-4">
+                        <Text className="text-background font-black text-lg">{initialsOf(lastAccount.name)}</Text>
+                    </View>
+                    <View className="flex-1">
+                        <Text className="text-background font-black text-lg">Continue as {firstNameOf(lastAccount.name)}</Text>
+                        <Text className="text-background/70 text-[13px] font-semibold mt-0.5">Trader ID {lastAccount.id}</Text>
+                    </View>
+                    <ArrowRight size={20} color="#0E1116" />
+                </TouchableOpacity>
+            ) : null}
 
             <TouchableOpacity
                 onPress={startAccountLogin}
-                className="bg-surface border border-border/50 p-6 rounded-[32px] mb-4 flex-row items-center active:scale-95 transition-transform"
+                accessibilityRole="button"
+                className="bg-surface border border-border p-5 rounded-3xl mb-3 flex-row items-center active:opacity-80"
             >
-                <View className="w-14 h-14 bg-primary/10 rounded-2xl items-center justify-center mr-4">
-                    <Zap size={28} color="#00E0A1" />
+                <View className="w-12 h-12 bg-primary/10 rounded-2xl items-center justify-center mr-4">
+                    <Key size={22} color="#00E0A1" />
                 </View>
                 <View className="flex-1">
-                    <Text className="text-text-primary font-black text-xl">My Account</Text>
-                    <Text className="text-text-muted text-xs font-bold uppercase mt-1">Live Market • Your Paper Portfolio</Text>
+                    <Text className="text-text-primary font-black text-lg">{lastAccount ? 'Another Trader ID' : 'Sign in with Trader ID'}</Text>
+                    <Text className="text-text-muted text-[13px] font-semibold mt-0.5">Your paper portfolio and scanner trades</Text>
                 </View>
-                <ArrowRight size={20} color="#6B7280" />
+                <ArrowRight size={20} color="#8B93A1" />
             </TouchableOpacity>
 
-            <TouchableOpacity
-                onPress={handleTestLogin}
-                className="bg-surface/50 border border-border/30 p-6 rounded-[32px] flex-row items-center active:scale-95 transition-transform"
-            >
-                <View className="w-14 h-14 bg-primary-blue/10 rounded-2xl items-center justify-center mr-4">
-                    <User size={28} color="#3B82F6" />
-                </View>
-                <View className="flex-1">
-                    <Text className="text-text-primary font-black text-xl opacity-80">Test User</Text>
-                    <Text className="text-text-muted text-xs font-bold uppercase mt-1">Paper Trading • Demo Account</Text>
-                </View>
-                <ArrowRight size={20} color="#6B7280" />
+            <TouchableOpacity onPress={handleTestLogin} accessibilityRole="button" className="self-center py-3 px-4 mt-2">
+                <Text className="text-text-muted font-bold text-[13px]">Explore with the demo account</Text>
             </TouchableOpacity>
         </View>
     );
@@ -159,40 +202,72 @@ const LoginScreen = () => {
         </View>
     );
 
+    const pressDigit = (d: string) => {
+        if (pin.length >= 4) return;
+        haptic.select();
+        setPinError(null);
+        const next = pin + d;
+        setPin(next);
+        if (next.length === 4) setTimeout(() => verifyPin(next), 120);
+    };
+    const backspace = () => { haptic.select(); setPinError(null); setPin(p => p.slice(0, -1)); };
+
     const renderPinPad = () => (
-        <View className="flex-1 justify-center px-6">
-            <View className="items-center mb-12">
-                <View className="w-16 h-16 bg-surface border border-border rounded-full items-center justify-center mb-6">
-                    <Lock size={30} color="#E1E7ED" />
+        <View className="flex-1 justify-center px-8">
+            <View className="items-center mb-8">
+                <View className="w-14 h-14 bg-surface border border-border rounded-full items-center justify-center mb-5">
+                    <Lock size={24} color="#E1E7ED" />
                 </View>
                 <Text className="text-text-primary text-3xl font-black">Enter PIN</Text>
                 <Text className="text-text-muted mt-2 text-center">
-                    Welcome back{realUser?.name ? `, ${String(realUser.name).split(/\s+/)[0].toLowerCase().replace(/^./, (c: string) => c.toUpperCase())}` : ''}. Enter your 4-digit app PIN.
+                    Welcome back{realUser?.name ? `, ${firstNameOf(realUser.name)}` : ''}. Enter your 4-digit app PIN.
                 </Text>
             </View>
 
-            <TextInput
-                className={`bg-surface border-2 p-6 rounded-3xl text-text-primary text-4xl font-black text-center tracking-[10px] outline-none ${pinError ? 'border-error/60 mb-3' : 'border-primary/30 mb-8'}`}
-                placeholder="••••"
-                placeholderTextColor="#3A3F4B"
-                autoFocus
-                accessibilityLabel="App PIN"
-                keyboardType="numeric"
-                secureTextEntry
-                maxLength={4}
-                value={pin}
-                onChangeText={(val) => {
-                    setPinError(null);
-                    setPin(val.replace(/\D/g, ''));
-                    if (val.length === 4) {
-                        // Small delay for better UX
-                        setTimeout(() => verifyPin(val), 100);
-                    }
-                }}
-            />
+            {/* Four dots; filled as digits are entered */}
+            <View className="flex-row justify-center mb-3" accessibilityLabel={`${pin.length} of 4 digits entered`}>
+                {[0, 1, 2, 3].map(i => (
+                    <View key={i} className="w-4 h-4 rounded-full mx-2.5 border-2"
+                        style={{ borderColor: pinError ? '#FF4D4D' : '#00E0A1', backgroundColor: i < pin.length ? (pinError ? '#FF4D4D' : '#00E0A1') : 'transparent' }} />
+                ))}
+            </View>
+            <Text className="text-error text-center font-semibold h-6" accessibilityLiveRegion="polite">{pinError || ''}</Text>
 
-            {!!pinError && <Text className="text-error text-center font-semibold mb-5" accessibilityLiveRegion="polite">{pinError}</Text>}
-            <TouchableOpacity onPress={() => { setView('CHOICE'); setPin(''); setPinError(null); }} className="self-center py-2 px-4">
+            {/* Typing on a hardware keyboard (web) */}
+            {Platform.OS === 'web' && (
+                <TextInput
+                    accessibilityLabel="App PIN"
+                    autoFocus
+                    value={pin}
+                    maxLength={4}
+                    keyboardType="number-pad"
+                    onChangeText={(val) => {
+                        const v = val.replace(/\D/g, '').slice(0, 4);
+                        setPinError(null);
+                        setPin(v);
+                        if (v.length === 4) setTimeout(() => verifyPin(v), 120);
+                    }}
+                    style={{ position: 'absolute', opacity: 0, width: 1, height: 1 }}
+                />
+            )}
+
+            <View className="mt-4">
+                {[['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9'], ['', '0', '⌫']].map((row, r) => (
+                    <View key={r} className="flex-row justify-center mb-3">
+                        {row.map((k, c) => k === '' ? <View key={c} className="w-20 h-16 mx-3" /> : (
+                            <TouchableOpacity key={c}
+                                onPress={() => (k === '⌫' ? backspace() : pressDigit(k))}
+                                accessibilityRole="button"
+                                accessibilityLabel={k === '⌫' ? 'Delete digit' : k}
+                                className={`w-20 h-16 mx-3 rounded-2xl items-center justify-center active:opacity-60 ${k === '⌫' ? '' : 'bg-surface border border-border'}`}>
+                                <Text className="text-text-primary text-2xl font-bold">{k}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                ))}
+            </View>
+
+            <TouchableOpacity onPress={() => { setView('CHOICE'); setPin(''); setPinError(null); }} className="self-center py-2 px-4 mt-2">
                 <Text className="text-text-muted text-center font-bold">Switch account</Text>
             </TouchableOpacity>
         </View>

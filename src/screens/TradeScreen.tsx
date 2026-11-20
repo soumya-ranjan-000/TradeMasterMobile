@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { toast } from '../components/Toast';
+import { haptic } from '../haptics';
 import { inr } from '../format';
 import { View, Text, TouchableOpacity, TextInput, Alert, ActivityIndicator, StatusBar, ScrollView, KeyboardAvoidingView, Platform, PanResponder, Dimensions } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
@@ -79,11 +81,11 @@ const TradeScreen = () => {
     const placeOrder = async () => {
         const qty = parseInt(quantity);
         if (!qty || qty <= 0) {
-            Alert.alert("Error", "Please enter a valid quantity");
+            haptic.error(); toast.error("Enter a quantity", "Quantity must be at least 1.");
             return;
         }
         if (orderType === 'LIMIT' && (!limitPrice || parseFloat(limitPrice) <= 0)) {
-            Alert.alert("Error", "Please enter a valid limit price");
+            haptic.error(); toast.error("Enter a limit price", "A limit order needs a price above zero.");
             return;
         }
         try {
@@ -119,7 +121,7 @@ const TradeScreen = () => {
                 const message = order.status === 'FILLED'
                     ? `${side === 'BUY' ? 'Bought' : 'Sold'} ${order.filled_quantity || quantity} ${symbol} @ ${inr(Number(order.average_fill_price))} (${product})${charges}`
                     : `${side} Limit Order for ${quantity} ${symbol} placed at ${inr(parseFloat(limitPrice))} (${product})`;
-                Alert.alert("Order Placed", message);
+                haptic.success(); toast.success(order.status === "FILLED" ? "Order filled" : "Order placed", message);
                 // Navigate to Portfolio (sibling tab)
                 navigation.navigate('Portfolio' as any);
             } else {
@@ -127,10 +129,10 @@ const TradeScreen = () => {
                 clientOrderId.current = '';
                 const err = await response.json().catch(() => ({}));
                 const detail = Array.isArray(err.detail) ? err.detail.map((d: any) => d.msg).join(', ') : err.detail;
-                Alert.alert("Execution Failed", detail || "Error processing order");
+                haptic.error(); toast.error("Order rejected", detail || "The paper trading service could not process this order.");
             }
         } catch (error) {
-            Alert.alert("Error", "Network error");
+            haptic.error(); toast.error("Network error", "Check your connection and try again. The order was not sent.");
         } finally {
             setLoading(false);
         }
@@ -147,7 +149,7 @@ const TradeScreen = () => {
 
             {/* Header */}
             <View className="flex-row items-center px-6 pt-12 pb-4">
-                <TouchableOpacity onPress={() => navigation.goBack()} className="p-2 -ml-2 mr-4">
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Back" onPress={() => navigation.goBack()} className="p-2 -ml-2 mr-4">
                     <ChevronLeft size={28} color="#E1E7ED" />
                 </TouchableOpacity>
                 <Text className="text-xl font-bold text-text-primary">New Order</Text>

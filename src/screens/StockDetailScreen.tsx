@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { toast } from '../components/Toast';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Pressable, Modal, TextInput, FlatList, Alert, Platform, Dimensions, StatusBar } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -133,7 +134,7 @@ const StockDetailScreen = () => {
                 if (Platform.OS === 'web') {
                     alert(`Success: Added ${symbol} to watchlist`);
                 } else {
-                    Alert.alert("Success", `Added ${symbol} to watchlist`);
+                    toast.success("Added to watchlist", `${symbol.split(".")[0]} is now in your watchlist.`);
                 }
                 setIsWatchlistModalVisible(false);
             } else {
@@ -142,7 +143,7 @@ const StockDetailScreen = () => {
                 if (Platform.OS === 'web') {
                     alert(`Error: ${msg} `);
                 } else {
-                    Alert.alert("Error", msg);
+                    toast.error("Couldn't add to watchlist", msg);
                 }
             }
         } catch (error) {
@@ -157,7 +158,7 @@ const StockDetailScreen = () => {
             if (Platform.OS === 'web') {
                 alert("Error: Please enter a name for the watchlist");
             } else {
-                Alert.alert("Error", "Please enter a name for the watchlist");
+                toast.error("Name your watchlist", "Enter a name for the new watchlist.");
             }
             return;
         }
@@ -173,13 +174,13 @@ const StockDetailScreen = () => {
                 })
             });
             if (response.ok) {
-                Alert.alert("Success", `Created watchlist "${newWatchlistName}" and added ${symbol}`);
+                toast.success("Watchlist created", `"${newWatchlistName}" with ${symbol.split(".")[0]}.`);
                 setNewWatchlistName('');
                 setIsCreatingNew(false);
                 setIsWatchlistModalVisible(false);
             } else {
                 const err = await response.json();
-                Alert.alert("Error", err.detail || "Failed to create watchlist");
+                toast.error("Couldn't create watchlist", err.detail || "Try again.");
             }
         } catch (error) {
             console.error("Failed to create watchlist:", error);

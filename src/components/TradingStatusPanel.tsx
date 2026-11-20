@@ -6,6 +6,8 @@ import {
     TradingStatus, MarketPulse, EconomicCalendar,
 } from '../api';
 import WeekCalendar, { dayLabel } from './WeekCalendar';
+import { UpdatedLine } from '../ui';
+import { ago } from '../format';
 
 /**
  * Dashboard "Events" tab: can I trade right now, and what is coming?
@@ -112,6 +114,7 @@ export default function TradingStatusPanel({ active }: { active: boolean }) {
     const [cal, setCal] = useState<EconomicCalendar | null>(null);
     const [failed, setFailed] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [loadedAt, setLoadedAt] = useState<number | null>(null);
     const [, tick] = useState(0);
 
     const load = useCallback(async () => {
@@ -120,6 +123,7 @@ export default function TradingStatusPanel({ active }: { active: boolean }) {
         if (p.status === 'fulfilled') setPulse(p.value);
         setCal(c.status === 'fulfilled' ? c.value : { available: false, days: [] });
         setLoading(false);
+        setLoadedAt(Date.now());
     }, []);
 
     useEffect(() => {
@@ -143,6 +147,7 @@ export default function TradingStatusPanel({ active }: { active: boolean }) {
 
     return (
         <View>
+            {!!loadedAt && <UpdatedLine text={`Updated ${ago(loadedAt)} · refreshes every minute`} onRefresh={load} />}
             <Card icon={<Clock size={20} color={open ? GREEN : RED} />} title="Exchange session"
                 value={open ? 'Open' : holiday ? 'Holiday' : 'Closed'} color={open ? GREEN : RED}>
                 {!!holiday && <Text className="text-text-primary text-[12px] font-bold mt-3">{holiday}</Text>}

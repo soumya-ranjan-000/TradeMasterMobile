@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from '../components/Toast';
 import {
     View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, StatusBar, Alert,
     Switch, Platform,
@@ -167,7 +168,7 @@ const ScannerScreen = () => {
                 if (run.status === 'running') return pollRun(runId);
                 setScanRun(null);
                 if (run.status === 'failed') {
-                    Alert.alert('Scan failed', run.errors?.[0] || 'See backend logs');
+                    toast.error('Scan failed', run.errors?.[0] || 'See backend logs');
                 }
                 load();
             } catch {
@@ -182,7 +183,7 @@ const ScannerScreen = () => {
             setScanRun(run.id);
             pollRun(run.id);
         } catch (err) {
-            Alert.alert('Scan not started', errorText(err));
+            toast.error('Scan not started', errorText(err));
         }
     };
 
@@ -193,15 +194,15 @@ const ScannerScreen = () => {
                 setSending(c.id);
                 const rec = await scanner.execute(c.id);
                 if (rec.status === 'placed') {
-                    Alert.alert('Paper order placed',
+                    toast.success('Paper order placed',
                         `${c.symbol} ${c.direction.toUpperCase()} x${rec.request.quantity} @ ${rupee(rec.request.entry)} (${rec.request.entry_type})` +
-                        (rec.request.user_id !== userId ? `\n\nNote: placed in account "${rec.request.user_id}", not yours ("${userId}").` : ''));
+                        (rec.request.user_id !== userId ? ` · Note: placed in account "${rec.request.user_id}", not yours ("${userId}").` : ''));
                 } else {
-                    Alert.alert(`Order ${rec.status}`, rec.error || 'See the Paper Orders tab');
+                    toast.error(`Order ${rec.status}`, rec.error || 'See the Paper tab');
                 }
                 load();
             } catch (err) {
-                Alert.alert('Cannot send', errorText(err).replace(/^Cannot send: /, ''));
+                toast.error('Cannot send', errorText(err).replace(/^Cannot send: /, ''));
             } finally {
                 setSending(null);
             }
@@ -229,7 +230,7 @@ const ScannerScreen = () => {
                 setSwitching(true);
                 setBridge(await scanner.setAutoTrading(on));
             } catch (err) {
-                Alert.alert('Could not change auto paper-trading', errorText(err));
+                toast.error('Could not change auto paper-trading', errorText(err));
             } finally {
                 setSwitching(false);
             }

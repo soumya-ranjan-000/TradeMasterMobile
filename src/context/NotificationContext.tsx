@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import { toast } from '../components/Toast';
 import { Alert, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
@@ -91,7 +92,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
                     if (missedAlerts.length > 0) {
                         const summary = missedAlerts.map(m => `• ${m.symbol} hit ₹${m.price}`).join('\n');
-                        Alert.alert("👋 Welcome Back!", `Alerts triggered while you were away:\n\n${summary}`);
+                        toast.info('Alerts triggered while you were away', missedAlerts.map(m => `${m.symbol} hit ₹${m.price}`).join(' · '));
                     }
                 }
 
@@ -132,7 +133,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
                     const message = `${alert.symbol} hit ₹${alert.price} (LTP: ₹${tick.ltp.toFixed(2)})`;
 
                     showLocalNotification(title, message);
-                    Alert.alert(title, message);
+                    toast.info('Price alert triggered', message);
                 }
             }
         });
@@ -165,11 +166,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
                     const message = `Position for ${pos.symbol} triggered at ₹${ltp.toFixed(2)}`;
 
                     showLocalNotification(title, message);
-                    Alert.alert(
-                        title,
-                        `Position for ${pos.symbol} has been triggered for automatic closure at ₹${ltp.toFixed(2)} (${reason} was ₹${reason === "Target" ? pos.target?.toFixed(2) : pos.stop_loss?.toFixed(2)})`,
-                        [{ text: "OK", onPress: () => refreshPositions() }]
-                    );
+                    toast.info(reason === "Target" ? 'Target reached' : 'Stop-loss hit',
+                        `${pos.symbol} closing at ₹${ltp.toFixed(2)} (${reason} ₹${reason === "Target" ? pos.target?.toFixed(2) : pos.stop_loss?.toFixed(2)})`);
+                    refreshPositions();
                 }
             }
         });

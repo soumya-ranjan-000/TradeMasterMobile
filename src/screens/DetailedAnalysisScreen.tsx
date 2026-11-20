@@ -57,7 +57,7 @@ const DetailedAnalysisScreen = () => {
 
             {/* Header */}
             <View className="px-6 pt-14 pb-6 flex-row items-center">
-                <TouchableOpacity onPress={() => navigation.navigate('Scanner')} className="p-2 bg-white/5 rounded-full mr-4">
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Back" onPress={() => navigation.navigate('Scanner')} className="p-2 bg-white/5 rounded-full mr-4">
                     <ChevronLeft size={24} color="#E1E7ED" />
                 </TouchableOpacity>
                 <View>

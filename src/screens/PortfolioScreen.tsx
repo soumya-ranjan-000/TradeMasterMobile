@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { ScreenHeader, IconButton } from '../ui';
+import { toast } from '../components/Toast';
+import { ScreenHeader, IconButton, confirmAction } from '../ui';
 import { colors, signColor } from '../theme';
 import { inr } from '../format';
 import { View, Text, FlatList, RefreshControl, TouchableOpacity, ScrollView, StatusBar, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
@@ -120,10 +121,10 @@ const PortfolioScreen = () => {
             if (response.ok) {
                 setModifyingPos(null);
                 fetchData();
-                Alert.alert("Protection Updated", `Risk levels for ${modifyingPos.symbol} have been synchronized.`);
+                toast.success("Stop-loss / target updated", `${modifyingPos.symbol} protection saved.`);
             } else {
                 const err = await response.json();
-                Alert.alert("Update Failed", err.detail || "Error updating protection");
+                toast.error("Update failed", err.detail || "Could not update stop-loss / target.");
             }
         } catch (error) {
             console.error("Update failed:", error);
@@ -149,15 +150,15 @@ const PortfolioScreen = () => {
                 const result = await response.json();
                 const pnl = result.realized_pnl || 0;
                 const pnlText = inr(pnl, { sign: true });
-                Alert.alert("Position Closed", `Exited ${symbol} with ${pnl >= 0 ? 'Profit' : 'Loss'} of ${pnlText}`);
+                toast.success("Position closed", `Exited ${symbol} · P&L ${pnlText}`);
                 fetchData();
             } else {
                 const err = await response.json();
-                Alert.alert("Error", err.detail || "Quick exit failed");
+                toast.error("Exit failed", err.detail || "Could not close the position.");
             }
         } catch (error) {
             console.error("Quick exit failed:", error);
-            Alert.alert("Error", "Network error");
+            toast.error("Network error", "Check your connection and try again.");
         } finally {
             setLoading(false);
         }
@@ -170,16 +171,16 @@ const PortfolioScreen = () => {
                 method: 'DELETE',
             });
             if (response.ok) {
-                Alert.alert("Order Cancelled", "Your limit order has been successfully cancelled.");
+                toast.success("Order cancelled", "Your limit order was cancelled.");
                 setSelectedOrder(null);
                 fetchData();
             } else {
                 const err = await response.json();
-                Alert.alert("Cancellation Failed", err.detail || "Could not cancel order");
+                toast.error("Cancellation failed", err.detail || "Could not cancel the order.");
             }
         } catch (error) {
             console.error("Cancel order failed:", error);
-            Alert.alert("Error", "Network error");
+            toast.error("Network error", "Check your connection and try again.");
         } finally {
             setLoading(false);
         }
@@ -652,7 +653,7 @@ const PortfolioScreen = () => {
                                 <Text className="text-text-primary text-2xl font-black">Modify Protection</Text>
                                 <Text className="text-text-muted text-sm font-bold">{modifyingPos?.symbol}</Text>
                             </View>
-                            <TouchableOpacity
+                            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close"
                                 onPress={() => setModifyingPos(null)}
                                 className="w-10 h-10 bg-background rounded-full items-center justify-center border border-border"
                             >
@@ -796,7 +797,7 @@ const PortfolioScreen = () => {
                                     </Text>
                                 </View>
                             </View>
-                            <TouchableOpacity
+                            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close"
                                 onPress={() => setSelectedOrder(null)}
                                 className="w-12 h-12 bg-background rounded-2xl items-center justify-center border border-border"
                             >
@@ -879,14 +880,7 @@ const PortfolioScreen = () => {
                             <TouchableOpacity
                                 disabled={loading}
                                 onPress={() => {
-                                    Alert.alert(
-                                        "Cancel Order",
-                                        "Are you sure you want to cancel this pending order?",
-                                        [
-                                            { text: "No", style: "cancel" },
-                                            { text: "Yes, Cancel", style: "destructive", onPress: () => cancelOrder(selectedOrder.order_id) }
-                                        ]
-                                    );
+                                    confirmAction('Cancel order', 'Cancel this pending order?', 'Cancel order', () => cancelOrder(selectedOrder.order_id), true);
                                 }}
                                 className={`mt-6 ${loading ? 'bg-error/5' : 'bg-error/10'} border border-error/20 py-4 rounded-2xl items-center`}
                             >
