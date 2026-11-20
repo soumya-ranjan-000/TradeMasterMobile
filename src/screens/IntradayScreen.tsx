@@ -33,6 +33,17 @@ import { backendFetch } from '../api';
 // The scanner's active intraday candidates, served by the backend in the shape of
 // the retired watchlist-generation service (QUALIFIED = READY, WATCHLIST = WAITING).
 const WATCHLIST_PATH = '/scanner/watchlist';
+
+type TradeStyle = 'intraday' | 'swing';
+
+/** NSE session (Mon-Fri 09:15-15:30 IST): intraday candidates only exist then. */
+function inSession(now = new Date()): boolean {
+    // IST = UTC+5:30 with no DST, so this needs no Intl time-zone support (Hermes).
+    const ist = new Date(now.getTime() + 330 * 60_000);
+    const day = ist.getUTCDay();
+    const mins = ist.getUTCHours() * 60 + ist.getUTCMinutes();
+    return day >= 1 && day <= 5 && mins >= 9 * 60 + 15 && mins <= 15 * 60 + 30;
+}
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/RootNavigator';
@@ -65,6 +76,9 @@ const IntradayScreen = () => {
     const [refreshing, setRefreshing] = useState(false);
     const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'bullish' | 'bearish'>('bullish');
+    // Intraday in market hours, swing otherwise: never an empty screen while
+    // the scanner has candidates.
+    const [tradeStyle, setTradeStyle] = useState<TradeStyle>(() => (inSession() ? 'intraday' : 'swing'));
     const [scanning, setScanning] = useState(false);
     const [scanStatus, setScanStatus] = useState<any>(null);
 
@@ -76,8 +90,8 @@ const IntradayScreen = () => {
         try {
             setRefreshing(true);
             const [bullRes, bearRes] = await Promise.all([
-                backendFetch(`${WATCHLIST_PATH}/bullish`),
-                backendFetch(`${WATCHLIST_PATH}/bearish`)
+                backendFetch(`${WATCHLIST_PATH}/bullish?style=${tradeStyle}`),
+                backendFetch(`${WATCHLIST_PATH}/bearish?style=${tradeStyle}`)
             ]);
             if (!bullRes.ok || !bearRes.ok) throw new Error(`HTTP ${bullRes.status}/${bearRes.status}`);
 
@@ -96,7 +110,7 @@ const IntradayScreen = () => {
 
     const fetchScanStatus = async () => {
         try {
-            const res = await backendFetch(`${WATCHLIST_PATH}/status`);
+            const res = await backendFetch(`${WATCHLIST_PATH}/status?style=${tradeStyle}`);
             if (res.ok) {
                 const status = await res.json();
                 setScanStatus(status);
@@ -116,9 +130,11 @@ const IntradayScreen = () => {
     };
 
     useEffect(() => {
+        setLoading(true);
+        setExpandedSymbol(null);
         fetchSignals();
         fetchScanStatus();
-    }, []);
+    }, [tradeStyle]);
 
     // Polling effect for scan progress
     useEffect(() => {
@@ -131,7 +147,7 @@ const IntradayScreen = () => {
         return () => {
             if (interval) clearInterval(interval);
         };
-    }, [scanning]);
+    }, [scanning, tradeStyle]);
 
     const onRefresh = () => {
         setRefreshing(true);
@@ -141,7 +157,7 @@ const IntradayScreen = () => {
     const triggerNewScan = async () => {
         try {
             setScanning(true);
-            const response = await backendFetch(`${WATCHLIST_PATH}/trigger`, {
+            const response = await backendFetch(`${WATCHLIST_PATH}/trigger?style=${tradeStyle}`, {
                 method: 'POST'
             });
             // 409: a scan is already running; just follow its progress.
@@ -318,9 +334,9 @@ const IntradayScreen = () => {
             {/* Header */}
             <View className="px-6 pt-14 pb-4 flex-row justify-between items-end">
                 <View>
-                    <Text className="text-text-primary text-3xl font-black">Intraday</Text>
+                    <Text className="text-text-primary text-3xl font-black">{tradeStyle === 'intraday' ? 'Intraday' : 'Swing'}</Text>
                     <Text className="text-text-muted text-xs font-bold uppercase tracking-widest mt-1">
-                        AI Watchlist • {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                        Scanner Watchlist • {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                     </Text>
                 </View>
                 <View className="flex-row">
@@ -359,19 +375,34 @@ const IntradayScreen = () => {
                 </View>
             )}
 
+            {/* Style switcher: intraday setups exist only in session; swing ones span days */}
+            <View className="flex-row px-6 mb-3">
+                {(['intraday', 'swing'] as TradeStyle[]).map((st) => (
+                    <TouchableOpacity
+                        key={st}
+                        onPress={() => setTradeStyle(st)}
+                        className={`flex-1 py-2 rounded-xl items-center ${st === 'intraday' ? 'mr-1' : 'ml-1'} ${tradeStyle === st ? 'bg-primary/20 border border-primary/40' : 'bg-surface border border-transparent'}`}
+                    >
+                        <Text className={`font-black uppercase text-[10px] tracking-widest ${tradeStyle === st ? 'text-primary' : 'text-text-muted'}`}>
+                            {st === 'intraday' ? 'Intraday · today' : 'Swing · days'}
+                        </Text>
+                    </TouchableOpacity>
+                ))}
+            </View>
+
             {/* Tab Switcher */}
             <View className="flex-row px-6 mb-4">
                 <TouchableOpacity
                     onPress={() => setActiveTab('bullish')}
                     className={`flex-1 py-3 rounded-2xl items-center mr-2 ${activeTab === 'bullish' ? 'bg-success/20 border border-success/40' : 'bg-surface border border-transparent'}`}
                 >
-                    <Text className={`font-black uppercase text-xs ${activeTab === 'bullish' ? 'text-success' : 'text-text-muted'}`}>Bullish</Text>
+                    <Text className={`font-black uppercase text-xs ${activeTab === 'bullish' ? 'text-success' : 'text-text-muted'}`}>Bullish ({bullishStocks.length})</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                     onPress={() => setActiveTab('bearish')}
                     className={`flex-1 py-3 rounded-2xl items-center ml-2 ${activeTab === 'bearish' ? 'bg-error/20 border border-error/40' : 'bg-surface border border-transparent'}`}
                 >
-                    <Text className={`font-black uppercase text-xs ${activeTab === 'bearish' ? 'text-error' : 'text-text-muted'}`}>Bearish</Text>
+                    <Text className={`font-black uppercase text-xs ${activeTab === 'bearish' ? 'text-error' : 'text-text-muted'}`}>Bearish ({bearishStocks.length})</Text>
                 </TouchableOpacity>
             </View>
 
@@ -424,7 +455,10 @@ const IntradayScreen = () => {
                             <View className="items-center justify-center py-20 opacity-50">
                                 <Trophy size={48} color="#94A3B8" strokeWidth={1} />
                                 <Text className="text-text-muted font-bold mt-4 text-center">
-                                    No {activeTab.toUpperCase()} signals found{"\n"}matching your filters for today.
+                                    No {activeTab.toUpperCase()} {tradeStyle} signals right now.{"\n"}
+                                    {tradeStyle === 'intraday'
+                                        ? 'Intraday scans run 09:35–14:45 IST. Outside market hours, try Swing.'
+                                        : 'Swing setups come from the daily 15:45 IST scan.'}
                                 </Text>
                                 <TouchableOpacity
                                     onPress={onRefresh}
