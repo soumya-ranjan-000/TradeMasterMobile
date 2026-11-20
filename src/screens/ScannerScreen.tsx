@@ -3,8 +3,7 @@ import {
     View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, StatusBar, Alert,
 } from 'react-native';
 import {
-    ArrowUpRight, ArrowDownRight, ChevronDown, ChevronUp, RefreshCw, Radar, Send,
-    ShieldAlert, Target, AlertTriangle, CircleCheck, CircleX, Clock,
+    ChevronDown, ChevronUp, RefreshCw, Radar, Send, AlertTriangle, CircleCheck, CircleX, Clock,
 } from 'lucide-react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -44,11 +43,6 @@ interface StockGroup {
     best: ScanCandidate;           // qualified first, then the higher score
     all: ScanCandidate[];          // every strategy that fired on this stock and side
 }
-
-const STATUS_COLOR: Record<string, string> = {
-    qualified: '#10B981',
-    watchlist: '#F59E0B',
-};
 
 const EXEC_STYLE: Record<ScanExecution['status'], { color: string; label: string }> = {
     placed: { color: '#10B981', label: 'Placed' },
@@ -231,107 +225,77 @@ const ScannerScreen = () => {
         );
     };
 
-    const renderCandidate = (c: ScanCandidate) => {
-        const open = true;                 // shown inside an expanded row
+    /**
+     * One strategy's detail under an expanded row. The row already shows the
+     * stock, READY/WAITING, score and the best strategy's levels, so this adds
+     * only what is new: strategy and state, entry band, LTP, quantity, net R:R,
+     * reason, warnings, paper status, actions. Stop/target appear only when
+     * this strategy's differ from the row's.
+     */
+    const renderCandidate = (c: ScanCandidate, best: ScanCandidate, multi: boolean) => {
         const long = c.direction === 'long';
-        const color = STATUS_COLOR[c.status] || '#94A3B8';
         const exec = execByCandidate[c.id];
         const canSend = !exec || exec.status === 'failed' || exec.status === 'rejected';
         const swingShort = c.style === 'swing' && !long;
+        const ownLevels = c.stop !== best.stop || c.targets?.[0] !== best.targets?.[0];
         return (
-            <View
-                key={c.id}
-                className="bg-surface/60 rounded-3xl border border-border/40 mb-3 overflow-hidden"
-            >
-                <View className="p-5">
-                    <View className="flex-row justify-between items-center">
-                        <View className="flex-row items-center flex-1">
-                            <View className="w-11 h-11 rounded-2xl items-center justify-center mr-3"
-                                style={{ backgroundColor: long ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)' }}>
-                                {long ? <ArrowUpRight size={22} color="#10B981" /> : <ArrowDownRight size={22} color="#EF4444" />}
-                            </View>
-                            <View className="flex-1">
-                                <View className="flex-row items-center">
-                                    {c.rank != null && <Text className="text-text-muted font-black text-xs mr-1">#{c.rank}</Text>}
-                                    <Text className="text-text-primary font-black text-lg tracking-tight">{c.symbol}</Text>
-                                </View>
-                                <View className="flex-row items-center mt-1 flex-wrap">
-                                    <View className="px-2 py-0.5 rounded-md mr-2" style={{ backgroundColor: `${color}20` }}>
-                                        <Text className="text-[9px] font-black uppercase" style={{ color }}>{c.status}</Text>
-                                    </View>
-                                    <Text className="text-text-muted text-[10px] font-bold">{c.strategy} • {c.setup_state}</Text>
-                                    {renderExecBadge(exec)}
-                                </View>
-                            </View>
-                        </View>
-                        <View className="items-end">
-                            <Text className="text-text-primary font-black text-lg">{Math.round(c.score)}</Text>
-                            <Text className="text-text-muted text-[9px] font-bold uppercase">Score</Text>
-                        </View>
+            <View key={c.id} className="bg-surface/60 rounded-2xl border border-border/40 mb-2 px-4 py-3">
+                <View className="flex-row items-center justify-between">
+                    <Text className="text-text-primary text-[11px] font-black flex-1">
+                        {c.strategy}
+                        <Text className="text-text-muted font-bold"> · {c.setup_state}{multi ? ` · ${Math.round(c.score)}` : ''}</Text>
+                    </Text>
+                    {renderExecBadge(exec)}
+                </View>
+
+                <Text className="text-text-muted text-[11px] font-bold mt-2">
+                    Entry band <Text className="text-text-primary">{inr(c.entry_low)} – {inr(c.entry_high)}</Text>
+                    {'  ·  '}LTP {inr(c.reference_price)}
+                    {c.change_pct != null ? ` (${c.change_pct >= 0 ? '+' : ''}${c.change_pct.toFixed(2)}%)` : ''}
+                </Text>
+                {ownLevels && (
+                    <Text className="text-text-muted text-[11px] font-bold mt-1">
+                        SL <Text className="text-error">{inr(c.stop)}</Text> · TGT <Text className="text-success">{inr(c.targets?.[0])}</Text>
+                    </Text>
+                )}
+                <Text className="text-text-muted text-[11px] font-bold mt-1">
+                    Qty {c.quantity ?? '---'}  ·  Net R:R {c.reward_risk_net?.toFixed(2) ?? '---'}
+                </Text>
+
+                {!!c.status_reason && c.status_reason !== 'All gates passed' && (
+                    <Text className="text-text-muted text-[11px] italic mt-2">{c.status_reason}</Text>
+                )}
+                {c.flags.map(f => (
+                    <View key={f.code} className="flex-row items-start mt-1.5">
+                        <AlertTriangle size={11} color={f.severity === 'block' ? '#EF4444' : '#F59E0B'} style={{ marginTop: 2 }} />
+                        <Text className="text-text-muted text-[10px] ml-1 flex-1">{f.message}</Text>
                     </View>
+                ))}
+                {exec?.error && (
+                    <Text className="text-error text-[10px] font-bold mt-2">Paper: {exec.error}</Text>
+                )}
+                <Text className="text-text-muted text-[9px] mt-2">
+                    Updated {timeAgo(c.updated_at)}{c.expires_at ? ` • expires ${new Date(c.expires_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
+                    {c.entry_confirmed_at ? ' • entry confirmed' : ''}
+                </Text>
 
-                    {open && (
-                        <View className="mt-5 pt-5 border-t border-border/30">
-                            <View className="flex-row justify-between mb-5">
-                                <View className="items-center flex-1 border-r border-border/20">
-                                    <ArrowUpRight size={14} color="#00E0A1" />
-                                    <Text className="text-text-muted text-[8px] font-bold uppercase my-1">Entry band</Text>
-                                    <Text className="text-text-primary font-black text-xs">{c.entry_low.toFixed(2)}–{c.entry_high.toFixed(2)}</Text>
-                                </View>
-                                <View className="items-center flex-1 border-r border-border/20">
-                                    <ShieldAlert size={14} color="#EF4444" />
-                                    <Text className="text-text-muted text-[8px] font-bold uppercase my-1">Stop</Text>
-                                    <Text className="text-error font-black text-xs">{rupee(c.stop)}</Text>
-                                </View>
-                                <View className="items-center flex-1">
-                                    <Target size={14} color="#10B981" />
-                                    <Text className="text-text-muted text-[8px] font-bold uppercase my-1">Target</Text>
-                                    <Text className="text-success font-black text-xs">{rupee(c.targets?.[0])}</Text>
-                                </View>
-                            </View>
-
-                            <View className="flex-row justify-between mb-4">
-                                <Text className="text-text-muted text-[11px] font-bold">LTP {rupee(c.reference_price)}{c.change_pct != null ? ` (${c.change_pct >= 0 ? '+' : ''}${c.change_pct.toFixed(2)}%)` : ''}</Text>
-                                <Text className="text-text-muted text-[11px] font-bold">Net R:R {c.reward_risk_net?.toFixed(2) ?? '---'} • Qty {c.quantity ?? '---'}</Text>
-                            </View>
-
-                            {!!c.status_reason && (
-                                <Text className="text-text-muted text-[11px] italic mb-3">{c.status_reason}</Text>
-                            )}
-                            {c.flags.map(f => (
-                                <View key={f.code} className="flex-row items-center mb-1">
-                                    <AlertTriangle size={11} color={f.severity === 'block' ? '#EF4444' : '#F59E0B'} />
-                                    <Text className="text-text-muted text-[10px] ml-1 flex-1">{f.message}</Text>
-                                </View>
-                            ))}
-                            {exec?.error && (
-                                <Text className="text-error text-[10px] font-bold mt-2">Paper: {exec.error}</Text>
-                            )}
-                            <Text className="text-text-muted text-[9px] mt-2">
-                                Updated {timeAgo(c.updated_at)}{c.expires_at ? ` • expires ${new Date(c.expires_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
-                                {c.entry_confirmed_at ? ' • entry confirmed' : ''}
-                            </Text>
-
-                            <View className="flex-row mt-4 gap-3">
-                                <TouchableOpacity
-                                    onPress={() => navigation.navigate('StockDetail', { symbol: c.symbol })}
-                                    className="flex-1 py-3.5 rounded-2xl items-center border border-border bg-background"
-                                >
-                                    <Text className="text-text-primary font-black text-xs uppercase">Chart</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    disabled={!canSend || swingShort || sending === c.id}
-                                    onPress={() => sendToPaper(c)}
-                                    className={`flex-[2] py-3.5 rounded-2xl items-center flex-row justify-center ${canSend && !swingShort ? 'bg-primary' : 'bg-primary/30'}`}
-                                >
-                                    {sending === c.id ? <ActivityIndicator color="white" size="small" /> : <Send size={14} color="white" />}
-                                    <Text className="text-white font-black text-xs uppercase ml-2">
-                                        {swingShort ? 'Swing shorts not tradable' : canSend ? 'Send to Paper' : 'Already sent'}
-                                    </Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                    )}
+                <View className="flex-row mt-3 gap-3">
+                    <TouchableOpacity
+                        onPress={() => navigation.navigate('StockDetail', { symbol: c.symbol })}
+                        className="flex-1 py-3 rounded-2xl items-center border border-border bg-background"
+                    >
+                        <Text className="text-text-primary font-black text-xs uppercase">Chart</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        disabled={!canSend || swingShort || sending === c.id}
+                        onPress={() => sendToPaper(c)}
+                        className={`flex-[2] py-3 rounded-2xl items-center flex-row justify-center ${canSend && !swingShort ? 'bg-primary' : 'bg-primary/30'}`}
+                    >
+                        {sending === c.id ? <ActivityIndicator color="white" size="small" /> : <Send size={14} color="white" />}
+                        <Text className="text-white font-black text-xs uppercase ml-2">
+                            {swingShort ? 'Swing shorts not tradable' : canSend ? 'Send to Paper' : 'Already sent'}
+                        </Text>
+                    </TouchableOpacity>
                 </View>
             </View>
         );
@@ -379,7 +343,7 @@ const ScannerScreen = () => {
                         </View>
                     )}
                 </TouchableOpacity>
-                {open && <View className="mt-2">{g.all.map(renderCandidate)}</View>}
+                {open && <View className="mt-2">{g.all.map(c => renderCandidate(c, g.best, g.all.length > 1))}</View>}
             </View>
         );
     };
