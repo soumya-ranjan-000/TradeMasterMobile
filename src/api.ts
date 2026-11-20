@@ -100,6 +100,45 @@ export async function getMarketStatus(): Promise<MarketStatus> {
     }
 }
 
+// --- market pulse & trading status (Dashboard Market / Events tabs) -----------------
+export interface PulseFactor {
+    key: string; label: string; group?: string;
+    unit?: 'pct' | 'bps' | 'cr' | null;   // unit of `change`
+    value: number | null; change: number | null;
+    reading?: string; impact?: 'positive' | 'negative' | 'neutral';   // what the move means for Indian stocks
+}
+export interface MarketPulse {
+    available: boolean;
+    error?: string;
+    updated_at?: string;
+    session?: { status?: string; hours?: string };
+    bias?: { score: number; label: string };
+    index?: { name?: string; price?: number; change?: number };
+    cues?: { label: string; change: number | null; weight?: number; as_of?: string; age_minutes?: number; stale?: boolean; detail?: string }[];
+    factors?: PulseFactor[];
+    sectors?: { as_of?: string; stale?: boolean; source?: string; rows: { label: string; symbol?: string; change: number; sentiment?: string }[] };
+    notes?: string[];
+}
+export const getMarketPulse = () => backendJson<MarketPulse>('/market/pulse');
+
+/** Raw events GO/NO-GO from the economic service (via the backend). */
+export interface NextEvent {
+    name: string; currency?: string; time?: string; event_at?: string; scope?: string;
+    start?: string | null; end?: string | null; minutes_to_event?: number | null;
+}
+export interface TradingStatus {
+    market_status?: string;          // OPEN | HALTED (event halts, not the exchange session)
+    trade_allowed?: boolean;
+    status?: string;                 // OPEN | DEGRADED ...
+    reason?: string | null;
+    halt_until?: string | null;
+    active_halts?: { scope: string; reason: string; until?: string | null; source?: string }[];
+    next_event?: NextEvent | null;
+    data_fresh?: boolean;
+    events_service?: string;         // "unavailable" when the backend could not reach it
+}
+export const getTradingStatus = () => backendJson<TradingStatus>('/market/status');
+
 // --- search ------------------------------------------------------------------------
 const bare = (s: string) => s.toUpperCase().trim().replace(/\.(NS|BO)$/, '');
 

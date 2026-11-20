@@ -3,6 +3,8 @@ import { View, Text, TextInput, FlatList, TouchableOpacity, ActivityIndicator, S
 import { Plus, Bell, Trash2, X, ChevronRight, Pause, Play } from 'lucide-react-native';
 import { API_URL, TEST_USER_ID } from '../config';
 import { getMarketStatus } from '../api';
+import MarketPulse from '../components/MarketPulse';
+import TradingStatusPanel from '../components/TradingStatusPanel';
 import { useNavigation, CompositeNavigationProp, useIsFocused } from '@react-navigation/native';
 import { Alert } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -283,10 +285,10 @@ const DashboardScreen = () => {
                     </TouchableOpacity>
                 </View>
             </View>
-            {/* Category Selector (Trending, News, Top Market) */}
+            {/* Category Selector: Watchlists, Market (global sentiment), Events (halts + next release) */}
             <View className="mt-8 px-4 bg-background">
                 <View className="flex-row gap-6 items-center">
-                    {['Watchlists', 'News', 'Top Market'].map((cat, i) => (
+                    {['Watchlists', 'Market', 'Events'].map((cat, i) => (
                         <TouchableOpacity key={cat} onPress={() => setActiveCategory(cat)}>
                             <Text className={`text-base font-bold ${activeCategory === cat ? 'text-text-primary' : 'text-text-muted'}`}>{cat}</Text>
                             {activeCategory === cat && <View className="h-1 bg-primary rounded-full w-1/3 mt-1" />}
@@ -426,14 +428,16 @@ const DashboardScreen = () => {
                     )
                 }
 
-                {
-                    (activeCategory === 'News' || activeCategory === 'Top Market') && (
-                        <View className="mt-10 items-center py-20 opacity-30">
-                            <Text className="text-text-muted font-bold text-lg">Under Construction</Text>
-                            <Text className="text-text-muted text-xs mt-2">Will be available in next update</Text>
-                        </View>
-                    )
-                }
+                {activeCategory === 'Market' && (
+                    <View className="px-6 pt-2 pb-8">
+                        <MarketPulse active={isFocused && activeCategory === 'Market'} />
+                    </View>
+                )}
+                {activeCategory === 'Events' && (
+                    <View className="px-6 pt-2 pb-8">
+                        <TradingStatusPanel active={isFocused && activeCategory === 'Events'} />
+                    </View>
+                )}
             </ScrollView >
         </View >
     );
