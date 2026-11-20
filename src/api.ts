@@ -111,12 +111,17 @@ export interface MarketPulse {
     available: boolean;
     error?: string;
     updated_at?: string;
-    session?: { status?: string; hours?: string };
+    /** next_session: YYYY-MM-DD of the next NSE session (holidays included); holiday: today's holiday name. */
+    session?: { status?: string; hours?: string; holiday?: string | null; next_session?: string | null };
     bias?: { score: number; label: string };
     index?: { name?: string; price?: number; change?: number };
     cues?: { label: string; change: number | null; weight?: number; as_of?: string; age_minutes?: number; stale?: boolean; detail?: string }[];
     factors?: PulseFactor[];
     sectors?: { as_of?: string; stale?: boolean; source?: string; rows: { label: string; symbol?: string; change: number; sentiment?: string }[] };
+    /** FII/DII provisional cash-market net flows, Rs crore; spark = recent sessions' nets. */
+    flows?: { key: 'fii' | 'dii' | string; label: string; value: number | null; buy?: number | null; sell?: number | null;
+              session?: string | null; reading?: string; impact?: 'positive' | 'negative' | 'neutral';
+              spark?: number[] | null; as_of?: string | null; stale?: boolean | null }[];
     notes?: string[];
     /** World overview (null if that part of the service failed). Scores are weighted moves in %. */
     global?: {
@@ -146,6 +151,21 @@ export interface TradingStatus {
     events_service?: string;         // "unavailable" when the backend could not reach it
 }
 export const getTradingStatus = () => backendJson<TradingStatus>('/market/status');
+
+/** Week ahead from the economic service: high-impact releases + results days, by IST date. */
+export interface CalendarEvent {
+    event_id: string; date: string; time?: string | null; time_status?: string; event_at?: string | null;
+    name: string; currency?: string; category?: 'macro' | 'earnings' | string;
+    symbols?: string[]; company?: string | null; scope?: string; action?: 'halt' | 'watch' | string;
+    actual?: string | null; forecast?: string | null; previous?: string | null; past?: boolean;
+}
+export interface EconomicCalendar {
+    available: boolean; error?: string;
+    days: { date: string; weekday: string; events: CalendarEvent[] }[];
+    /** Beyond these dates an empty day means "not published yet". */
+    coverage?: { macro_until?: string | null; results_until?: string | null; currencies?: string[] };
+}
+export const getEconomicCalendar = (days = 7) => backendJson<EconomicCalendar>(`/market/calendar?days=${days}`);
 
 // --- search ------------------------------------------------------------------------
 const bare = (s: string) => s.toUpperCase().trim().replace(/\.(NS|BO)$/, '');
