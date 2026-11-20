@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { inr } from '../format';
 import { View, Text, TouchableOpacity, TextInput, Alert, ActivityIndicator, StatusBar, ScrollView, KeyboardAvoidingView, Platform, PanResponder, Dimensions } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { ChevronLeft, Info, HelpCircle, ShieldCheck, Zap, Target, ChevronsRight } from 'lucide-react-native';
@@ -114,10 +115,10 @@ const TradeScreen = () => {
             if (response.ok) {
                 clientOrderId.current = '';
                 const order = await response.json();
-                const charges = order.charges ? ` • Charges ₹${Number(order.charges).toFixed(2)}` : '';
+                const charges = order.charges ? ` · Charges ${inr(Number(order.charges))}` : '';
                 const message = order.status === 'FILLED'
-                    ? `${side === 'BUY' ? 'Bought' : 'Sold'} ${order.filled_quantity || quantity} ${symbol} @ ₹${Number(order.average_fill_price).toFixed(2)} (${product})${charges}`
-                    : `${side} Limit Order for ${quantity} ${symbol} placed at ₹${limitPrice} (${product})`;
+                    ? `${side === 'BUY' ? 'Bought' : 'Sold'} ${order.filled_quantity || quantity} ${symbol} @ ${inr(Number(order.average_fill_price))} (${product})${charges}`
+                    : `${side} Limit Order for ${quantity} ${symbol} placed at ${inr(parseFloat(limitPrice))} (${product})`;
                 Alert.alert("Order Placed", message);
                 // Navigate to Portfolio (sibling tab)
                 navigation.navigate('Portfolio' as any);
@@ -184,7 +185,7 @@ const TradeScreen = () => {
                     <View className="items-end">
                         <Text className="text-text-muted text-xs uppercase font-bold tracking-widest">Market Price</Text>
                         <Text className="text-2xl font-black text-text-primary mt-1">
-                            ₹{livePrice ? livePrice.toFixed(2) : '---'}
+                            {livePrice ? inr(livePrice) : '—'}
                         </Text>
                     </View>
                 </View>
@@ -195,7 +196,7 @@ const TradeScreen = () => {
                         <View className="items-center mb-8">
                             <Text className="text-text-secondary text-sm font-bold uppercase mb-4">Enter Quantity</Text>
                             <TextInput
-                                className="text-6xl font-black text-text-primary text-center w-full"
+                                className="text-6xl font-black text-text-primary text-center w-full outline-none"
                                 keyboardType="numeric"
                                 value={quantity}
                                 onChangeText={setQuantity}
@@ -235,7 +236,7 @@ const TradeScreen = () => {
                             </TouchableOpacity>
                         ))}
                     </View>
-                    <Text className="text-text-muted text-[10px] mt-2 text-center">
+                    <Text className="text-text-muted text-[11px] mt-2 text-center">
                         {product === 'INTRADAY'
                             ? 'Auto square-off at 15:15 IST • Short selling allowed'
                             : 'Held overnight • Sell only what you hold'}
@@ -267,13 +268,13 @@ const TradeScreen = () => {
                     {orderType === 'LIMIT' && (
                         <View className="mt-4 bg-surface border border-primary/20 p-8 rounded-[32px] shadow-2xl shadow-primary/5">
                             <View className="flex-row justify-between items-center mb-6">
-                                <Text className="text-text-secondary text-[10px] uppercase font-black tracking-widest">Target Price Entry</Text>
+                                <Text className="text-text-secondary text-[11px] uppercase font-black tracking-widest">Target Price Entry</Text>
                                 <View className="bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
-                                    <Text className="text-primary text-[8px] font-black uppercase">Pending Order</Text>
+                                    <Text className="text-primary text-[11px] font-black uppercase">Pending Order</Text>
                                 </View>
                             </View>
                             <TextInput
-                                className="text-5xl font-black text-text-primary text-center"
+                                className="text-5xl font-black text-text-primary text-center outline-none"
                                 keyboardType="numeric"
                                 value={limitPrice}
                                 onChangeText={setLimitPrice}
@@ -290,7 +291,7 @@ const TradeScreen = () => {
                                         }}
                                         className="px-4 py-2 bg-background border border-border rounded-xl"
                                     >
-                                        <Text className={`text-[10px] font-black ${perc < 0 ? 'text-error' : 'text-success'}`}>
+                                        <Text className={`text-[11px] font-black ${perc < 0 ? 'text-error' : 'text-success'}`}>
                                             {perc > 0 ? '+' : ''}{perc}%
                                         </Text>
                                     </TouchableOpacity>
@@ -316,7 +317,7 @@ const TradeScreen = () => {
                     {showRiskPanel && (
                         <View className="bg-surface border-x border-b border-border p-6 rounded-b-[32px] -mt-6 pt-10 gap-6">
                             <View>
-                                <Text className="text-text-secondary text-[10px] uppercase font-bold tracking-widest mb-3">Stop Loss (Price)</Text>
+                                <Text className="text-text-secondary text-[11px] uppercase font-bold tracking-widest mb-3">Stop Loss (Price)</Text>
                                 <TextInput
                                     className="bg-background border border-border p-4 rounded-xl text-text-primary font-bold"
                                     placeholder="Set SL Quote"
@@ -337,14 +338,14 @@ const TradeScreen = () => {
                                             }}
                                             className="px-3 py-1 bg-error/10 border border-error/20 rounded-lg"
                                         >
-                                            <Text className="text-error text-[10px] font-bold">-{p}%</Text>
+                                            <Text className="text-error text-[11px] font-bold">-{p}%</Text>
                                         </TouchableOpacity>
                                     ))}
                                 </View>
                             </View>
 
                             <View>
-                                <Text className="text-text-secondary text-[10px] uppercase font-bold tracking-widest mb-3">Target Price</Text>
+                                <Text className="text-text-secondary text-[11px] uppercase font-bold tracking-widest mb-3">Target Price</Text>
                                 <TextInput
                                     className="bg-background border border-border p-4 rounded-xl text-text-primary font-bold"
                                     placeholder="Set Target Quote"
@@ -365,13 +366,13 @@ const TradeScreen = () => {
                                             }}
                                             className="px-3 py-1 bg-success/10 border border-success/20 rounded-lg"
                                         >
-                                            <Text className="text-success text-[10px] font-bold">+{p}%</Text>
+                                            <Text className="text-success text-[11px] font-bold">+{p}%</Text>
                                         </TouchableOpacity>
                                     ))}
                                 </View>
                             </View>
                             <View>
-                                <Text className="text-text-secondary text-[10px] uppercase font-bold tracking-widest mb-3">Trailing Stop Loss (Distance)</Text>
+                                <Text className="text-text-secondary text-[11px] uppercase font-bold tracking-widest mb-3">Trailing Stop Loss (Distance)</Text>
                                 <TextInput
                                     className="bg-background border border-border p-4 rounded-xl text-text-primary font-bold"
                                     placeholder="Set Trailing Distance"
@@ -392,7 +393,7 @@ const TradeScreen = () => {
                                             }}
                                             className="px-3 py-1 bg-primary/10 border border-primary/20 rounded-lg"
                                         >
-                                            <Text className="text-primary text-[10px] font-bold">{p}% Dist</Text>
+                                            <Text className="text-primary text-[11px] font-bold">{p}% Dist</Text>
                                         </TouchableOpacity>
                                     ))}
                                 </View>
@@ -416,13 +417,13 @@ const TradeScreen = () => {
                         {orderType === 'LIMIT' && (
                             <View className="flex-row justify-between">
                                 <Text className="text-text-secondary font-medium">Limit Price</Text>
-                                <Text className="text-text-primary font-bold">₹{parseFloat(limitPrice).toFixed(2)}</Text>
+                                <Text className="text-text-primary font-bold">{inr(parseFloat(limitPrice))}</Text>
                             </View>
                         )}
                         <View className="flex-row justify-between">
                             <Text className="text-text-secondary font-medium">Estimated Value</Text>
                             <Text className="text-text-primary font-bold">
-                                ₹{((orderType === 'LIMIT' ? (parseFloat(limitPrice) || 0) : (livePrice || 0)) * (parseInt(quantity) || 0)).toFixed(2)}
+                                {inr((orderType === 'LIMIT' ? (parseFloat(limitPrice) || 0) : (livePrice || 0)) * (parseInt(quantity) || 0))}
                             </Text>
                         </View>
                         <View className="h-px bg-border my-2" />

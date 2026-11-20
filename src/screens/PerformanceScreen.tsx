@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, StatusBar, Dimensions } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { ChevronLeft, TrendingUp, Target, BarChart3, PieChart as PieIcon, Calendar, ArrowUpRight, ArrowDownRight, Info } from 'lucide-react-native';
+import { ChevronLeft, TrendingUp, Target, BarChart3, PieChart as PieIcon, ArrowUpRight, ArrowDownRight, Info, RefreshCw } from 'lucide-react-native';
+import { ScreenHeader, IconButton } from '../ui';
+import { colors } from '../theme';
 import { API_URL, TEST_USER_ID } from '../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Rect, Circle, G, Line, Text as SvgText, Defs, LinearGradient as SVGGradiant, Stop } from 'react-native-svg';
 
 const { width } = Dimensions.get('window');
@@ -76,7 +77,7 @@ const PerformanceScreen = () => {
                 <View className="flex-row justify-between items-center mb-6">
                     <Text className="text-text-primary font-black text-lg">Equity Curve</Text>
                     <View className="bg-success/10 px-3 py-1 rounded-full">
-                        <Text className="text-success text-[10px] font-bold">+18.5% Total</Text>
+                        <Text className="text-success text-[11px] font-bold">+18.5% Total</Text>
                     </View>
                 </View>
 
@@ -95,8 +96,8 @@ const PerformanceScreen = () => {
                 </Svg>
 
                 <View className="flex-row justify-between mt-4">
-                    <Text className="text-text-muted text-[10px] font-bold uppercase tracking-widest">30 Days Ago</Text>
-                    <Text className="text-text-muted text-[10px] font-bold uppercase tracking-widest">Today</Text>
+                    <Text className="text-text-muted text-[11px] font-bold uppercase tracking-widest">30 Days Ago</Text>
+                    <Text className="text-text-muted text-[11px] font-bold uppercase tracking-widest">Today</Text>
                 </View>
             </View>
         );
@@ -106,21 +107,13 @@ const PerformanceScreen = () => {
         <View className="flex-1 bg-background">
             <StatusBar barStyle="light-content" />
 
-            {/* Header */}
-            <LinearGradient
-                colors={['#1C1F26', '#0E1116']}
-                className="px-6 pt-12 pb-6 border-b border-border/30"
-            >
-                <View className="flex-row items-center justify-between">
-                    <TouchableOpacity onPress={() => navigation.goBack()} className="p-2 -ml-2 bg-white/5 rounded-full">
-                        <ChevronLeft size={24} color="#E1E7ED" />
-                    </TouchableOpacity>
-                    <Text className="text-xl font-black text-text-primary">Performance Analytics</Text>
-                    <TouchableOpacity onPress={fetchAnalytics} className="p-2 bg-white/5 rounded-full">
-                        <Calendar size={20} color="#00E0A1" />
-                    </TouchableOpacity>
-                </View>
-            </LinearGradient>
+            <ScreenHeader
+                title="Performance"
+                subtitle="Closed paper trades"
+                onBack={() => navigation.goBack()}
+                compact
+                right={<IconButton label="Refresh analytics" onPress={fetchAnalytics}><RefreshCw size={18} color={colors.primary} /></IconButton>}
+            />
 
             {loading ? (
                 <View className="flex-1 items-center justify-center">
@@ -144,7 +137,7 @@ const PerformanceScreen = () => {
                         <View className="bg-surface rounded-3xl border border-border p-5 w-[47%]">
                             <View className="flex-row items-center mb-2">
                                 <Target size={14} color="#00E0A1" />
-                                <Text className="text-text-muted text-[10px] font-bold uppercase ml-2">Win Rate</Text>
+                                <Text className="text-text-muted text-[11px] font-bold uppercase ml-2">Win Rate</Text>
                             </View>
                             <Text className="text-text-primary text-2xl font-black">{stats.winRate}%</Text>
                             <View className="mt-2 w-full h-1 bg-background rounded-full overflow-hidden">
@@ -155,16 +148,16 @@ const PerformanceScreen = () => {
                         <View className="bg-surface rounded-3xl border border-border p-5 w-[47%]">
                             <View className="flex-row items-center mb-2">
                                 <TrendingUp size={14} color="#00E0A1" />
-                                <Text className="text-text-muted text-[10px] font-bold uppercase ml-2">Profit Factor</Text>
+                                <Text className="text-text-muted text-[11px] font-bold uppercase ml-2">Profit Factor</Text>
                             </View>
                             <Text className="text-text-primary text-2xl font-black">{stats.profitFactor ?? '—'}</Text>
-                            <Text className="text-success text-[10px] font-bold mt-1">Excellent Range</Text>
+                            <Text className="text-success text-[11px] font-bold mt-1">Excellent Range</Text>
                         </View>
 
                         <View className="bg-surface rounded-3xl border border-border p-5 w-[47%]">
                             <View className="flex-row items-center mb-2">
                                 <ArrowUpRight size={14} color="#10B981" />
-                                <Text className="text-text-muted text-[10px] font-bold uppercase ml-2">Avg Win</Text>
+                                <Text className="text-text-muted text-[11px] font-bold uppercase ml-2">Avg Win</Text>
                             </View>
                             <Text className="text-text-primary text-2xl font-black">₹{stats.avgWin}</Text>
                         </View>
@@ -172,7 +165,7 @@ const PerformanceScreen = () => {
                         <View className="bg-surface rounded-3xl border border-border p-5 w-[47%]">
                             <View className="flex-row items-center mb-2">
                                 <ArrowDownRight size={14} color="#EF4444" />
-                                <Text className="text-text-muted text-[10px] font-bold uppercase ml-2">Avg Loss</Text>
+                                <Text className="text-text-muted text-[11px] font-bold uppercase ml-2">Avg Loss</Text>
                             </View>
                             <Text className="text-text-primary text-2xl font-black">₹{stats.avgLoss}</Text>
                         </View>

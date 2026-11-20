@@ -10,8 +10,8 @@ module.exports = {
                 surfaceHighlight: "#252932", // For hover or active states
                 text: {
                     primary: "#F3F4F6",
-                    secondary: "#9CA3AF",
-                    muted: "#6B7280",
+                    secondary: "#A9B0BC",
+                    muted: "#8B93A1", // ≥4.5:1 on surface (was #6B7280, 3.3:1)
                 },
                 primary: {
                     DEFAULT: "#00E0A1", // Emerald accent from logo

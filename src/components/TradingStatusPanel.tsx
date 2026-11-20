@@ -47,7 +47,7 @@ const Card = ({ icon, title, value, color, children }: {
         <View className="flex-row items-center">
             <View className="w-10 h-10 rounded-2xl items-center justify-center mr-3" style={{ backgroundColor: `${color}1A` }}>{icon}</View>
             <View className="flex-1">
-                <Text className="text-text-muted text-[10px] font-black uppercase tracking-widest">{title}</Text>
+                <Text className="text-text-muted text-[11px] font-black uppercase tracking-widest">{title}</Text>
                 <Text className="font-black text-lg" style={{ color }}>{value}</Text>
             </View>
         </View>
@@ -87,19 +87,19 @@ function FlowsCard({ flows }: { flows: NonNullable<MarketPulse['flows']> }) {
                     <View key={f.key} className="flex-row items-center mt-4">
                         <View className="flex-1">
                             <Text className="text-text-primary text-[12px] font-black">{f.label}</Text>
-                            <Text className="text-text-muted text-[10px] mt-0.5" numberOfLines={1}>
+                            <Text className="text-text-muted text-[11px] mt-0.5" numberOfLines={1}>
                                 Buy {crore(f.buy).replace(/^\+| cr$/g, '')} · Sell {crore(f.sell).replace(/^\+| cr$/g, '')}
                             </Text>
                         </View>
                         {!!f.spark && f.spark.length > 1 && <View className="mr-3"><FlowBars values={f.spark.slice(-10)} /></View>}
                         <View className="items-end" style={{ minWidth: 92 }}>
                             <Text className="text-[14px] font-black" style={{ color, fontVariant: ['tabular-nums'] }}>{crore(f.value)}</Text>
-                            <Text className="text-[10px] font-bold" style={{ color }}>{f.reading}</Text>
+                            <Text className="text-[11px] font-bold" style={{ color }}>{f.reading}</Text>
                         </View>
                     </View>
                 );
             })}
-            <Text className="text-text-muted text-[10px] mt-4 leading-4">
+            <Text className="text-text-muted text-[11px] mt-4 leading-4">
                 NSE provisional cash-market figures, published after the close. Sustained FII selling tends to weigh on the next sessions; DIIs often absorb it.
             </Text>
         </Card>

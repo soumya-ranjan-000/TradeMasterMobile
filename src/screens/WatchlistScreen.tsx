@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, FlatList, TouchableOpacity, ActivityIndicator, ScrollView, RefreshControl } from 'react-native';
-import { Search, Globe, Coins, Briefcase, ChevronRight, TrendingUp, Clock, X } from 'lucide-react-native';
+import { View, Text, TextInput, FlatList, Pressable, ActivityIndicator, ScrollView } from 'react-native';
+import { Search, ChevronRight, X } from 'lucide-react-native';
+import { ScreenHeader, SectionLabel, EmptyState } from '../ui';
+import { colors } from '../theme';
 import { searchSymbols } from '../api';
 import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -27,8 +29,6 @@ const WatchlistScreen = () => {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<SearchResult[]>([]);
     const [loading, setLoading] = useState(false);
-    const [activeCategory, setActiveCategory] = useState('Equity');
-    const [activeRegion, setActiveRegion] = useState('India');
     const [recentSearches, setRecentSearches] = useState<string[]>([]);
 
     useEffect(() => {
@@ -87,132 +87,97 @@ const WatchlistScreen = () => {
         searchStocks(cleanSymbol);
     };
 
-    const categories = ['Global', 'Crypto', 'Equity', 'CFD'];
-    const regions = ['India'];
+    const openStock = (symbol: string) => {
+        addToRecentSearches(symbol);
+        navigation.navigate('StockDetail', { symbol });
+        setQuery('');
+        setResults([]);
+    };
+
+    const Chip = ({ label, onPress }: { label: string; onPress: () => void }) => (
+        <Pressable onPress={onPress} accessibilityRole="button"
+            className="bg-surface px-4 py-2 rounded-full border border-border active:opacity-70">
+            <Text className="text-text-primary font-semibold text-[13px]">{label}</Text>
+        </Pressable>
+    );
 
     return (
-        <View className="flex-1 bg-background pt-12">
-            <View className="px-6 mb-8">
-                <Text className="text-3xl font-black text-text-primary">Exploration</Text>
-            </View>
+        <View className="flex-1 bg-background">
+            <ScreenHeader title="Search" subtitle="NSE stocks by symbol or company name" />
 
-            {/* Category Filters */}
-            <View className="px-4 mb-4">
-                <View className="flex-row justify-between border-b border-border">
-                    {categories.map((cat) => (
-                        <TouchableOpacity
-                            key={cat}
-                            onPress={() => cat === 'Equity' && setActiveCategory(cat)}
-                            disabled={cat !== 'Equity'}
-                            className={`pb-3 px-2 ${activeCategory === cat ? 'border-b-2 border-primary' : ''} ${cat !== 'Equity' ? 'opacity-30' : ''}`}
-                        >
-                            <Text className={`font-bold ${activeCategory === cat ? 'text-text-primary' : 'text-text-muted'}`}>{cat}</Text>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-            </View>
-
-            {/* Region Filters (Horizontal) */}
-            <View className="mb-6">
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} className="pl-4" contentContainerStyle={{ paddingRight: 30 }}>
-                    {regions.map((reg) => (
-                        <TouchableOpacity
-                            key={reg}
-                            onPress={() => setActiveRegion(reg)}
-                            className={`mr-3 px-6 py-2.5 rounded-full border ${activeRegion === reg ? 'bg-surface border-text-primary' : 'bg-transparent border-border'}`}
-                        >
-                            <Text className={`font-medium text-sm ${activeRegion === reg ? 'text-text-primary' : 'text-text-muted'}`}>{reg}</Text>
-                        </TouchableOpacity>
-                    ))}
-                </ScrollView>
-            </View>
-
-            {/* Search Input */}
-            <View className="px-4 mb-4">
-                <View className="bg-surface/50 border border-border rounded-2xl flex-row items-center px-4 py-3">
-                    <Search size={20} color="#6B7280" />
+            <View className="px-5 mb-4">
+                <View className="bg-surface border border-border rounded-2xl flex-row items-center px-4" style={{ minHeight: 50 }}>
+                    <Search size={19} color={colors.textMuted} />
                     <TextInput
-                        placeholder="Search Indian Stocks (e.g. RELIANCE)"
-                        placeholderTextColor="#6B7280"
-                        className="flex-1 ml-3 text-text-primary font-medium outline-none"
+                        placeholder="e.g. RELIANCE or Tata Steel"
+                        placeholderTextColor={colors.textMuted}
+                        className="flex-1 ml-3 text-text-primary font-semibold text-[15px] outline-none py-3"
                         value={query}
                         onChangeText={searchStocks}
+                        autoCapitalize="characters"
+                        autoCorrect={false}
+                        returnKeyType="search"
+                        accessibilityLabel="Search stocks"
                     />
-                    {query.length > 0 && (
-                        <TouchableOpacity onPress={() => { setQuery(''); setResults([]); }}>
-                            <X size={18} color="#6B7280" />
-                        </TouchableOpacity>
+                    {loading ? <ActivityIndicator size="small" color={colors.primary} /> : query.length > 0 && (
+                        <Pressable onPress={() => { setQuery(''); setResults([]); }} accessibilityLabel="Clear search" hitSlop={10}>
+                            <X size={18} color={colors.textMuted} />
+                        </Pressable>
                     )}
                 </View>
             </View>
 
-            {/* Recent Searches */}
-            {query.length === 0 && recentSearches.length > 0 && (
-                <View className="px-4 mb-6">
-                    <View className="flex-row justify-between items-center mb-3">
-                        <View className="flex-row items-center">
-                            <Clock size={14} color="#6B7280" className="mr-2" />
-                            <Text className="text-text-muted font-bold text-xs uppercase tracking-widest">Recent Searches</Text>
+            {query.length === 0 ? (
+                <ScrollView className="flex-1" contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
+                    {recentSearches.length > 0 && (
+                        <View className="mb-6">
+                            <SectionLabel right={
+                                <Pressable onPress={clearRecentSearches} hitSlop={8}><Text className="text-primary text-xs font-bold">Clear</Text></Pressable>
+                            }>Recent</SectionLabel>
+                            <View className="flex-row flex-wrap gap-2">
+                                {recentSearches.map(s => <Chip key={s} label={s.split('.')[0]} onPress={() => selectRecentSearch(s)} />)}
+                            </View>
                         </View>
-                        <TouchableOpacity onPress={clearRecentSearches}>
-                            <Text className="text-primary text-xs font-bold">Clear All</Text>
-                        </TouchableOpacity>
-                    </View>
+                    )}
+                    <SectionLabel>Popular on NSE</SectionLabel>
                     <View className="flex-row flex-wrap gap-2">
-                        {recentSearches.map((s) => (
-                            <TouchableOpacity
-                                key={s}
-                                onPress={() => selectRecentSearch(s)}
-                                className="bg-surface px-4 py-2 rounded-full border border-border"
-                            >
-                                <Text className="text-text-primary font-medium text-sm">{s.split('.')[0]}</Text>
-                            </TouchableOpacity>
-                        ))}
+                        {POPULAR.map(s => <Chip key={s} label={s} onPress={() => openStock(s)} />)}
                     </View>
-                </View>
-            )}
-
-            {/* Search Results Dropdown */}
-            {results.length > 0 && (
-                <View className="mx-4 bg-surface rounded-[24px] border border-border mb-6 max-h-80 overflow-hidden shadow-2xl">
-                    <FlatList
-                        data={results}
-                        keyExtractor={(item) => item.symbol}
-                        showsVerticalScrollIndicator={false}
-                        renderItem={({ item, index }) => (
-                            <TouchableOpacity
-                                className={`p-4 flex-row justify-between items-center active:bg-white/5 ${index !== results.length - 1 ? 'border-b border-border/50' : ''}`}
-                                onPress={() => {
-                                    addToRecentSearches(item.symbol);
-                                    navigation.navigate('StockDetail', { symbol: item.symbol });
-                                    setQuery('');
-                                    setResults([]);
-                                }}
-                            >
-                                <View className="flex-row items-center flex-1">
-                                    <View className="w-10 h-10 rounded-full bg-background border border-border items-center justify-center mr-3">
-                                        <Text className="text-text-primary font-bold text-xs">{item.symbol.substring(0, 2).toUpperCase()}</Text>
-                                    </View>
-                                    <View className="flex-1">
-                                        <Text className="font-black text-text-primary text-base">{item.symbol}</Text>
-                                        <Text className="text-text-muted text-[10px] font-bold uppercase tracking-tighter" numberOfLines={1}>
-                                            {item.description || 'Equity • NSE'}
-                                        </Text>
-                                    </View>
-                                </View>
-                                <View className="bg-background/50 p-2 rounded-xl">
-                                    <ChevronRight size={14} color="#6B7280" />
-                                </View>
-                            </TouchableOpacity>
-                        )}
-                    />
-                </View>
-            )}
-
-            {/* Empty space at bottom */}
-            <View className="h-20" />
+                </ScrollView>
+            ) : results.length > 0 ? (
+                <FlatList
+                    className="flex-1"
+                    data={results}
+                    keyExtractor={(item) => item.symbol}
+                    keyboardShouldPersistTaps="handled"
+                    contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }}
+                    showsVerticalScrollIndicator={false}
+                    renderItem={({ item }) => (
+                        <Pressable onPress={() => openStock(item.symbol)} accessibilityRole="button"
+                            accessibilityLabel={`${item.symbol}${item.description ? ', ' + item.description : ''}`}
+                            className="flex-row items-center py-3 border-b border-border active:opacity-70">
+                            <View className="w-10 h-10 rounded-2xl bg-surface border border-border items-center justify-center mr-3">
+                                <Text className="text-primary font-black text-[15px]">{item.symbol[0]}</Text>
+                            </View>
+                            <View className="flex-1 mr-2">
+                                <Text className="font-black text-text-primary text-[15px]">{item.symbol}</Text>
+                                <Text className="text-text-muted text-xs font-semibold mt-0.5" numberOfLines={1}>
+                                    {item.description ? titleCase(item.description) : 'NSE · Equity'}
+                                </Text>
+                            </View>
+                            <ChevronRight size={18} color={colors.textMuted} />
+                        </Pressable>
+                    )}
+                />
+            ) : !loading && query.length >= 2 ? (
+                <EmptyState icon={<Search size={22} color={colors.textMuted} />} title={`No matches for "${query}"`}
+                    body="Try the NSE symbol (e.g. HDFCBANK) or part of the company name." />
+            ) : null}
         </View>
     );
 };
+
+const POPULAR = ['RELIANCE', 'HDFCBANK', 'ICICIBANK', 'INFY', 'TCS', 'SBIN', 'BHARTIARTL', 'ITC', 'LT', 'TATAMOTORS'];
+const titleCase = (s: string) => s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase()).replace(/\bLtd\b/g, 'Ltd');
 
 export default WatchlistScreen;

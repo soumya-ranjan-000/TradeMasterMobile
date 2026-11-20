@@ -36,19 +36,19 @@ function EventRow({ e }: { e: CalendarEvent }) {
             <Text className="text-text-primary text-[12px] font-black w-12" style={{ fontVariant: ['tabular-nums'] }}>
                 {earnings ? 'Day' : timed ? e.time : (e.time || 'TBA')}
             </Text>
-            <View className="py-0.5 rounded-md mr-2.5 self-start items-center" style={{ backgroundColor: `${tagColor}22`, width: 50 }}>
-                <Text className="text-[9px] font-black" style={{ color: tagColor }}>{tag}</Text>
+            <View className="py-0.5 rounded-md mr-2.5 self-start items-center" style={{ backgroundColor: `${tagColor}22`, width: 60 }}>
+                <Text className="text-[11px] font-black" style={{ color: tagColor }}>{tag}</Text>
             </View>
             <View className="flex-1">
                 <Text className="text-text-primary text-[12px] font-bold" numberOfLines={2}>
                     {earnings ? (e.symbols?.[0] || e.name) : e.name}
                 </Text>
                 {earnings ? (
-                    <Text className="text-text-muted text-[10px] mt-0.5" numberOfLines={2}>
+                    <Text className="text-text-muted text-[11px] mt-0.5" numberOfLines={2}>
                         {e.company ? `${e.company} · ` : ''}{e.action === 'watch' ? 'watch only' : 'no new trades in it all session'}
                     </Text>
                 ) : !!numbers && (
-                    <Text className="text-text-muted text-[10px] mt-0.5">{numbers}</Text>
+                    <Text className="text-text-muted text-[11px] mt-0.5">{numbers}</Text>
                 )}
             </View>
         </View>
@@ -60,7 +60,7 @@ export default function WeekCalendar({ cal, todayIso }: { cal: EconomicCalendar 
     if (!cal.available) {
         return (
             <View className="bg-surface rounded-3xl border border-border p-5 mb-3">
-                <Text className="text-text-muted text-[10px] font-black uppercase tracking-widest">This week</Text>
+                <Text className="text-text-muted text-[11px] font-black uppercase tracking-widest">This week</Text>
                 <Text className="text-text-muted text-[11px] mt-2">Calendar unavailable: the economic events service did not answer.</Text>
             </View>
         );
@@ -86,8 +86,8 @@ export default function WeekCalendar({ cal, todayIso }: { cal: EconomicCalendar 
     return (
         <View className="bg-surface rounded-3xl border border-border p-5 mb-3">
             <View className="flex-row items-baseline justify-between">
-                <Text className="text-text-muted text-[10px] font-black uppercase tracking-widest">Next 7 days</Text>
-                <Text className="text-text-muted text-[10px] font-bold">{total} high-impact · IST</Text>
+                <Text className="text-text-muted text-[11px] font-black uppercase tracking-widest">Next 7 days</Text>
+                <Text className="text-text-muted text-[11px] font-bold">{total} high-impact · IST</Text>
             </View>
             {days.map((d, i) => {
                 const label = d.until ? `${dayLabel(d.date, d.weekday)} – ${dayLabel(d.until.date, d.until.weekday)}`
@@ -110,7 +110,7 @@ export default function WeekCalendar({ cal, todayIso }: { cal: EconomicCalendar 
                     </View>
                 );
             })}
-            <Text className="text-text-muted text-[10px] mt-4 leading-4">
+            <Text className="text-text-muted text-[11px] mt-4 leading-4">
                 Releases for {(cal.coverage?.currencies || ['USD', 'INR', 'EUR', 'CNY', 'JPY']).join(', ')}; results days for the stocks the scanner trades.
             </Text>
         </View>

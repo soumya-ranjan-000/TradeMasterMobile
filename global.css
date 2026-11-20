@@ -15,3 +15,6 @@
         @apply bg-background text-text-primary;
     }
 }
+/* Web build: hide scrollbars like the native app (scrolling still works). */
+* { scrollbar-width: none; }
+*::-webkit-scrollbar { width: 0; height: 0; display: none; }

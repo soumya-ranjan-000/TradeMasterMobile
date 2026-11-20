@@ -1,7 +1,10 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StatusBar, RefreshControl, Pressable } from 'react-native';
+import { ScreenHeader } from '../ui';
+import { colors, signColor } from '../theme';
+import { inr, groupIN, istDate } from '../format';
 import { useFocusEffect } from '@react-navigation/native';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, TrendingUp, TrendingDown } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { API_URL, TEST_USER_ID } from '../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -73,10 +76,10 @@ const CalendarScreen = () => {
         const calendar = [];
 
         // Week Headers
-        const weekDays = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+        const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         const weekHeader = weekDays.map(d => (
             <View key={d} className="flex-1 items-center mb-4">
-                <Text className="text-text-secondary text-[10px] font-black">{d}</Text>
+                <Text className="text-text-secondary text-[11px] font-black">{d}</Text>
             </View>
         ));
 
@@ -96,11 +99,11 @@ const CalendarScreen = () => {
 
                     row.push(
                         <View key={dateStr} className="flex-1 h-20 border border-border/20 p-1">
-                            <Text className="text-text-muted text-[10px] font-bold">{dayNum}</Text>
+                            <Text className="text-text-muted text-[11px] font-bold">{dayNum}</Text>
                             {pnl !== undefined && (
                                 <View className={`flex-1 rounded-lg mt-1 items-center justify-center ${pnl > 0 ? 'bg-success/10' : pnl < 0 ? 'bg-error/10' : 'bg-surfaceHighlight'}`}>
-                                    <Text className={`text-[10px] font-black ${pnl > 0 ? 'text-success' : pnl < 0 ? 'text-error' : 'text-text-muted'}`}>
-                                        {pnl > 0 ? '+' : ''}{pnl.toFixed(0)}
+                                    <Text className={`text-[11px] font-black ${pnl > 0 ? 'text-success' : pnl < 0 ? 'text-error' : 'text-text-muted'}`}>
+                                        {pnl > 0 ? '+' : pnl < 0 ? '−' : ''}{groupIN(Math.abs(pnl), 0)}
                                     </Text>
                                 </View>
                             )}
@@ -129,28 +132,39 @@ const CalendarScreen = () => {
         return acc;
     }, 0);
 
-    return (
-        <View className="flex-1 bg-background pt-12">
-            <StatusBar barStyle="light-content" />
-            <ScrollView
-                className="flex-1 px-4"
-                refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchPnL} tintColor="#00E0A1" />}
-            >
-                <View className="mb-6">
-                    <Text className="text-3xl font-black text-text-primary">Journal</Text>
-                </View>
+    const monthKey = `${currentMonth.getFullYear()}-${(currentMonth.getMonth() + 1).toString().padStart(2, '0')}`;
+    const monthDays = Object.entries(pnlData).filter(([d]) => d.startsWith(monthKey));
+    const winDays = monthDays.filter(([, v]) => v > 0).length;
+    const latest = Object.keys(pnlData).sort().pop();
 
+    return (
+        <View className="flex-1 bg-background">
+            <StatusBar barStyle="light-content" />
+            <ScreenHeader title="Journal" subtitle="Daily P&L from closed paper trades" />
+            <ScrollView
+                className="flex-1"
+                contentContainerStyle={{ paddingHorizontal: 20 }}
+                showsVerticalScrollIndicator={false}
+                refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchPnL} tintColor={colors.primary} />}
+            >
                 {/* Monthly Summary */}
-                <View className="bg-surface rounded-[32px] border border-border p-6 mb-8 flex-row items-center justify-between">
-                    <View>
-                        <Text className="text-text-muted text-xs font-bold uppercase tracking-widest mb-1">Monthly P&L</Text>
-                        <Text className={`text-2xl font-black ${totalMonthPnL > 0 ? 'text-success' : totalMonthPnL < 0 ? 'text-error' : 'text-text-primary'}`}>
-                            {totalMonthPnL > 0 ? '+' : ''}₹{totalMonthPnL.toLocaleString()}
-                        </Text>
-                    </View>
-                    <View className={`w-12 h-12 rounded-2xl items-center justify-center ${totalMonthPnL > 0 ? 'bg-success/10' : totalMonthPnL < 0 ? 'bg-error/10' : 'bg-surfaceHighlight'}`}>
-                        {totalMonthPnL > 0 ? <TrendingUp size={24} color="#10B981" /> : totalMonthPnL < 0 ? <TrendingDown size={24} color="#EF4444" /> : <CalendarIcon size={24} color="#6B7280" />}
-                    </View>
+                <View className="bg-surface rounded-3xl border border-border p-4 mb-5">
+                    <Text className="text-text-muted text-xs font-semibold">P&L this month</Text>
+                    <Text className="text-3xl font-black mt-0.5" style={{ color: signColor(totalMonthPnL) === colors.textMuted ? colors.textPrimary : signColor(totalMonthPnL), fontVariant: ['tabular-nums'] }}>
+                        {inr(totalMonthPnL, { sign: true })}
+                    </Text>
+                    <Text className="text-text-muted text-xs font-semibold mt-1">
+                        {monthDays.length
+                            ? `${monthDays.length} trading ${monthDays.length === 1 ? 'day' : 'days'} · ${winDays} in profit`
+                            : 'No closed trades this month'}
+                    </Text>
+                    {!monthDays.length && latest && (
+                        <Pressable onPress={() => { const [y, m] = latest.split('-').map(Number); setCurrentMonth(new Date(y, m - 1, 1)); }}
+                            className="flex-row items-center mt-3 self-start" accessibilityRole="button">
+                            <Text className="text-primary text-[13px] font-bold">Jump to latest trades ({istDate(`${latest}T12:00:00+05:30`)})</Text>
+                            <ChevronRight size={15} color={colors.primary} />
+                        </Pressable>
+                    )}
                 </View>
 
                 {renderHeader()}
@@ -160,11 +174,11 @@ const CalendarScreen = () => {
                 <View className="flex-row justify-center gap-6 mt-8 mb-12">
                     <View className="flex-row items-center">
                         <View className="w-3 h-3 rounded-full bg-success mr-2" />
-                        <Text className="text-text-muted text-xs font-bold uppercase tracking-widest">Profit Day</Text>
+                        <Text className="text-text-muted text-xs font-semibold">Profit day</Text>
                     </View>
                     <View className="flex-row items-center">
                         <View className="w-3 h-3 rounded-full bg-error mr-2" />
-                        <Text className="text-text-muted text-xs font-bold uppercase tracking-widest">Loss Day</Text>
+                        <Text className="text-text-muted text-xs font-semibold">Loss day</Text>
                     </View>
                 </View>
             </ScrollView>

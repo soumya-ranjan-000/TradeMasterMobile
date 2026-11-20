@@ -1,4 +1,7 @@
 import React, { useState, useCallback } from 'react';
+import { ScreenHeader, IconButton } from '../ui';
+import { colors, signColor } from '../theme';
+import { inr } from '../format';
 import { View, Text, FlatList, RefreshControl, TouchableOpacity, ScrollView, StatusBar, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
 import { useFocusEffect, useNavigation, CompositeNavigationProp, useIsFocused } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -145,7 +148,7 @@ const PortfolioScreen = () => {
             if (response.ok) {
                 const result = await response.json();
                 const pnl = result.realized_pnl || 0;
-                const pnlText = pnl >= 0 ? `+₹${pnl.toFixed(2)}` : `-₹${Math.abs(pnl).toFixed(2)}`;
+                const pnlText = inr(pnl, { sign: true });
                 Alert.alert("Position Closed", `Exited ${symbol} with ${pnl >= 0 ? 'Profit' : 'Loss'} of ${pnlText}`);
                 fetchData();
             } else {
@@ -303,24 +306,24 @@ const PortfolioScreen = () => {
                             <View>
                                 <View className="flex-row items-center">
                                     <Text className="text-text-primary font-bold text-sm">{item.symbol}</Text>
-                                    <Text className="text-text-muted text-[8px] font-black ml-2 px-1.5 py-0.5 rounded bg-background border border-border">
+                                    <Text className="text-text-muted text-[11px] font-black ml-2 px-1.5 py-0.5 rounded bg-background border border-border">
                                         {item.product === 'DELIVERY' ? 'CNC' : 'MIS'}{item.quantity < 0 ? ' • SHORT' : ''}
                                     </Text>
                                     {item.source === 'scanner' && (
-                                        <Text className="text-primary text-[8px] font-black ml-1 px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">
+                                        <Text className="text-primary text-[11px] font-black ml-1 px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">
                                             SCANNER{item.strategy ? ` • ${item.strategy}` : ''}
                                         </Text>
                                     )}
                                 </View>
-                                <Text className="text-text-muted text-[9px] font-bold">Avg. ₹{(item.average_price || 0).toFixed(2)} • LTP: ₹{(item.current_ltp || 0).toFixed(2)}</Text>
+                                <Text className="text-text-muted text-[11px] font-bold">Avg {inr(item.average_price || 0)} · LTP {inr(item.current_ltp || 0)}</Text>
                             </View>
                         </View>
                         <View className="items-end">
                             <Text className="text-text-primary font-bold text-sm">{item.quantity} {item.quantity === 1 ? 'Share' : 'Shares'}</Text>
                             <View className="flex-row items-center mt-0.5">
                                 {(item.unrealized_pnl || 0) >= -0.005 ? <ArrowUpRight size={10} color="#10B981" /> : <ArrowDownRight size={10} color="#EF4444" />}
-                                <Text className={`text-[10px] font-bold ml-1 ${(item.unrealized_pnl || 0) >= -0.005 ? 'text-success' : 'text-error'}`}>
-                                    {(item.unrealized_pnl || 0) >= -0.005 ? '+' : '-'}₹{Math.abs(item.unrealized_pnl || 0).toFixed(2)}
+                                <Text className={`text-[11px] font-bold ml-1 ${(item.unrealized_pnl || 0) >= -0.005 ? 'text-success' : 'text-error'}`}>
+                                    {inr(item.unrealized_pnl || 0, { sign: true })}
                                 </Text>
                             </View>
                         </View>
@@ -333,17 +336,17 @@ const PortfolioScreen = () => {
 
                         <View className="flex-row justify-between items-end mb-3">
                             <View>
-                                <Text className="text-text-secondary text-[8px] uppercase font-bold tracking-widest">Invested</Text>
-                                <Text className="text-text-primary font-bold text-xs">₹{(item.quantity * item.average_price).toLocaleString()}</Text>
+                                <Text className="text-text-secondary text-[11px] uppercase font-bold tracking-widest">Invested</Text>
+                                <Text className="text-text-primary font-bold text-xs">{inr(item.quantity * item.average_price)}</Text>
                             </View>
                             <View className="items-end">
-                                <Text className="text-text-secondary text-[8px] uppercase font-bold tracking-widest">Day Change</Text>
+                                <Text className="text-text-secondary text-[11px] uppercase font-bold tracking-widest">Day Change</Text>
                                 <View className="flex-row items-center">
                                     <Text className={`font-bold text-xs ${(item.day_change_perc || 0) >= 0 ? 'text-success' : 'text-error'}`}>
                                         {(item.day_change_perc || 0) >= 0 ? '+' : '-'}{(item.day_change_perc || 0).toFixed(2)}%
                                     </Text>
-                                    <Text className={`text-[9px] font-bold ml-1 ${(item.day_change_perc || 0) >= 0 ? 'text-success opacity-80' : 'text-error opacity-80'}`}>
-                                        ({(item.day_change_perc || 0) >= 0 ? '+' : '-'}₹{Math.abs((item.day_change_abs || 0) * item.quantity).toFixed(2)})
+                                    <Text className={`text-[11px] font-bold ml-1 ${(item.day_change_perc || 0) >= 0 ? 'text-success opacity-80' : 'text-error opacity-80'}`}>
+                                        ({inr((item.day_change_abs || 0) * item.quantity, { sign: true })})
                                     </Text>
                                 </View>
                             </View>
@@ -354,7 +357,7 @@ const PortfolioScreen = () => {
                                 onPress={() => quickExit(item.symbol, item.current_ltp || item.average_price, item.position_id)}
                                 className="flex-1 bg-error/10 border border-error/20 py-2 rounded-lg items-center justify-center"
                             >
-                                <Text className="text-error font-black text-[10px] uppercase tracking-wider">Quick Exit</Text>
+                                <Text className="text-error font-black text-[11px] uppercase tracking-wider">Quick Exit</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 onPress={() => {
@@ -365,23 +368,23 @@ const PortfolioScreen = () => {
                                 }}
                                 className="flex-1 bg-surface border border-border py-2 rounded-lg items-center justify-center"
                             >
-                                <Text className="text-text-primary font-bold text-[10px] uppercase tracking-wider">Modify</Text>
+                                <Text className="text-text-primary font-bold text-[11px] uppercase tracking-wider">Modify</Text>
                             </TouchableOpacity>
                         </View>
 
                         <View className="flex-row justify-between bg-background/50 rounded-lg p-2 px-3">
                             <View className="flex-row items-center">
                                 <ShieldCheck size={10} color="#6B7280" />
-                                <Text className="text-text-muted text-[8px] font-bold ml-1 uppercase">SL: {item.stop_loss ? `₹${item.stop_loss}` : 'NONE'}</Text>
+                                <Text className="text-text-muted text-[11px] font-bold ml-1 uppercase">SL: {item.stop_loss ? inr(item.stop_loss) : 'NONE'}</Text>
                             </View>
                             <View className="flex-row items-center">
                                 <Target size={10} color="#6B7280" />
-                                <Text className="text-text-muted text-[8px] font-bold ml-1 uppercase">TP: {item.target ? `₹${item.target.toFixed(2)}` : 'NONE'}</Text>
+                                <Text className="text-text-muted text-[11px] font-bold ml-1 uppercase">TP: {item.target ? inr(item.target) : 'NONE'}</Text>
                             </View>
                             {item.trailing_sl && (
                                 <View className="flex-row items-center">
                                     <History size={10} color="#6B7280" />
-                                    <Text className="text-text-muted text-[8px] font-bold ml-1 uppercase">TSL: {item.trailing_sl.toFixed(2)}</Text>
+                                    <Text className="text-text-muted text-[11px] font-bold ml-1 uppercase">TSL: {item.trailing_sl.toFixed(2)}</Text>
                                 </View>
                             )}
                         </View>
@@ -395,9 +398,9 @@ const PortfolioScreen = () => {
         if (item.itemType === 'HEADER') {
             return (
                 <View className="py-4 px-2 flex-row justify-between items-center">
-                    <Text className="text-text-muted font-black text-[10px] uppercase tracking-[2px]">{item.title}</Text>
+                    <Text className="text-text-muted font-black text-[11px] uppercase tracking-[2px]">{item.title}</Text>
                     <View className="bg-surface px-2 py-0.5 rounded-md border border-border/50">
-                        <Text className="text-text-muted text-[8px] font-bold">{item.count} {item.count === 1 ? 'Trade' : 'Trades'}</Text>
+                        <Text className="text-text-muted text-[11px] font-bold">{item.count} {item.count === 1 ? 'Trade' : 'Trades'}</Text>
                     </View>
                 </View>
             );
@@ -418,17 +421,17 @@ const PortfolioScreen = () => {
                                 </View>
                                 <View>
                                     <Text className="text-text-primary font-bold text-sm">{item.symbol}</Text>
-                                    <Text className="text-primary text-[8px] font-black uppercase tracking-widest">
+                                    <Text className="text-primary text-[11px] font-black uppercase tracking-widest">
                                         PENDING {item.order_type} ORDER
                                     </Text>
                                 </View>
                             </View>
                             <View className="items-end">
                                 <View className={`px-2 py-0.5 rounded-md mb-1 ${item.side === 'BUY' ? 'bg-success/10' : 'bg-error/10'}`}>
-                                    <Text className={`text-[8px] font-black ${item.side === 'BUY' ? 'text-success' : 'text-error'}`}>{item.side}</Text>
+                                    <Text className={`text-[11px] font-black ${item.side === 'BUY' ? 'text-success' : 'text-error'}`}>{item.side}</Text>
                                 </View>
-                                <Text className="text-text-primary font-black text-xs">₹{item.price?.toFixed(2)}</Text>
-                                <Text className="text-text-muted text-[8px] mt-0.5">{new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                                <Text className="text-text-primary font-black text-xs">{inr(item.price)}</Text>
+                                <Text className="text-text-muted text-[11px] mt-0.5">{new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
                             </View>
                         </View>
                     </TouchableOpacity>
@@ -452,17 +455,17 @@ const PortfolioScreen = () => {
                             </View>
                             <View>
                                 <Text className="text-text-primary font-bold text-sm">{item.symbol}</Text>
-                                <Text className="text-text-muted text-[8px] font-bold uppercase tracking-widest">
+                                <Text className="text-text-muted text-[11px] font-bold uppercase tracking-widest">
                                     {item.status} TRADE • {item.orders.length} EXECUTIONS
                                 </Text>
                             </View>
                         </View>
                         <View className="items-end">
                             <Text className={`font-black text-sm ${item.realized_pnl >= 0 ? 'text-success' : 'text-error'}`}>
-                                {item.realized_pnl >= 0 ? '+' : '-'}₹{Math.abs(item.realized_pnl).toFixed(2)}
+                                {inr(item.realized_pnl, { sign: true })}
                             </Text>
                             <View className="flex-row items-center">
-                                <Text className="text-text-muted text-[8px] mr-1">{new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                                <Text className="text-text-muted text-[11px] mr-1">{new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
                                 {isExpanded ? <ChevronDown size={12} color="#6B7280" /> : <ChevronRight size={12} color="#6B7280" />}
                             </View>
                         </View>
@@ -479,21 +482,21 @@ const PortfolioScreen = () => {
                             >
                                 <View className="flex-row items-center">
                                     <View className={`px-2 py-0.5 rounded-md mr-3 ${ord.side === 'BUY' ? 'bg-success/10' : 'bg-error/10'}`}>
-                                        <Text className={`text-[9px] font-black ${ord.side === 'BUY' ? 'text-success' : 'text-error'}`}>{ord.side}</Text>
+                                        <Text className={`text-[11px] font-black ${ord.side === 'BUY' ? 'text-success' : 'text-error'}`}>{ord.side}</Text>
                                     </View>
                                     <View>
                                         <Text className="text-text-primary text-xs font-bold">
-                                            {ord.side === 'BUY' ? 'Bought' : 'Sold'} {ord.quantity} @ ₹{ord.average_fill_price.toFixed(2)}
+                                            {ord.side === 'BUY' ? 'Bought' : 'Sold'} {ord.quantity} @ {inr(ord.average_fill_price)}
                                         </Text>
                                         <View className="flex-row items-center mt-0.5">
-                                            <Text className="text-text-muted text-[9px] font-bold uppercase tracking-tighter">Value: ₹{(ord.quantity * ord.average_fill_price).toLocaleString()}</Text>
-                                            <Text className="text-text-muted text-[9px] ml-2 opacity-50">• {new Date(ord.created_at).toLocaleTimeString()}</Text>
+                                            <Text className="text-text-muted text-[11px] font-bold uppercase tracking-tighter">Value {inr(ord.quantity * ord.average_fill_price)}</Text>
+                                            <Text className="text-text-muted text-[11px] ml-2 opacity-50">• {new Date(ord.created_at).toLocaleTimeString()}</Text>
                                         </View>
                                     </View>
                                 </View>
                                 {ord.realized_pnl !== undefined && ord.realized_pnl !== null ? (
-                                    <Text className={`text-[10px] font-black ${(ord.realized_pnl || 0) >= -0.005 ? 'text-success' : 'text-error'}`}>
-                                        {(ord.realized_pnl || 0) >= -0.005 ? '+' : '-'}₹{Math.abs(ord.realized_pnl || 0).toFixed(2)}
+                                    <Text className={`text-[11px] font-black ${(ord.realized_pnl || 0) >= -0.005 ? 'text-success' : 'text-error'}`}>
+                                        {inr(ord.realized_pnl || 0, { sign: true })}
                                     </Text>
                                 ) : null}
                             </TouchableOpacity>
@@ -505,59 +508,44 @@ const PortfolioScreen = () => {
     };
 
     return (
-        <View className="flex-1 bg-background pt-10">
+        <View className="flex-1 bg-background">
             <StatusBar barStyle="light-content" backgroundColor="#0E1116" />
 
-            <View className="px-4 mb-3">
-                <Text className="text-2xl font-black text-text-primary">Portfolio</Text>
-            </View>
+            <ScreenHeader
+                title="Portfolio"
+                subtitle="Paper trading"
+                right={<IconButton label="Performance analytics" onPress={() => navigation.navigate('Performance')}>
+                    <BarChart3 size={18} color={colors.primary} />
+                </IconButton>}
+            />
 
-            {/* Compact Summary Card */}
-            <View className="px-4 mb-4">
-                <LinearGradient
-                    colors={['#151921', '#0B0E11']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    className="rounded-[24px] p-4 border border-border/50 shadow-lg relative overflow-hidden"
-                >
-                    <View className="flex-row justify-between mb-3">
-                        <View>
-                            <Text className="text-text-secondary text-[10px] font-bold uppercase tracking-widest">Total Value</Text>
-                            <Text className="text-text-primary text-2xl font-black mt-0.5">₹{currentVal.toLocaleString()}</Text>
+            {/* Summary: what the account is worth and how it splits */}
+            <View className="px-5 mb-4">
+                <View className="bg-surface rounded-3xl border border-border p-4">
+                    <Text className="text-text-muted text-xs font-semibold">Account value</Text>
+                    <Text className="text-text-primary text-[28px] font-black mt-0.5" style={{ fontVariant: ['tabular-nums'] }}>
+                        {account ? inr((account.balance ?? 0) + (currentVal || 0)) : '—'}
+                    </Text>
+                    <Text className="text-[13px] font-bold" style={{ color: signColor(totalPnLToday) }}>
+                        {inr(totalPnLToday || 0, { sign: true })} today
+                    </Text>
+                    <View className="flex-row mt-3 pt-3 border-t border-border">
+                        <View className="flex-1">
+                            <Text className="text-text-muted text-xs font-semibold">Cash</Text>
+                            <Text className="text-text-primary text-sm font-bold mt-0.5" style={{ fontVariant: ['tabular-nums'] }}>{account ? inr(account.balance, { compact: true }) : '—'}</Text>
                         </View>
-                        <View className={`w-10 h-10 rounded-xl items-center justify-center ${(currentPortfolioPnL || 0) >= -0.005 ? 'bg-success/10' : 'bg-error/10'}`}>
-                            {(currentPortfolioPnL || 0) >= -0.005 ? <ArrowUpRight size={20} color="#10B981" /> : <ArrowDownRight size={20} color="#EF4444" />}
+                        <View className="flex-1">
+                            <Text className="text-text-muted text-xs font-semibold">In positions</Text>
+                            <Text className="text-text-primary text-sm font-bold mt-0.5" style={{ fontVariant: ['tabular-nums'] }}>{inr(currentVal || 0, { compact: true })}</Text>
                         </View>
-                    </View>
-
-                    <TouchableOpacity
-                        onPress={() => navigation.navigate('Performance')}
-                        className="bg-white/10 py-2 rounded-xl items-center mb-4 border border-white/10"
-                    >
-                        <View className="flex-row items-center">
-                            <BarChart3 size={12} color="#00E0A1" className="mr-2" />
-                            <Text className="text-white text-[10px] font-black uppercase tracking-widest">Analytics</Text>
-                        </View>
-                    </TouchableOpacity>
-
-                    <View className="flex-row justify-between">
-                        <View>
-                            <Text className="text-text-muted text-[8px] font-bold uppercase mb-0.5">Total P&L</Text>
-                            <Text className={`text-sm font-black ${(currentPortfolioPnL || 0) >= -0.005 ? 'text-success' : 'text-error'}`}>
-                                {(currentPortfolioPnL || 0) >= -0.005 ? '+' : '-'}₹{Math.abs(currentPortfolioPnL || 0).toLocaleString()} ({currentPortfolioPerc.toFixed(2)}%)
-                            </Text>
-                        </View>
-                        <View className="items-end">
-                            <Text className="text-text-muted text-[8px] font-bold uppercase mb-0.5">Today</Text>
-                            <Text className={`text-sm font-black ${(totalPnLToday || 0) >= -0.005 ? 'text-success' : 'text-error'}`}>
-                                {(totalPnLToday || 0) >= -0.005 ? '+' : '-'}₹{Math.abs(totalPnLToday || 0).toLocaleString()}
+                        <View className="flex-1 items-end">
+                            <Text className="text-text-muted text-xs font-semibold">Open P&L</Text>
+                            <Text className="text-sm font-bold mt-0.5" style={{ color: signColor(currentPortfolioPnL), fontVariant: ['tabular-nums'] }}>
+                                {inr(currentPortfolioPnL || 0, { sign: true, compact: true })}
                             </Text>
                         </View>
                     </View>
-
-                    {/* Decorative Element */}
-                    <View className="absolute -bottom-10 -right-10 w-32 h-32 rounded-full bg-primary/5 border border-primary/10" />
-                </LinearGradient>
+                </View>
             </View>
 
             {/* Compact Premium Selector */}
@@ -819,17 +807,17 @@ const PortfolioScreen = () => {
                         <View className="gap-6">
                             <View className="flex-row justify-between items-center bg-background/50 p-5 rounded-3xl border border-border/50">
                                 <View>
-                                    <Text className="text-text-secondary text-[10px] uppercase font-bold tracking-widest mb-1">Quantity</Text>
+                                    <Text className="text-text-secondary text-[11px] uppercase font-bold tracking-widest mb-1">Quantity</Text>
                                     <Text className="text-text-primary text-xl font-black">
                                         {selectedOrder?.status === 'PENDING' ? selectedOrder?.quantity : selectedOrder?.filled_quantity} Shares
                                     </Text>
                                 </View>
                                 <View className="items-end">
-                                    <Text className="text-text-secondary text-[10px] uppercase font-bold tracking-widest mb-1">
+                                    <Text className="text-text-secondary text-[11px] uppercase font-bold tracking-widest mb-1">
                                         {selectedOrder?.status === 'PENDING' ? 'Limit Price' : 'Avg. Fill Price'}
                                     </Text>
                                     <Text className="text-text-primary text-xl font-black">
-                                        ₹{(selectedOrder?.status === 'PENDING' ? selectedOrder?.price : selectedOrder?.average_fill_price)?.toFixed(2)}
+                                        {inr(selectedOrder?.status === 'PENDING' ? selectedOrder?.price : selectedOrder?.average_fill_price)}
                                     </Text>
                                 </View>
                             </View>
@@ -840,8 +828,8 @@ const PortfolioScreen = () => {
                                         {selectedOrder?.side === 'BUY' ? 'Estimated Investment' : 'Target Value'}
                                     </Text>
                                     <Text className="text-text-primary font-black">
-                                        ₹{((selectedOrder?.status === 'PENDING' ? selectedOrder?.quantity : (selectedOrder?.filled_quantity || 0)) *
-                                            (selectedOrder?.status === 'PENDING' ? selectedOrder?.price : (selectedOrder?.average_fill_price || 0))).toLocaleString()}
+                                        {inr((selectedOrder?.status === 'PENDING' ? selectedOrder?.quantity : (selectedOrder?.filled_quantity || 0)) *
+                                            (selectedOrder?.status === 'PENDING' ? selectedOrder?.price : (selectedOrder?.average_fill_price || 0)))}
                                     </Text>
                                 </View>
                                 <View className="flex-row justify-between">
@@ -856,7 +844,7 @@ const PortfolioScreen = () => {
                                 {(selectedOrder?.charges || 0) > 0 && (
                                     <View className="flex-row justify-between">
                                         <Text className="text-text-secondary font-bold">Charges</Text>
-                                        <Text className="text-text-primary font-bold">₹{Number(selectedOrder?.charges).toFixed(2)}</Text>
+                                        <Text className="text-text-primary font-bold">{inr(Number(selectedOrder?.charges))}</Text>
                                     </View>
                                 )}
                                 {selectedOrder?.source && selectedOrder?.source !== 'manual' && (
@@ -871,7 +859,7 @@ const PortfolioScreen = () => {
                                         <View className="flex-row justify-between">
                                             <Text className="text-text-secondary font-bold">Realized P&L (gross)</Text>
                                             <Text className={`font-black ${(selectedOrder?.realized_pnl || 0) >= 0 ? 'text-success' : 'text-error'}`}>
-                                                {(selectedOrder?.realized_pnl || 0) >= 0 ? '+' : '-'}₹{Math.abs(selectedOrder?.realized_pnl || 0).toFixed(2)}
+                                                {inr(selectedOrder?.realized_pnl || 0, { sign: true })}
                                             </Text>
                                         </View>
                                     </>
@@ -879,7 +867,7 @@ const PortfolioScreen = () => {
 
                                 {selectedOrder?.error_message && (
                                     <View className="mt-2 p-3 bg-primary/10 rounded-xl border border-primary/20">
-                                        <Text className="text-primary text-[10px] font-bold uppercase tracking-widest text-center">
+                                        <Text className="text-primary text-[11px] font-bold uppercase tracking-widest text-center">
                                             Note: {selectedOrder?.error_message}
                                         </Text>
                                     </View>
@@ -913,7 +901,7 @@ const PortfolioScreen = () => {
                         {/* Summary Footer */}
                         <View className="mt-8 flex-row items-center justify-center gap-2 opacity-50">
                             <ShieldCheck size={14} color="#6B7280" />
-                            <Text className="text-text-muted text-[10px] font-bold uppercase">Transaction Verified • Paper Trading Network</Text>
+                            <Text className="text-text-muted text-[11px] font-bold uppercase">Transaction Verified • Paper Trading Network</Text>
                         </View>
                     </View>
                 </View>

@@ -18,6 +18,8 @@ const LoginScreen = () => {
     const [loading, setLoading] = useState(false);
     const [traderId, setTraderId] = useState('');
     const [pin, setPin] = useState('');
+    const [pinError, setPinError] = useState<string | null>(null);
+    const [idError, setIdError] = useState<string | null>(null);
     const [realUser, setRealUser] = useState<any>(null);
 
     // The app no longer reads the broker session (that needs the Breeze key,
@@ -34,9 +36,10 @@ const LoginScreen = () => {
 
     const continueWithId = async () => {
         const id = traderId.trim();
-        if (!id) return Alert.alert("Error", "Please enter your Trader ID");
+        setIdError(null);
+        if (!id) return setIdError('Enter your Trader ID.');
         if (!/^[A-Za-z0-9_.@-]{3,64}$/.test(id)) {
-            return Alert.alert("Error", "Use 3-64 letters, digits or . _ @ -");
+            return setIdError('Use 3–64 letters, digits or . _ @ -');
         }
         try {
             setLoading(true);
@@ -66,7 +69,7 @@ const LoginScreen = () => {
             await AsyncStorage.setItem('IS_REAL', 'true');
             navigation.replace('MainTabs');
         } else {
-            Alert.alert("Incorrect PIN", "Please enter the correct app PIN. Default is 0000.");
+            setPinError('Incorrect PIN. Try again.');
             setPin('');
         }
     };
@@ -130,26 +133,28 @@ const LoginScreen = () => {
                 <Text className="text-text-muted mt-2 font-medium">Your paper portfolio, orders and scanner trades are stored under this ID. Use the same ID on every device.</Text>
             </View>
 
-            <View className="bg-surface border border-border rounded-2xl p-4 flex-row items-center mb-6 shadow-sm">
+            <View className={`bg-surface border rounded-2xl p-4 flex-row items-center ${idError ? 'border-error/60 mb-2' : 'border-border mb-6'}`}>
                 <Key size={20} color="#00E0A1" />
                 <TextInput
                     className="flex-1 ml-3 text-text-primary font-bold"
                     placeholder="Trader ID"
                     placeholderTextColor="#6B7280"
                     value={traderId}
-                    onChangeText={setTraderId}
+                    onChangeText={(v) => { setTraderId(v); setIdError(null); }}
+                    accessibilityLabel="Trader ID"
                     autoCapitalize="none"
                     autoCorrect={false}
                     onSubmitEditing={continueWithId}
                 />
             </View>
 
+            {!!idError && <Text className="text-error text-[13px] font-semibold mb-4" accessibilityLiveRegion="polite">{idError}</Text>}
             <TouchableOpacity
                 onPress={continueWithId}
                 disabled={loading}
                 className={`py-5 rounded-2xl items-center ${loading ? 'bg-primary/50' : 'bg-primary shadow-xl shadow-primary/30'}`}
             >
-                {loading ? <ActivityIndicator color="white" /> : <Text className="text-white font-black text-lg uppercase">Continue</Text>}
+                {loading ? <ActivityIndicator color="white" /> : <Text className="text-background font-black text-lg">Continue</Text>}
             </TouchableOpacity>
         </View>
     );
@@ -160,20 +165,25 @@ const LoginScreen = () => {
                 <View className="w-16 h-16 bg-surface border border-border rounded-full items-center justify-center mb-6">
                     <Lock size={30} color="#E1E7ED" />
                 </View>
-                <Text className="text-text-primary text-3xl font-black">Security Pin</Text>
-                <Text className="text-text-muted mt-2 text-center">Hello {realUser?.name || realUser?.id || 'Trader'}, enter your app PIN to continue.</Text>
+                <Text className="text-text-primary text-3xl font-black">Enter PIN</Text>
+                <Text className="text-text-muted mt-2 text-center">
+                    Welcome back{realUser?.name ? `, ${String(realUser.name).split(/\s+/)[0].toLowerCase().replace(/^./, (c: string) => c.toUpperCase())}` : ''}. Enter your 4-digit app PIN.
+                </Text>
             </View>
 
             <TextInput
-                className="bg-surface border-2 border-primary/30 p-6 rounded-[24px] text-text-primary text-4xl font-black text-center tracking-[10px] mb-8"
-                placeholder="****"
-                placeholderTextColor="#2A2E39"
+                className={`bg-surface border-2 p-6 rounded-3xl text-text-primary text-4xl font-black text-center tracking-[10px] outline-none ${pinError ? 'border-error/60 mb-3' : 'border-primary/30 mb-8'}`}
+                placeholder="••••"
+                placeholderTextColor="#3A3F4B"
+                autoFocus
+                accessibilityLabel="App PIN"
                 keyboardType="numeric"
                 secureTextEntry
                 maxLength={4}
                 value={pin}
                 onChangeText={(val) => {
-                    setPin(val);
+                    setPinError(null);
+                    setPin(val.replace(/\D/g, ''));
                     if (val.length === 4) {
                         // Small delay for better UX
                         setTimeout(() => verifyPin(val), 100);
@@ -181,8 +191,9 @@ const LoginScreen = () => {
                 }}
             />
 
-            <TouchableOpacity onPress={() => setView('CHOICE')}>
-                <Text className="text-text-muted text-center font-bold">Switch Account</Text>
+            {!!pinError && <Text className="text-error text-center font-semibold mb-5" accessibilityLiveRegion="polite">{pinError}</Text>}
+            <TouchableOpacity onPress={() => { setView('CHOICE'); setPin(''); setPinError(null); }} className="self-center py-2 px-4">
+                <Text className="text-text-muted text-center font-bold">Switch account</Text>
             </TouchableOpacity>
         </View>
     );

@@ -54,9 +54,9 @@ const BiasGauge = ({ score }: { score: number }) => {
                 <View style={{ position: 'absolute', left: '50%', width: 2, marginLeft: -1, top: 0, bottom: 0, backgroundColor: MUTED }} />
             </View>
             <View className="flex-row justify-between mt-1">
-                <Text className="text-text-muted text-[8px] font-bold">≤ −1%  BEARISH</Text>
-                <Text className="text-text-muted text-[8px] font-bold">FLAT</Text>
-                <Text className="text-text-muted text-[8px] font-bold">BULLISH  ≥ +1%</Text>
+                <Text className="text-text-muted text-[11px] font-bold">≤ −1%  BEARISH</Text>
+                <Text className="text-text-muted text-[11px] font-bold">FLAT</Text>
+                <Text className="text-text-muted text-[11px] font-bold">BULLISH  ≥ +1%</Text>
             </View>
         </View>
     );
@@ -64,8 +64,8 @@ const BiasGauge = ({ score }: { score: number }) => {
 
 const SectionTitle = ({ children, right }: { children: React.ReactNode; right?: string }) => (
     <View className="flex-row items-end justify-between mt-6 mb-3">
-        <Text className="text-text-muted text-[10px] font-black uppercase tracking-widest">{children}</Text>
-        {!!right && <Text className="text-text-muted text-[9px] font-bold">{right}</Text>}
+        <Text className="text-text-muted text-[11px] font-black uppercase tracking-widest">{children}</Text>
+        {!!right && <Text className="text-text-muted text-[11px] font-bold">{right}</Text>}
     </View>
 );
 
@@ -118,11 +118,11 @@ export default function MarketPulse({ active }: { active: boolean }) {
             <View className="bg-surface rounded-3xl border border-border p-5">
                 <View className="flex-row justify-between items-start">
                     <View>
-                        <Text className="text-text-muted text-[10px] font-black uppercase tracking-widest">India market bias</Text>
+                        <Text className="text-text-muted text-[11px] font-black uppercase tracking-widest">India market bias</Text>
                         <Text className="font-black text-3xl mt-1" style={{ color: bc }}>{pulse.bias?.label || '—'}</Text>
                     </View>
                     <View className="items-end">
-                        <Text className="text-text-muted text-[9px] font-bold uppercase">Weighted move</Text>
+                        <Text className="text-text-muted text-[11px] font-bold uppercase">Weighted move</Text>
                         <Text className="font-black text-lg" style={{ color: bc }}>{signed(score)}%</Text>
                     </View>
                 </View>
@@ -132,7 +132,7 @@ export default function MarketPulse({ active }: { active: boolean }) {
                     <Text style={{ color: toneOf(pulse.index?.change) }}>{signed(pulse.index?.change)}%</Text>
                     {pulse.session?.status ? `  ·  Session ${pulse.session.status}` : ''}
                 </Text>
-                {!!pulse.updated_at && <Text className="text-text-muted text-[9px] mt-1">Updated {ago(pulse.updated_at)}</Text>}
+                {!!pulse.updated_at && <Text className="text-text-muted text-[11px] mt-1">Updated {ago(pulse.updated_at)}</Text>}
             </View>
 
             {/* Global picture */}
@@ -142,12 +142,12 @@ export default function MarketPulse({ active }: { active: boolean }) {
                     <View className="bg-surface rounded-3xl border border-border p-4">
                         <View className="flex-row items-center justify-between">
                             <View>
-                                <Text className="text-text-muted text-[9px] font-bold uppercase">Global average</Text>
+                                <Text className="text-text-muted text-[11px] font-bold uppercase">Global average</Text>
                                 <Text className="font-black text-xl" style={{ color: biasColor(g.average_bias || undefined) }}>{g.average_bias || '—'}</Text>
                             </View>
                             <View className="items-end">
                                 <Text className="font-black text-base" style={{ color: biasColor(g.average_bias || undefined) }}>{signed(g.average_score)}%</Text>
-                                <Text className="text-text-muted text-[10px] font-bold">
+                                <Text className="text-text-muted text-[11px] font-bold">
                                     <Text style={{ color: GREEN }}>{g.counts.bullish ?? 0}▲</Text>  {g.counts.neutral ?? 0}●  <Text style={{ color: RED }}>{g.counts.bearish ?? 0}▼</Text>
                                 </Text>
                             </View>
@@ -157,11 +157,11 @@ export default function MarketPulse({ active }: { active: boolean }) {
                             <View key={m.slug} className="flex-row items-center py-1.5">
                                 <View className="w-1.5 h-1.5 rounded-full mr-2" style={{ backgroundColor: m.status === 'open' ? GREEN : '#3A3F4B' }} />
                                 <Text className="text-text-primary text-xs font-bold flex-1" numberOfLines={1}>{m.name}</Text>
-                                <Text className="text-[10px] font-black w-24 text-right" style={{ color: biasColor(m.bias?.label) }} numberOfLines={1}>{m.bias?.label}</Text>
-                                <Text className="text-[10px] font-bold w-16 text-right" style={{ color: toneOf(m.index?.change) }}>{signed(m.index?.change)}%</Text>
+                                <Text className="text-[11px] font-black w-24 text-right" style={{ color: biasColor(m.bias?.label) }} numberOfLines={1}>{m.bias?.label}</Text>
+                                <Text className="text-[11px] font-bold w-16 text-right" style={{ color: toneOf(m.index?.change) }}>{signed(m.index?.change)}%</Text>
                             </View>
                         ))}
-                        <Text className="text-text-muted text-[9px] mt-2">● open now · bias = each market's opening read · % = its index today</Text>
+                        <Text className="text-text-muted text-[11px] mt-2">● open now · bias = each market's opening read · % = its index today</Text>
                     </View>
                 </>
             )}
@@ -173,12 +173,12 @@ export default function MarketPulse({ active }: { active: boolean }) {
                     <View className="flex-row flex-wrap">
                         {pulse.cues.map(c => (
                             <View key={c.label} className="bg-surface rounded-2xl border border-border px-3 py-2 mr-2 mb-2">
-                                <Text className="text-text-muted text-[9px] font-bold uppercase">{c.label}{c.stale ? ' · old' : ''}</Text>
+                                <Text className="text-text-muted text-[11px] font-bold uppercase">{c.label}{c.stale ? ' · old' : ''}</Text>
                                 <Text className="font-black text-sm" style={{ color: toneOf(c.change) }}>{signed(c.change)}%</Text>
                             </View>
                         ))}
                     </View>
-                    {!!pulse.cues[0]?.detail && <Text className="text-text-muted text-[9px]">{pulse.cues[0].label}: {pulse.cues[0].detail}</Text>}
+                    {!!pulse.cues[0]?.detail && <Text className="text-text-muted text-[11px]">{pulse.cues[0].label}: {pulse.cues[0].detail}</Text>}
                 </>
             )}
 
@@ -189,12 +189,12 @@ export default function MarketPulse({ active }: { active: boolean }) {
                     <View className="flex-row flex-wrap justify-between">
                         {pulse.factors.map(f => (
                             <View key={f.key} className="bg-surface rounded-2xl border border-border p-3 mb-2" style={{ width: '48.5%' }}>
-                                <Text className="text-text-muted text-[9px] font-bold uppercase" numberOfLines={1}>{f.label}</Text>
+                                <Text className="text-text-muted text-[11px] font-bold uppercase" numberOfLines={1}>{f.label}</Text>
                                 <View className="flex-row items-baseline justify-between mt-1">
                                     <Text className="text-text-primary font-black text-base">{fmtNum(f.value)}</Text>
-                                    <Text className="text-[10px] font-black" style={{ color: impactColor(f.impact) }}>{fmtChange(f)}</Text>
+                                    <Text className="text-[11px] font-black" style={{ color: impactColor(f.impact) }}>{fmtChange(f)}</Text>
                                 </View>
-                                {!!f.reading && <Text className="text-[10px] font-bold mt-0.5" style={{ color: impactColor(f.impact) }}>{f.reading}</Text>}
+                                {!!f.reading && <Text className="text-[11px] font-bold mt-0.5" style={{ color: impactColor(f.impact) }}>{f.reading}</Text>}
                             </View>
                         ))}
                     </View>
@@ -211,7 +211,7 @@ export default function MarketPulse({ active }: { active: boolean }) {
                             const bg = r.change >= 0 ? `rgba(0,224,161,${a})` : `rgba(255,77,77,${a})`;
                             return (
                                 <View key={r.label} className="rounded-xl px-2 py-2 mb-1.5" style={{ width: '32.5%', backgroundColor: bg }}>
-                                    <Text className="text-text-primary text-[10px] font-bold" numberOfLines={1}>{r.label}</Text>
+                                    <Text className="text-text-primary text-[11px] font-bold" numberOfLines={1}>{r.label}</Text>
                                     <Text className="text-text-primary text-xs font-black">{signed(r.change)}%</Text>
                                 </View>
                             );
@@ -223,10 +223,10 @@ export default function MarketPulse({ active }: { active: boolean }) {
             {(pulse.notes || []).map(n => (
                 <View key={n} className="flex-row items-start mt-3">
                     <AlertTriangle size={11} color="#FBBF24" style={{ marginTop: 2 }} />
-                    <Text className="text-text-muted text-[10px] ml-1 flex-1">{n}</Text>
+                    <Text className="text-text-muted text-[11px] ml-1 flex-1">{n}</Text>
                 </View>
             ))}
-            <Text className="text-text-muted text-[9px] mt-4 mb-2 text-center">Bias is a weighted read of overnight cues. Not investment advice.</Text>
+            <Text className="text-text-muted text-[11px] mt-4 mb-2 text-center">Bias is a weighted read of overnight cues. Not investment advice.</Text>
         </View>
     );
 }

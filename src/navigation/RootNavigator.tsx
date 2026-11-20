@@ -3,7 +3,9 @@ import { View } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Home, PieChart, Activity, BookOpen, User, Radar, Search } from 'lucide-react-native';
+import { Home, PieChart, BookOpen, User, Radar, Search } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { colors } from '../theme';
 
 import DashboardScreen from '../screens/DashboardScreen';
 import WatchlistScreen from '../screens/WatchlistScreen';
@@ -61,11 +63,17 @@ const TradeMasterTheme = {
     },
 };
 
+const TAB_LABELS: Record<string, string> = {
+    Dashboard: 'Home', Watchlist: 'Search', Scanner: 'Scanner', Journal: 'Journal', Portfolio: 'Portfolio',
+};
+
 const MainTabs = () => {
+    const insets = useSafeAreaInsets();
     return (
         <Tab.Navigator
             screenOptions={({ route }) => ({
-                tabBarIcon: ({ color, size, focused }) => {
+                // Labelled tabs with a pill behind the active icon (Material 3 navigation bar).
+                tabBarIcon: ({ focused }) => {
                     let Icon;
                     if (route.name === 'Dashboard') Icon = Home;
                     else if (route.name === 'Watchlist') Icon = Search;
@@ -74,36 +82,27 @@ const MainTabs = () => {
                     else if (route.name === 'Journal') Icon = BookOpen;
                     else if (route.name === 'Profile') Icon = User;
                     else return null;
-
                     return (
-                        <View className="items-center justify-center pt-2">
-                            <View
-                                className={`w-12 h-12 items-center justify-center`}
-                            >
-                                <Icon
-                                    size={26}
-                                    color={focused ? '#00E0A1' : '#94A3B8'}
-                                    strokeWidth={focused ? 2.2 : 1.8}
-                                />
-                            </View>
-                            {focused && (
-                                <View className="absolute -bottom-1 w-6 h-1 rounded-full bg-primary" />
-                            )}
+                        <View style={{ width: 56, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center',
+                                       backgroundColor: focused ? 'rgba(0,224,161,0.14)' : 'transparent' }}>
+                            <Icon size={21} color={focused ? colors.primary : colors.textMuted} strokeWidth={focused ? 2.3 : 1.9} />
                         </View>
                     );
                 },
-                tabBarActiveTintColor: '#00E0A1',
-                tabBarInactiveTintColor: '#94A3B8',
+                tabBarLabel: TAB_LABELS[route.name] ?? route.name,
+                tabBarLabelStyle: { fontSize: 11, fontWeight: '700', marginTop: 2 },
+                tabBarActiveTintColor: colors.textPrimary,
+                tabBarInactiveTintColor: colors.textMuted,
                 tabBarStyle: {
-                    backgroundColor: '#1E2329',
-                    height: 80,
-                    borderTopWidth: 1.2,
-                    borderTopColor: 'rgba(255,255,255,0.08)',
-                    paddingBottom: 15,
-                    paddingTop: 5,
+                    backgroundColor: colors.tabBar,
+                    height: 62 + Math.max(insets.bottom, 8),
+                    borderTopWidth: 1,
+                    borderTopColor: colors.border,
+                    paddingBottom: Math.max(insets.bottom, 8),
+                    paddingTop: 8,
                 },
                 headerShown: false,
-                tabBarShowLabel: false,
+                tabBarShowLabel: true,
             })}
         >
             <Tab.Screen name="Dashboard" component={DashboardScreen} />

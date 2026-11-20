@@ -10,6 +10,9 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ApiError, BridgeStatus, ScanCandidate, ScanExecution, ScanStyle, scanner } from '../api';
 import { TEST_USER_ID } from '../config';
+import { confirmAction, Skeleton, SkeletonRow, ScreenHeader, IconButton, Segmented } from '../ui';
+import { colors } from '../theme';
+import { ago, inr as fmtInr } from '../format';
 
 /**
  * TradeMasterBackend's opportunity scanner, as one tab: a compact list of
@@ -29,25 +32,14 @@ function inSession(now = new Date()): boolean {
     return day >= 1 && day <= 5 && mins >= 9 * 60 + 15 && mins <= 15 * 60 + 30;
 }
 
-/** ₹9,200 / ₹155.33: thousands separators, no trailing .00 (no Intl needed). */
-const inr = (v?: number | null) => {
-    if (v == null) return '---';
-    const [int, dec] = Number(v).toFixed(2).split('.');
-    const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    return `₹${grouped}${dec === '00' ? '' : `.${dec}`}`;
-};
+/** ₹9,200 / ₹155.33 (Indian grouping, no trailing .00). */
+const inr = (v?: number | null) => fmtInr(v, { trim: true });
 
 /**
  * Yes/No confirmation. React Native's Alert with buttons is a no-op on web
  * (react-native-web), so the browser build uses window.confirm.
  */
-const confirmAction = (title: string, message: string, yes: string, onYes: () => void) => {
-    if (Platform.OS === 'web') {
-        if (window.confirm(`${title}\n\n${message}`)) onYes();
-        return;
-    }
-    Alert.alert(title, message, [{ text: 'Cancel', style: 'cancel' }, { text: yes, onPress: onYes }]);
-};
+const SCAN_CACHE_KEY = 'SCANNER_CACHE_V1';
 
 type Side = 'long' | 'short';
 type SignalFilter = 'ALL' | 'READY' | 'WAITING';
@@ -64,7 +56,7 @@ const EXEC_STYLE: Record<ScanExecution['status'], { color: string; label: string
     cancelled: { color: '#94A3B8', label: 'Cancelled' },
 };
 
-const rupee = (v?: number | null) => (v == null ? '---' : `₹${Number(v).toFixed(2)}`);
+const rupee = inr;
 const timeAgo = (iso?: string | null) => {
     if (!iso) return '';
     const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
@@ -98,18 +90,44 @@ const ScannerScreen = () => {
     const [scanRun, setScanRun] = useState<string | null>(null);
     const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    const [loadedAt, setLoadedAt] = useState<number | null>(null);
+    const [syncing, setSyncing] = useState(false);
+
+    /** Show the last result for this style instantly; the fresh fetch takes several seconds. */
+    const showCached = useCallback(async (s: ScanStyle) => {
+        try {
+            const raw = await AsyncStorage.getItem(`${SCAN_CACHE_KEY}:${s}`);
+            if (!raw) return false;
+            const c = JSON.parse(raw);
+            setCandidates(c.candidates || []);
+            setExecutions(c.executions || []);
+            setBridge(c.bridge || null);
+            setLoadedAt(c.at || null);
+            setLoading(false);
+            return true;
+        } catch {
+            return false;
+        }
+    }, []);
+
     const load = useCallback(async (s: ScanStyle = style) => {
         try {
             setError(null);
+            setSyncing(true);
             const [c, e] = await Promise.all([scanner.candidates(s), scanner.executions()]);
             setCandidates(c.candidates);
             setExecutions(e.items);
             setBridge(e.bridge);
+            const at = Date.now();
+            setLoadedAt(at);
+            AsyncStorage.setItem(`${SCAN_CACHE_KEY}:${s}`,
+                JSON.stringify({ at, candidates: c.candidates, executions: e.items, bridge: e.bridge })).catch(() => { });
         } catch (err) {
             setError(errorText(err));
         } finally {
             setLoading(false);
             setRefreshing(false);
+            setSyncing(false);
         }
     }, [style]);
 
@@ -131,6 +149,7 @@ const ScannerScreen = () => {
         return () => { if (pollTimer.current) clearTimeout(pollTimer.current); };
     }, []);
 
+    useEffect(() => { showCached(style); /* first paint only */ }, []);   // eslint-disable-line react-hooks/exhaustive-deps
     useFocusEffect(useCallback(() => { load(); }, [load]));
 
     const switchStyle = (s: ScanStyle) => {
@@ -138,7 +157,7 @@ const ScannerScreen = () => {
         setStyle(s);
         setExpanded(null);
         setLoading(true);
-        load(s);
+        showCached(s).finally(() => load(s));
     };
 
     const pollRun = (runId: string) => {
@@ -243,7 +262,7 @@ const ScannerScreen = () => {
                 <View className="flex-row items-center justify-between">
                     <View className="flex-1 pr-3">
                         <Text className="text-text-primary text-[12px] font-black">Auto paper-trading</Text>
-                        <Text className="text-text-muted text-[10px] font-bold mt-0.5">
+                        <Text className="text-text-muted text-[11px] font-bold mt-0.5">
                             {on
                                 ? `On · sends on ${bridge.trigger === 'entry_confirmed' ? 'entry confirmation' : 'qualification'}`
                                 : 'Off · send setups by hand with Send to Paper'}
@@ -262,7 +281,7 @@ const ScannerScreen = () => {
                 {notes.map(n => (
                     <View key={n} className="flex-row items-start mt-2">
                         <AlertTriangle size={11} color="#F59E0B" style={{ marginTop: 2 }} />
-                        <Text className="text-text-muted text-[10px] ml-1 flex-1 leading-4">{n}</Text>
+                        <Text className="text-text-muted text-[11px] ml-1 flex-1 leading-4">{n}</Text>
                     </View>
                 ))}
             </View>
@@ -280,7 +299,7 @@ const ScannerScreen = () => {
         const s = execStyle(e);
         return (
             <View className="px-2 py-0.5 rounded-md ml-2" style={{ backgroundColor: `${s.color}20` }}>
-                <Text className="text-[9px] font-black uppercase" style={{ color: s.color }}>Paper: {s.label}</Text>
+                <Text className="text-[11px] font-black uppercase" style={{ color: s.color }}>Paper: {s.label}</Text>
             </View>
         );
     };
@@ -328,13 +347,13 @@ const ScannerScreen = () => {
                 {c.flags.map(f => (
                     <View key={f.code} className="flex-row items-start mt-1.5">
                         <AlertTriangle size={11} color={f.severity === 'block' ? '#EF4444' : '#F59E0B'} style={{ marginTop: 2 }} />
-                        <Text className="text-text-muted text-[10px] ml-1 flex-1">{f.message}</Text>
+                        <Text className="text-text-muted text-[11px] ml-1 flex-1">{f.message}</Text>
                     </View>
                 ))}
                 {exec?.error && (
-                    <Text className="text-[10px] font-bold mt-2" style={{ color: execStyle(exec).color }}>Paper: {exec.error}</Text>
+                    <Text className="text-[11px] font-bold mt-2" style={{ color: execStyle(exec).color }}>Paper: {exec.error}</Text>
                 )}
-                <Text className="text-text-muted text-[9px] mt-2">
+                <Text className="text-text-muted text-[11px] mt-2">
                     Updated {timeAgo(c.updated_at)}{c.expires_at ? ` • expires ${new Date(c.expires_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
                     {c.entry_confirmed_at ? ' • entry confirmed' : ''}
                 </Text>
@@ -377,7 +396,7 @@ const ScannerScreen = () => {
                         <View className="flex-row items-center flex-1">
                             <Text className="text-text-primary font-black text-base tracking-tight mr-2">{c.symbol}</Text>
                             <View className="px-1.5 py-0.5 rounded-md" style={{ backgroundColor: ready ? '#10B98120' : '#F59E0B20' }}>
-                                <Text className="text-[9px] font-black uppercase" style={{ color: ready ? '#10B981' : '#F59E0B' }}>
+                                <Text className="text-[11px] font-black uppercase" style={{ color: ready ? '#10B981' : '#F59E0B' }}>
                                     {ready ? 'Ready' : 'Waiting'}
                                 </Text>
                             </View>
@@ -395,7 +414,7 @@ const ScannerScreen = () => {
                     {(g.all.length > 1 || exec) && (
                         <View className="flex-row items-center mt-1.5">
                             {g.all.length > 1 && (
-                                <Text className="text-text-muted text-[10px] font-bold mr-1">
+                                <Text className="text-text-muted text-[11px] font-bold mr-1">
                                     {g.all.map(x => x.strategy).join(' + ')}
                                 </Text>
                             )}
@@ -420,21 +439,21 @@ const ScannerScreen = () => {
                             <Text className="text-text-primary font-black">
                                 {e.symbol} <Text className="text-text-muted text-xs">{e.direction === 'long' ? 'BUY' : 'SELL'} x{e.request?.quantity ?? '?'}</Text>
                             </Text>
-                            <Text className="text-text-muted text-[10px] font-bold">
+                            <Text className="text-text-muted text-[11px] font-bold">
                                 {e.strategy} • {e.style} • {e.trigger}{e.attempts > 1 ? ` • ${e.attempts} attempts` : ''}
                             </Text>
                         </View>
                     </View>
                     <View className="items-end">
-                        <Text className="text-[10px] font-black uppercase" style={{ color: s.color }}>{s.label}</Text>
-                        <Text className="text-text-muted text-[9px]">{timeAgo(e.updated_at)}</Text>
+                        <Text className="text-[11px] font-black uppercase" style={{ color: s.color }}>{s.label}</Text>
+                        <Text className="text-text-muted text-[11px]">{timeAgo(e.updated_at)}</Text>
                     </View>
                 </View>
-                <Text className="text-text-muted text-[10px] mt-2">
+                <Text className="text-text-muted text-[11px] mt-2">
                     {e.request?.entry_type?.toUpperCase()} {rupee(e.request?.entry)} • SL {rupee(e.request?.stop_loss)} • TGT {rupee(e.request?.target)}
                     {e.order_status ? ` • order ${e.order_status}` : ''}{e.fill_price ? ` @ ${rupee(e.fill_price)}` : ''}
                 </Text>
-                {!!e.error && <Text className="text-error text-[10px] font-bold mt-1">{e.error}</Text>}
+                {!!e.error && <Text className="text-error text-[11px] font-bold mt-1">{e.error}</Text>}
             </View>
         );
     };
@@ -461,26 +480,18 @@ const ScannerScreen = () => {
         <View className="flex-1 bg-background">
             <StatusBar barStyle="light-content" />
 
-            <View className="px-6 pt-14 pb-4 flex-row justify-between items-end">
-                <View>
-                    <Text className="text-text-primary text-3xl font-black">Scanner</Text>
-                    <Text className="text-text-muted text-xs font-bold uppercase tracking-widest mt-1">
-                        {style === 'intraday' ? 'Intraday' : 'Swing'} setups{marketOpen == null ? '' : marketOpen ? ' • Market open' : ' • Market closed'}
-                    </Text>
-                </View>
-                <View className="flex-row">
-                    <TouchableOpacity onPress={() => { setRefreshing(true); load(); }} className="p-3 bg-surface rounded-2xl border border-border/30 mr-2">
-                        <RefreshCw size={18} color="#00E0A1" />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        disabled={!!scanRun}
-                        onPress={runScan}
-                        className={`p-3 rounded-2xl ${scanRun ? 'bg-primary/40' : 'bg-primary shadow-lg shadow-primary/20'}`}
-                    >
-                        {scanRun ? <ActivityIndicator color="white" size="small" /> : <Radar size={18} color="white" />}
-                    </TouchableOpacity>
-                </View>
-            </View>
+            <ScreenHeader
+                title="Scanner"
+                subtitle={`${style === 'intraday' ? 'Intraday' : 'Swing'} setups${marketOpen == null ? '' : marketOpen ? ' · Market open' : ' · Market closed'}`}
+                right={<>
+                    <IconButton label="Refresh results" onPress={() => { setRefreshing(true); load(); }}>
+                        <RefreshCw size={18} color={colors.primary} />
+                    </IconButton>
+                    <IconButton label={scanRun ? 'Scan running' : 'Run a new scan'} tone="primary" disabled={!!scanRun} onPress={runScan}>
+                        {scanRun ? <ActivityIndicator color={colors.background} size="small" /> : <Radar size={18} color={colors.background} />}
+                    </IconButton>
+                </>}
+            />
 
             {scanRun && (
                 <Text className="text-primary text-[11px] font-bold px-6 mb-3">
@@ -488,40 +499,36 @@ const ScannerScreen = () => {
                 </Text>
             )}
 
-            <View className="px-6 mb-4 flex-row gap-3">
-                <View className="flex-1 bg-surface p-1 rounded-2xl flex-row border border-border">
-                    {(['intraday', 'swing'] as ScanStyle[]).map(s => (
-                        <TouchableOpacity key={s} onPress={() => switchStyle(s)}
-                            className={`flex-1 py-2.5 rounded-xl items-center ${style === s ? 'bg-primary' : ''}`}>
-                            <Text className={`text-[11px] font-black uppercase ${style === s ? 'text-white' : 'text-text-muted'}`}>{s}</Text>
-                        </TouchableOpacity>
-                    ))}
+            <View className="px-5 mb-3 flex-row gap-2">
+                <View className="flex-1">
+                    <Segmented options={['intraday', 'swing'] as const} value={style} onChange={switchStyle}
+                        labels={{ intraday: 'Intraday', swing: 'Swing' }} />
                 </View>
-                <View className="flex-1 bg-surface p-1 rounded-2xl flex-row border border-border">
-                    {(['OPPORTUNITIES', 'ORDERS'] as const).map(v => (
-                        <TouchableOpacity key={v} onPress={() => setView(v)}
-                            className={`flex-1 py-2.5 rounded-xl items-center ${view === v ? 'bg-primary-blue' : ''}`}>
-                            <Text className={`text-[11px] font-black uppercase ${view === v ? 'text-white' : 'text-text-muted'}`}>
-                                {v === 'OPPORTUNITIES' ? 'Ideas' : 'Paper'}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
+                <View className="flex-1">
+                    <Segmented options={['OPPORTUNITIES', 'ORDERS'] as const} value={view} onChange={setView}
+                        labels={{ OPPORTUNITIES: 'Ideas', ORDERS: 'Paper' }} />
                 </View>
             </View>
 
             {renderBridgeBanner()}
 
             {loading ? (
-                <View className="flex-1 items-center justify-center">
-                    <ActivityIndicator size="large" color="#00E0A1" />
+                <View className="px-5 pt-1">
+                    <Skeleton h={40} r={16} style={{ marginBottom: 12 }} />
+                    {[0, 1, 2, 3, 4].map(i => <SkeletonRow key={i} />)}
                 </View>
             ) : (
                 <ScrollView
                     className="flex-1"
-                    contentContainerStyle={{ paddingHorizontal: 24 }}
+                    contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }}
                     showsVerticalScrollIndicator={false}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#00E0A1" />}
                 >
+                    {!!loadedAt && (
+                        <Text className="text-text-muted text-xs font-semibold mb-2">
+                            {syncing ? `Showing results from ${ago(loadedAt)} · updating…` : `Updated ${ago(loadedAt)}`}
+                        </Text>
+                    )}
                     {error && (
                         <View className="p-4 rounded-2xl bg-error/10 border border-error/20 mb-4">
                             <Text className="text-error text-xs font-bold">{error}</Text>
@@ -546,7 +553,7 @@ const ScannerScreen = () => {
                                 {(['ALL', 'READY', 'WAITING'] as SignalFilter[]).map(f => (
                                     <TouchableOpacity key={f} onPress={() => setSignal(f)}
                                         className={`px-3 py-1.5 rounded-full mr-2 ${signal === f ? 'bg-primary' : 'bg-surface border border-border/40'}`}>
-                                        <Text className={`text-[10px] font-black uppercase ${signal === f ? 'text-white' : 'text-text-muted'}`}>
+                                        <Text className={`text-[11px] font-black uppercase ${signal === f ? 'text-white' : 'text-text-muted'}`}>
                                             {f === 'ALL' ? 'All' : f === 'READY' ? `Ready ${readyCount}` : `Waiting ${sideGroups.length - readyCount}`}
                                         </Text>
                                     </TouchableOpacity>

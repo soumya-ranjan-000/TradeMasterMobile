@@ -3,9 +3,12 @@ import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Pressable,
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/RootNavigator';
-import { ChevronLeft, Share2, Star, TrendingUp, Plus, X, Search, ListPlus } from 'lucide-react-native';
+import { ChevronLeft, TrendingUp, TrendingDown, Plus, X, Search, ListPlus } from 'lucide-react-native';
+import { IconButton } from '../ui';
+import { colors } from '../theme';
+import { inr, pct, num } from '../format';
 import { API_URL, TEST_USER_ID } from '../config';
-import { getHistory } from '../api';
+import { getHistory, isExchangeOpen } from '../api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Rect, Line, Defs, LinearGradient as SVGGradiant, Stop, Text as SvgText, Path, Polyline, G } from 'react-native-svg';
 import { Activity, Settings2, PencilLine, BarChart3, Calendar } from 'lucide-react-native';
@@ -302,6 +305,17 @@ const StockDetailScreen = () => {
         return { macdLine, signalLine, histogram };
     };
 
+    /** Four evenly spaced price levels, positioned with the same mapping as getY in the chart. */
+    const priceAxis = React.useMemo(() => {
+        if (!history.length) return [];
+        const hi = Math.max(...history.map(d => d.high)), lo = Math.min(...history.map(d => d.low));
+        const range = hi - lo || 1;
+        return [0, 1, 2, 3].map(k => {
+            const p = lo + range * (k / 3);
+            return { p, y: 40 + (CHART_HEIGHT - 80) * (1 - (p - lo) / range) };
+        });
+    }, [history]);
+
     const renderCandleChart = () => {
         if (history.length === 0) return null;
 
@@ -335,6 +349,11 @@ const StockDetailScreen = () => {
                             <Stop offset="1" stopColor="#00E0A1" stopOpacity="0.5" />
                         </SVGGradiant>
                     </Defs>
+
+                    {/* Price gridlines (labels are a fixed overlay outside the scroll) */}
+                    {priceAxis.map(a => (
+                        <Line key={a.p} x1={0} x2={totalWidth} y1={a.y} y2={a.y} stroke="#2A2E39" strokeWidth={1} strokeDasharray="3 5" />
+                    ))}
 
                     {/* Main Price Chart */}
                     <G>
@@ -547,21 +566,14 @@ const StockDetailScreen = () => {
         <View className="flex-1 bg-background">
             <StatusBar barStyle="light-content" />
 
-            {/* Premium Header */}
-            <View className="flex-row justify-between items-center px-6 pt-12 pb-4">
-                <TouchableOpacity onPress={() => navigation.navigate('Watchlist' as any)} className="p-2 -ml-2 bg-white/5 rounded-full">
-                    <ChevronLeft size={24} color="#E1E7ED" />
-                </TouchableOpacity>
-                <View className="flex-row gap-3">
-                    <TouchableOpacity
-                        onPress={() => setIsWatchlistModalVisible(true)}
-                        className="p-2 bg-white/5 rounded-full"
-                    >
-                        <Plus size={20} color="#E1E7ED" />
-                    </TouchableOpacity>
-                    <TouchableOpacity className="p-2 bg-white/5 rounded-full"><Share2 size={20} color="#E1E7ED" /></TouchableOpacity>
-                    <TouchableOpacity className="p-2 bg-white/5 rounded-full"><Star size={20} color="#E1E7ED" /></TouchableOpacity>
-                </View>
+            {/* Header: back, add to watchlist */}
+            <View className="flex-row justify-between items-center px-5 pb-2" style={{ paddingTop: 44 }}>
+                <IconButton label="Back" onPress={() => navigation.navigate('Watchlist' as any)}>
+                    <ChevronLeft size={22} color={colors.textPrimary} />
+                </IconButton>
+                <IconButton label="Add to watchlist" onPress={() => setIsWatchlistModalVisible(true)}>
+                    <Plus size={20} color={colors.textPrimary} />
+                </IconButton>
             </View>
 
             <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
@@ -574,38 +586,30 @@ const StockDetailScreen = () => {
                             </View>
                             <View>
                                 <Text className="text-text-primary font-black text-xl tracking-tight">{symbol.split('.')[0]}</Text>
-                                <Text className="text-text-muted text-[10px] font-semibold uppercase tracking-widest mt-0.5">Live Analytics</Text>
+                                <Text className="text-text-muted text-xs font-semibold mt-0.5">NSE · {isExchangeOpen() ? 'Live' : 'Market closed, last price'}</Text>
                             </View>
                         </View>
                         {selectedCandle ? (
                             <View className="items-end">
-                                <Text className="text-text-muted text-[10px] font-bold uppercase mb-1">Price at touch</Text>
-                                <Text className="text-text-primary font-bold text-lg">₹{selectedCandle.close.toFixed(2)}</Text>
+                                <Text className="text-text-muted text-[11px] font-bold uppercase mb-1">Price at touch</Text>
+                                <Text className="text-text-primary font-bold text-lg">{inr(selectedCandle.close)}</Text>
                             </View>
-                        ) : (
-                            <View className="items-end">
-                                <View className={`px-2 py-1 rounded-lg ${(stockData?.change ?? 0) >= 0 ? 'bg-success/10' : 'bg-error/10'}`}>
-                                    <Text className={`font-bold text-xs ${(stockData?.change ?? 0) >= 0 ? 'text-success' : 'text-error'}`}>
-                                        {(stockData?.change ?? 0) >= 0 ? 'ACTIVE' : 'BEARISH'}
-                                    </Text>
-                                </View>
-                            </View>
-                        )}
+                        ) : null}
                     </View>
 
                     <View className="mt-6">
-                        <Text className="text-text-primary text-5xl font-black tracking-tighter">
-                            ₹{(stockData?.price || (history.length > 0 ? history[history.length - 1].close : 0))?.toFixed(2) || '---'}
+                        <Text className="text-text-primary text-4xl font-black tracking-tight" style={{ fontVariant: ['tabular-nums'] }}>
+                            {inr(stockData?.price || (history.length > 0 ? history[history.length - 1].close : null))}
                         </Text>
                         <View className="flex-row items-center mt-3">
                             <View className={`px-2 py-1 rounded-lg flex-row items-center ${(stockData?.change_percent || 0) >= 0 ? 'bg-success/10' : 'bg-error/10'}`}>
-                                <TrendingUp size={14} color={(stockData?.change_percent || 0) >= 0 ? '#10B981' : '#EF4444'} />
+                                {(stockData?.change_percent || 0) >= 0 ? <TrendingUp size={14} color={colors.success} /> : <TrendingDown size={14} color={colors.error} />}
                                 <Text className={`font-black text-sm ml-1.5 ${(stockData?.change_percent || 0) >= 0 ? 'text-success' : 'text-error'}`}>
-                                    {Math.abs(stockData?.change_percent || 0).toFixed(2)}%
+                                    {pct(stockData?.change_percent || 0)}
                                 </Text>
                             </View>
-                            <Text className="text-text-muted text-sm font-bold ml-3">
-                                {stockData?.change?.toFixed(2) || '0.00'} Since Open
+                            <Text className="text-text-muted text-sm font-semibold ml-3">
+                                {inr(stockData?.change || 0, { sign: true })} vs previous close
                             </Text>
                         </View>
                     </View>
@@ -623,7 +627,7 @@ const StockDetailScreen = () => {
                             className="bg-surface/50 p-2 px-3 rounded-lg border border-border/50 flex-row items-center gap-2"
                         >
                             <Settings2 size={14} color="#E1E7ED" />
-                            <Text className="text-text-primary text-[10px] font-bold uppercase">Indicators ({activeIndicators.length})</Text>
+                            <Text className="text-text-primary text-[11px] font-bold uppercase">Indicators ({activeIndicators.length})</Text>
                         </TouchableOpacity>
                     </View>
 
@@ -641,7 +645,7 @@ const StockDetailScreen = () => {
                                     }}
                                     className={`px-3 py-1.5 rounded-lg border ${activeIndicators.includes(ind) ? 'bg-primary/20 border-primary' : 'bg-background border-border/50'}`}
                                 >
-                                    <Text className={`text-[10px] font-bold ${activeIndicators.includes(ind) ? 'text-primary' : 'text-text-muted'}`}>{ind}</Text>
+                                    <Text className={`text-[11px] font-bold ${activeIndicators.includes(ind) ? 'text-primary' : 'text-text-muted'}`}>{ind}</Text>
                                 </TouchableOpacity>
                             ))}
                             <TouchableOpacity
@@ -649,14 +653,14 @@ const StockDetailScreen = () => {
                                 className="px-3 py-1.5 rounded-lg border bg-background border-border/50 flex-row items-center gap-1"
                             >
                                 <Calendar size={12} color="#6B7280" />
-                                <Text className="text-[10px] font-bold text-text-muted">Period: {chartPeriod.toUpperCase()}</Text>
+                                <Text className="text-[11px] font-bold text-text-muted">Period: {chartPeriod.toUpperCase()}</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 onPress={() => setIsDrawingMode(!isDrawingMode)}
                                 className={`px-3 py-1.5 rounded-lg border flex-row items-center gap-1 ${isDrawingMode ? 'bg-primary/20 border-primary' : 'bg-background border-border/50'}`}
                             >
                                 <PencilLine size={12} color={isDrawingMode ? "#00E0A1" : "#6B7280"} />
-                                <Text className={`text-[10px] font-bold ${isDrawingMode ? 'text-primary' : 'text-text-muted'}`}>Draw Tools</Text>
+                                <Text className={`text-[11px] font-bold ${isDrawingMode ? 'text-primary' : 'text-text-muted'}`}>Draw Tools</Text>
                             </TouchableOpacity>
                             {drawings.length > 0 && (
                                 <TouchableOpacity
@@ -664,7 +668,7 @@ const StockDetailScreen = () => {
                                     className="px-3 py-1.5 rounded-lg border bg-error/10 border-error/20 flex-row items-center gap-1"
                                 >
                                     <X size={10} color="#EF4444" />
-                                    <Text className="text-[10px] font-bold text-error">Clear</Text>
+                                    <Text className="text-[11px] font-bold text-error">Clear</Text>
                                 </TouchableOpacity>
                             )}
                         </View>
@@ -700,19 +704,29 @@ const StockDetailScreen = () => {
                             {renderCandleChart()}
                         </ScrollView>
                     )}
+                    {history.length > 0 && !loading && (
+                        <View pointerEvents="none" style={{ position: 'absolute', right: 8, top: 0, height: CHART_HEIGHT }}>
+                            {priceAxis.map(a => (
+                                <Text key={a.p} className="text-text-muted text-[11px] font-semibold px-1 rounded"
+                                    style={{ position: 'absolute', right: 0, top: a.y - 8, backgroundColor: 'rgba(14,17,22,0.85)', fontVariant: ['tabular-nums'] }}>
+                                    {num(a.p, a.p >= 1000 ? 0 : 2)}
+                                </Text>
+                            ))}
+                        </View>
+                    )}
                 </View>
 
                 {/* Action Section */}
                 <View className="px-6 mt-2 pb-12">
-                    <View className="bg-surface/20 p-5 rounded-[32px] border border-border/40">
-
+                    <View className="bg-surface p-4 rounded-3xl border border-border">
+                        <Text className="text-text-muted text-xs font-semibold mb-3 text-center">Paper trade · simulated with virtual money</Text>
 
                         <View className="flex-row gap-3">
                             <TouchableOpacity
                                 onPress={() => navigation.navigate('Trade', { symbol, side: 'SELL' })}
                                 className="flex-1 bg-error/10 border border-error/30 py-4 rounded-3xl items-center justify-center active:scale-[0.96]"
                             >
-                                <Text className="text-error font-black text-sm tracking-wider uppercase" numberOfLines={1}>Short</Text>
+                                <Text className="text-error font-black text-sm tracking-wider uppercase" numberOfLines={1}>Sell / Short</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 onPress={() => navigation.navigate('Trade', { symbol, side: 'BUY' })}
@@ -808,7 +822,7 @@ const StockDetailScreen = () => {
                                                 </View>
                                                 {item.symbols?.includes(symbol) ? (
                                                     <View className="bg-success/20 px-3 py-1 rounded-full">
-                                                        <Text className="text-success text-[10px] font-bold">ADDED</Text>
+                                                        <Text className="text-success text-[11px] font-bold">ADDED</Text>
                                                     </View>
                                                 ) : (
                                                     <Plus size={18} color="#6B7280" />

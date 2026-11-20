@@ -73,7 +73,7 @@ const DetailedAnalysisScreen = () => {
                     <View className="bg-primary/20 p-4 rounded-full mb-4">
                         <Zap size={32} color="#00E0A1" />
                     </View>
-                    <Text className="text-text-muted text-[10px] font-black uppercase tracking-[4px]">AI Confidence</Text>
+                    <Text className="text-text-muted text-[11px] font-black uppercase tracking-[4px]">AI Confidence</Text>
                     <Text className="text-text-primary text-6xl font-black my-2">{analysis.confidence}%</Text>
                     <View className="flex-row items-center bg-background/50 px-4 py-2 rounded-full border border-border/30">
                         <Text className="text-text-muted text-xs mr-2">Market Bias:</Text>
@@ -143,27 +143,27 @@ const DetailedAnalysisScreen = () => {
                         </View>
                         <View className="bg-surface rounded-3xl p-6 border border-border/40 flex-row flex-wrap justify-between">
                             <View className="w-1/3 mb-4 items-center">
-                                <Text className="text-text-muted text-[8px] font-black uppercase mb-1">R2</Text>
+                                <Text className="text-text-muted text-[11px] font-black uppercase mb-1">R2</Text>
                                 <Text className="text-error font-bold text-xs">₹{pivots.r2?.toFixed(2)}</Text>
                             </View>
                             <View className="w-1/3 mb-4 items-center">
-                                <Text className="text-text-muted text-[8px] font-black uppercase mb-1">R1</Text>
+                                <Text className="text-text-muted text-[11px] font-black uppercase mb-1">R1</Text>
                                 <Text className="text-error font-bold text-xs">₹{pivots.r1?.toFixed(2)}</Text>
                             </View>
                             <View className="w-1/3 mb-4 items-center">
-                                <Text className="text-text-muted text-[8px] font-black uppercase mb-1">Pivot</Text>
+                                <Text className="text-text-muted text-[11px] font-black uppercase mb-1">Pivot</Text>
                                 <Text className="text-primary font-black text-xs">₹{pivots.pivot?.toFixed(2)}</Text>
                             </View>
                             <View className="w-1/3 items-center">
-                                <Text className="text-text-muted text-[8px] font-black uppercase mb-1">S1</Text>
+                                <Text className="text-text-muted text-[11px] font-black uppercase mb-1">S1</Text>
                                 <Text className="text-success font-bold text-xs">₹{pivots.s1?.toFixed(2)}</Text>
                             </View>
                             <View className="w-1/3 items-center">
-                                <Text className="text-text-muted text-[8px] font-black uppercase mb-1">S2</Text>
+                                <Text className="text-text-muted text-[11px] font-black uppercase mb-1">S2</Text>
                                 <Text className="text-success font-bold text-xs">₹{pivots.s2?.toFixed(2)}</Text>
                             </View>
                             <View className="w-1/3 items-center">
-                                <Text className="text-text-muted text-[8px] font-black uppercase mb-1">ADR</Text>
+                                <Text className="text-text-muted text-[11px] font-black uppercase mb-1">ADR</Text>
                                 <Text className="text-text-primary font-bold text-xs">{adr ? `${adr.toFixed(2)}%` : '---'}</Text>
                             </View>
                         </View>
