@@ -4,10 +4,15 @@ import { AlertTriangle, RefreshCw } from 'lucide-react-native';
 import { getMarketPulse, MarketPulse as Pulse, PulseFactor } from '../api';
 
 /**
- * Dashboard "Market" tab: India market mood from the global sentiment service
- * (via the backend's /market/pulse): bias with a score gauge, NIFTY, overnight
- * cues (GIFT Nifty first), key factors coloured by what they mean for Indian
- * stocks, and today's sector moves as a heatmap.
+ * Dashboard "Market" tab, from the global sentiment service (via the
+ * backend's /market/pulse): India's opening bias with a gauge, the global
+ * picture (average bias, how many markets lean each way, CBOE VIX, each
+ * market's bias and index), overnight cues, key factors coloured by what they
+ * mean for Indian stocks, and today's sector heatmap.
+ *
+ * Bias scores are weighted overnight moves in PERCENT (not a -1..1 index):
+ * |s| < 0.2 Neutral/Flat, 0.2-0.5 Bullish/Bearish, > 0.5 Strong (the service's
+ * classify_bias). The gauge spans -1..+1 % with ticks at those thresholds.
  */
 
 const REFRESH_MS = 60_000;
@@ -28,6 +33,34 @@ const fmtChange = (f: PulseFactor) =>
     f.change == null ? '' : f.unit === 'bps' ? `${signed(f.change, 1)} bps` : `${signed(f.change)}%`;
 const fmtNum = (v?: number | null) =>
     v == null ? '—' : v >= 1000 ? v.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : v.toFixed(2);
+
+const GAUGE_MAX = 1.0;          // % at each end of the bias gauge
+const TICKS = [-0.5, -0.2, 0.2, 0.5];
+
+/** Bias gauge: centre = 0, fill toward the score, ticks at the label thresholds. */
+const BiasGauge = ({ score }: { score: number }) => {
+    const pos = (v: number) => `${50 + (Math.max(-GAUGE_MAX, Math.min(GAUGE_MAX, v)) / GAUGE_MAX) * 50}%`;
+    const clamped = Math.max(-GAUGE_MAX, Math.min(GAUGE_MAX, score));
+    const left = clamped < 0 ? pos(clamped) : '50%';
+    const width = `${(Math.abs(clamped) / GAUGE_MAX) * 50}%`;
+    return (
+        <View className="mt-4">
+            <View className="h-2.5 rounded-full bg-background overflow-hidden" style={{ position: 'relative' }}>
+                <View style={{ position: 'absolute', left: left as any, width: width as any, top: 0, bottom: 0,
+                               backgroundColor: score < 0 ? RED : GREEN }} />
+                {TICKS.map(t => (
+                    <View key={t} style={{ position: 'absolute', left: pos(t) as any, width: 1, top: 0, bottom: 0, backgroundColor: '#3A3F4B' }} />
+                ))}
+                <View style={{ position: 'absolute', left: '50%', width: 2, marginLeft: -1, top: 0, bottom: 0, backgroundColor: MUTED }} />
+            </View>
+            <View className="flex-row justify-between mt-1">
+                <Text className="text-text-muted text-[8px] font-bold">≤ −1%  BEARISH</Text>
+                <Text className="text-text-muted text-[8px] font-bold">FLAT</Text>
+                <Text className="text-text-muted text-[8px] font-bold">BULLISH  ≥ +1%</Text>
+            </View>
+        </View>
+    );
+};
 
 const SectionTitle = ({ children, right }: { children: React.ReactNode; right?: string }) => (
     <View className="flex-row items-end justify-between mt-6 mb-3">
@@ -74,7 +107,8 @@ export default function MarketPulse({ active }: { active: boolean }) {
         );
     }
 
-    const score = Math.max(-1, Math.min(1, pulse.bias?.score ?? 0));
+    const score = pulse.bias?.score ?? 0;
+    const g = pulse.global;
     const bc = biasColor(pulse.bias?.label);
     const rows = pulse.sectors?.rows || [];
 
@@ -88,24 +122,11 @@ export default function MarketPulse({ active }: { active: boolean }) {
                         <Text className="font-black text-3xl mt-1" style={{ color: bc }}>{pulse.bias?.label || '—'}</Text>
                     </View>
                     <View className="items-end">
-                        <Text className="text-text-muted text-[9px] font-bold uppercase">Score</Text>
-                        <Text className="font-black text-lg" style={{ color: bc }}>{signed(score)}</Text>
+                        <Text className="text-text-muted text-[9px] font-bold uppercase">Weighted move</Text>
+                        <Text className="font-black text-lg" style={{ color: bc }}>{signed(score)}%</Text>
                     </View>
                 </View>
-                {/* Gauge: -1 (left) .. +1 (right), filled from the centre */}
-                <View className="h-2 rounded-full bg-background mt-4 overflow-hidden flex-row">
-                    <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                        {score < 0 && <View style={{ width: `${-score * 100}%`, height: '100%', backgroundColor: RED, borderRadius: 4 }} />}
-                    </View>
-                    <View style={{ width: 2, backgroundColor: MUTED }} />
-                    <View style={{ flex: 1 }}>
-                        {score > 0 && <View style={{ width: `${score * 100}%`, height: '100%', backgroundColor: GREEN, borderRadius: 4 }} />}
-                    </View>
-                </View>
-                <View className="flex-row justify-between mt-1">
-                    <Text className="text-text-muted text-[8px] font-bold">BEARISH</Text>
-                    <Text className="text-text-muted text-[8px] font-bold">BULLISH</Text>
-                </View>
+                <BiasGauge score={score} />
                 <Text className="text-text-muted text-[11px] font-bold mt-3">
                     {pulse.index?.name} {fmtNum(pulse.index?.price)}{' '}
                     <Text style={{ color: toneOf(pulse.index?.change) }}>{signed(pulse.index?.change)}%</Text>
@@ -113,6 +134,37 @@ export default function MarketPulse({ active }: { active: boolean }) {
                 </Text>
                 {!!pulse.updated_at && <Text className="text-text-muted text-[9px] mt-1">Updated {ago(pulse.updated_at)}</Text>}
             </View>
+
+            {/* Global picture */}
+            {!!g && (
+                <>
+                    <SectionTitle right={g.vix ? `CBOE VIX ${fmtNum(g.vix.value)} · ${g.vix.reading || ''}` : undefined}>Global markets</SectionTitle>
+                    <View className="bg-surface rounded-3xl border border-border p-4">
+                        <View className="flex-row items-center justify-between">
+                            <View>
+                                <Text className="text-text-muted text-[9px] font-bold uppercase">Global average</Text>
+                                <Text className="font-black text-xl" style={{ color: biasColor(g.average_bias || undefined) }}>{g.average_bias || '—'}</Text>
+                            </View>
+                            <View className="items-end">
+                                <Text className="font-black text-base" style={{ color: biasColor(g.average_bias || undefined) }}>{signed(g.average_score)}%</Text>
+                                <Text className="text-text-muted text-[10px] font-bold">
+                                    <Text style={{ color: GREEN }}>{g.counts.bullish ?? 0}▲</Text>  {g.counts.neutral ?? 0}●  <Text style={{ color: RED }}>{g.counts.bearish ?? 0}▼</Text>
+                                </Text>
+                            </View>
+                        </View>
+                        <View className="h-px bg-border my-3" />
+                        {g.markets.map(m => (
+                            <View key={m.slug} className="flex-row items-center py-1.5">
+                                <View className="w-1.5 h-1.5 rounded-full mr-2" style={{ backgroundColor: m.status === 'open' ? GREEN : '#3A3F4B' }} />
+                                <Text className="text-text-primary text-xs font-bold flex-1" numberOfLines={1}>{m.name}</Text>
+                                <Text className="text-[10px] font-black w-24 text-right" style={{ color: biasColor(m.bias?.label) }} numberOfLines={1}>{m.bias?.label}</Text>
+                                <Text className="text-[10px] font-bold w-16 text-right" style={{ color: toneOf(m.index?.change) }}>{signed(m.index?.change)}%</Text>
+                            </View>
+                        ))}
+                        <Text className="text-text-muted text-[9px] mt-2">● open now · bias = each market's opening read · % = its index today</Text>
+                    </View>
+                </>
+            )}
 
             {/* Overnight cues */}
             {!!pulse.cues?.length && (

@@ -118,6 +118,14 @@ export interface MarketPulse {
     factors?: PulseFactor[];
     sectors?: { as_of?: string; stale?: boolean; source?: string; rows: { label: string; symbol?: string; change: number; sentiment?: string }[] };
     notes?: string[];
+    /** World overview (null if that part of the service failed). Scores are weighted moves in %. */
+    global?: {
+        average_score: number | null; average_bias: string | null;
+        counts: { bullish?: number; neutral?: number; bearish?: number };
+        vix: { value: number | null; change: number | null; reading?: string; impact?: string } | null;
+        markets: { slug: string; name: string; status?: string; bias?: { score: number; label: string };
+                   index?: { name?: string; change?: number | null } }[];
+    } | null;
 }
 export const getMarketPulse = () => backendJson<MarketPulse>('/market/pulse');
 
