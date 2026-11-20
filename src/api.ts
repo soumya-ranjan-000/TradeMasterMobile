@@ -203,7 +203,9 @@ export interface ScanExecution {
 }
 
 export interface BridgeStatus {
-    enabled: boolean;
+    enabled: boolean;               // automatic sends happening (all switches on)
+    allowed?: boolean;              // the server permits them (env + YAML)
+    auto_switch?: boolean;          // the app's on/off
     master_switch: boolean;
     mode: string;
     trigger: string;
@@ -236,4 +238,10 @@ export const scanner = {
             body: JSON.stringify({ style, universe }),
         }),
     run: (runId: string) => backendJson<ScanRun>(`/scanner/runs/${encodeURIComponent(runId)}`),
+    setAutoTrading: (enabled: boolean) =>
+        backendJson<BridgeStatus>('/scanner/executions/auto', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled }),
+        }),
 };

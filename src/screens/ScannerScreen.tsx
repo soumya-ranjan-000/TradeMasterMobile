@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, StatusBar, Alert,
+    Switch, Platform,
 } from 'react-native';
 import {
     ChevronDown, ChevronUp, RefreshCw, Radar, Send, AlertTriangle, CircleCheck, CircleX, Clock,
@@ -34,6 +35,18 @@ const inr = (v?: number | null) => {
     const [int, dec] = Number(v).toFixed(2).split('.');
     const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     return `₹${grouped}${dec === '00' ? '' : `.${dec}`}`;
+};
+
+/**
+ * Yes/No confirmation. React Native's Alert with buttons is a no-op on web
+ * (react-native-web), so the browser build uses window.confirm.
+ */
+const confirmAction = (title: string, message: string, yes: string, onYes: () => void) => {
+    if (Platform.OS === 'web') {
+        if (window.confirm(`${title}\n\n${message}`)) onYes();
+        return;
+    }
+    Alert.alert(title, message, [{ text: 'Cancel', style: 'cancel' }, { text: yes, onPress: onYes }]);
 };
 
 type Side = 'long' | 'short';
@@ -174,12 +187,12 @@ const ScannerScreen = () => {
                 setSending(null);
             }
         };
-        Alert.alert(
+        confirmAction(
             'Send to paper trading?',
             `${c.direction === 'long' ? 'BUY' : 'SELL'} ${c.quantity ?? '?'} ${c.symbol}\n` +
             `Entry ≤ ${rupee(c.direction === 'long' ? c.entry_high : c.entry_low)} • SL ${rupee(c.stop)} • Target ${rupee(target)}` +
             (bridge && bridge.paper_user_id !== userId ? `\n\nAccount: "${bridge.paper_user_id}"` : ''),
-            [{ text: 'Cancel', style: 'cancel' }, { text: 'Send', onPress: go }],
+            'Send', go,
         );
     };
 
@@ -190,34 +203,81 @@ const ScannerScreen = () => {
     }, [executions]);
 
     // --- pieces -----------------------------------------------------------------
+    const [switching, setSwitching] = useState(false);
+    const toggleAuto = (on: boolean) => {
+        const apply = async () => {
+            try {
+                setSwitching(true);
+                setBridge(await scanner.setAutoTrading(on));
+            } catch (err) {
+                Alert.alert('Could not change auto paper-trading', errorText(err));
+            } finally {
+                setSwitching(false);
+            }
+        };
+        if (on) {
+            confirmAction(
+                'Turn on auto paper-trading?',
+                `The scanner will place paper orders automatically ` +
+                `${bridge?.trigger === 'entry_confirmed' ? 'when an entry is confirmed' : 'when a setup qualifies'}` +
+                `, in account "${bridge?.paper_user_id}". At most one order per stock, within the daily cap.`,
+                'Turn on', apply,
+            );
+        } else {
+            apply();
+        }
+    };
+
+    /** Auto paper-trading on/off, with why it can't be on when the server forbids it. */
     const renderBridgeBanner = () => {
         if (!bridge) return null;
+        const allowed = bridge.allowed ?? bridge.master_switch;
+        const on = (bridge.auto_switch ?? true) && allowed;
         const otherAccount = bridge.paper_user_id !== userId;
-        if (bridge.enabled && !otherAccount) {
-            return (
-                <View className="mx-6 mb-4 p-3 rounded-2xl bg-success/10 border border-success/20 flex-row items-center">
-                    <CircleCheck size={16} color="#10B981" />
-                    <Text className="text-text-primary text-[11px] font-bold ml-2 flex-1">
-                        Auto paper-trading ON • sends on {bridge.trigger === 'entry_confirmed' ? 'entry confirmation' : 'qualification'}
-                    </Text>
-                </View>
-            );
-        }
+        const notes: string[] = [];
+        if (!allowed) notes.push('Disabled on the server (SCANNER_AUTO_TRADE_ENABLED / execution.mode). Send to Paper still works.');
+        if (otherAccount) notes.push(`Orders go to account "${bridge.paper_user_id}"; you are "${userId}".`);
+        if (!bridge.outbound_key_set) notes.push('Backend has no PAPER_TRADING_SERVICE_API_KEY.');
         return (
-            <View className="mx-6 mb-4 p-3 rounded-2xl bg-primary/5 border border-border flex-row items-start">
-                <AlertTriangle size={16} color="#F59E0B" />
-                <Text className="text-text-muted text-[11px] font-bold ml-2 flex-1 leading-4">
-                    {bridge.enabled ? 'Auto paper-trading ON. ' : 'Auto paper-trading OFF: you can still send candidates by hand. '}
-                    {otherAccount ? `Scanner orders go to account "${bridge.paper_user_id}", you are "${userId}". Set portfolio.paper_user_id in the scanner config to match.` : ''}
-                    {!bridge.outbound_key_set ? ' Backend has no PAPER_TRADING_SERVICE_API_KEY.' : ''}
-                </Text>
+            <View className={`mx-6 mb-4 px-4 py-3 rounded-2xl border ${on ? 'bg-success/10 border-success/20' : 'bg-surface border-border/40'}`}>
+                <View className="flex-row items-center justify-between">
+                    <View className="flex-1 pr-3">
+                        <Text className="text-text-primary text-[12px] font-black">Auto paper-trading</Text>
+                        <Text className="text-text-muted text-[10px] font-bold mt-0.5">
+                            {on
+                                ? `On · sends on ${bridge.trigger === 'entry_confirmed' ? 'entry confirmation' : 'qualification'}`
+                                : 'Off · send setups by hand with Send to Paper'}
+                        </Text>
+                    </View>
+                    {switching ? <ActivityIndicator color="#00E0A1" size="small" /> : (
+                        <Switch
+                            value={on}
+                            disabled={!allowed}
+                            onValueChange={toggleAuto}
+                            trackColor={{ false: '#334155', true: '#10B98199' }}
+                            thumbColor={on ? '#10B981' : '#94A3B8'}
+                        />
+                    )}
+                </View>
+                {notes.map(n => (
+                    <View key={n} className="flex-row items-start mt-2">
+                        <AlertTriangle size={11} color="#F59E0B" style={{ marginTop: 2 }} />
+                        <Text className="text-text-muted text-[10px] ml-1 flex-1 leading-4">{n}</Text>
+                    </View>
+                ))}
             </View>
         );
     };
 
+    /** Failed records the backend is holding back say so ("Waiting: daily cap…", "Not sent: …"). */
+    const execStyle = (e: ScanExecution) =>
+        e.status === 'failed' && e.error?.startsWith('Waiting') ? { color: '#60A5FA', label: 'Waiting' }
+            : e.status === 'failed' && e.error?.startsWith('Not sent') ? { color: '#94A3B8', label: 'Skipped' }
+                : EXEC_STYLE[e.status];
+
     const renderExecBadge = (e?: ScanExecution) => {
         if (!e) return null;
-        const s = EXEC_STYLE[e.status];
+        const s = execStyle(e);
         return (
             <View className="px-2 py-0.5 rounded-md ml-2" style={{ backgroundColor: `${s.color}20` }}>
                 <Text className="text-[9px] font-black uppercase" style={{ color: s.color }}>Paper: {s.label}</Text>
@@ -272,7 +332,7 @@ const ScannerScreen = () => {
                     </View>
                 ))}
                 {exec?.error && (
-                    <Text className="text-error text-[10px] font-bold mt-2">Paper: {exec.error}</Text>
+                    <Text className="text-[10px] font-bold mt-2" style={{ color: execStyle(exec).color }}>Paper: {exec.error}</Text>
                 )}
                 <Text className="text-text-muted text-[9px] mt-2">
                     Updated {timeAgo(c.updated_at)}{c.expires_at ? ` • expires ${new Date(c.expires_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
