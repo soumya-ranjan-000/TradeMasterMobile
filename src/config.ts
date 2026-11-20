@@ -43,15 +43,6 @@ export const BACKEND_API_KEY = process.env.EXPO_PUBLIC_BACKEND_API_KEY || '';
 
 // Local default 8002: the paper-trading service owns 8001 (see the watchlist
 // service's docker-compose.yml, which maps host 8002 -> container 8001).
-const getWatchlistUrl = () => {
-    if (process.env.EXPO_PUBLIC_WATCHLIST_API_URL) {
-        return process.env.EXPO_PUBLIC_WATCHLIST_API_URL;
-    }
-    if (Platform.OS === 'android') {
-        return 'http://10.0.2.2:8002/api/v1';
-    }
-    return 'http://localhost:8002/api/v1';
-};
-
-export const WATCHLIST_API_URL = getWatchlistUrl();
+// The intraday watchlist comes from the backend scanner (/api/v1/scanner/watchlist);
+// the watchlist-generation service is retired.
 export const TEST_USER_ID = "test_user_123";

@@ -28,7 +28,11 @@ import {
     Search
 } from 'lucide-react-native';
 import { Alert } from 'react-native';
-import { WATCHLIST_API_URL } from '../config';
+import { backendFetch } from '../api';
+
+// The scanner's active intraday candidates, served by the backend in the shape of
+// the retired watchlist-generation service (QUALIFIED = READY, WATCHLIST = WAITING).
+const WATCHLIST_PATH = '/scanner/watchlist';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/RootNavigator';
@@ -49,7 +53,8 @@ interface StockSignal {
     stop_loss?: number;
     target?: number;
     best_entry?: number;
-    analysis_details?: any;
+    nse_symbol?: string;     // bare NSE code, what StockDetail takes
+    strategy?: string;
 }
 
 const IntradayScreen = () => {
@@ -71,9 +76,10 @@ const IntradayScreen = () => {
         try {
             setRefreshing(true);
             const [bullRes, bearRes] = await Promise.all([
-                fetch(`${WATCHLIST_API_URL}/watchlist/bullish`),
-                fetch(`${WATCHLIST_API_URL}/watchlist/bearish`)
+                backendFetch(`${WATCHLIST_PATH}/bullish`),
+                backendFetch(`${WATCHLIST_PATH}/bearish`)
             ]);
+            if (!bullRes.ok || !bearRes.ok) throw new Error(`HTTP ${bullRes.status}/${bearRes.status}`);
 
             const bullish = await bullRes.json();
             const bearish = await bearRes.json();
@@ -90,7 +96,7 @@ const IntradayScreen = () => {
 
     const fetchScanStatus = async () => {
         try {
-            const res = await fetch(`${WATCHLIST_API_URL}/watchlist/status`);
+            const res = await backendFetch(`${WATCHLIST_PATH}/status`);
             if (res.ok) {
                 const status = await res.json();
                 setScanStatus(status);
@@ -135,10 +141,11 @@ const IntradayScreen = () => {
     const triggerNewScan = async () => {
         try {
             setScanning(true);
-            const response = await fetch(`${WATCHLIST_API_URL}/watchlist/trigger`, {
+            const response = await backendFetch(`${WATCHLIST_PATH}/trigger`, {
                 method: 'POST'
             });
-            if (response.ok) {
+            // 409: a scan is already running; just follow its progress.
+            if (response.ok || response.status === 409) {
                 // Let polling handle UI updates
                 fetchScanStatus();
             } else {
@@ -289,11 +296,11 @@ const IntradayScreen = () => {
                             </View>
 
                             <TouchableOpacity
-                                onPress={() => navigation.navigate('DetailedAnalysis', { symbol: stock.symbol, analysis: stock.analysis_details })}
+                                onPress={() => navigation.navigate('StockDetail', { symbol: stock.nse_symbol || stock.symbol.replace(/\.(NS|BO)$/, '') })}
                                 className="bg-primary py-4 rounded-2xl flex-row items-center justify-center shadow-lg shadow-primary/20"
                             >
                                 <Info size={18} color="white" />
-                                <Text className="text-white font-black text-sm ml-2 uppercase tracking-tight">Full Report Analysis</Text>
+                                <Text className="text-white font-black text-sm ml-2 uppercase tracking-tight">Open Stock Detail</Text>
                             </TouchableOpacity>
                         </View>
                     )}
