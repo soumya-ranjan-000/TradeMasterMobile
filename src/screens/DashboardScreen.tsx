@@ -361,14 +361,15 @@ const DashboardScreen = () => {
                                                     <Pressable
                                                         key={sym}
                                                         onPress={() => navigation.navigate('StockDetail', { symbol: sym })}
-                                                        className="bg-surface p-6 rounded-[32px] border border-border mb-4 flex-row items-center justify-between active:scale-95 transition-transform"
+                                                        className="bg-surface px-4 py-4 rounded-[28px] border border-border mb-3 flex-row items-center justify-between active:scale-95 transition-transform"
                                                     >
-                                                        <View className="flex-row items-center">
-                                                            <View className={`w-14 h-14 rounded-2xl items-center justify-center mr-4 ${quote?.change >= 0 || !quote ? 'bg-success/10' : 'bg-error/10'}`}>
+                                                        {/* Left side shrinks (symbol ellipsizes); price and remove keep their width. */}
+                                                        <View className="flex-row items-center flex-1 mr-3">
+                                                            <View className={`w-12 h-12 rounded-2xl items-center justify-center mr-3 ${quote?.change >= 0 || !quote ? 'bg-success/10' : 'bg-error/10'}`}>
                                                                 <Text className={`font-black text-xl ${quote?.change >= 0 || !quote ? 'text-success' : 'text-error'}`}>{sym[0]}</Text>
                                                             </View>
-                                                            <View>
-                                                                <Text className="text-text-primary font-black text-lg tracking-tight">{sym.split('.')[0]}</Text>
+                                                            <View className="flex-1">
+                                                                <Text className="text-text-primary font-black text-lg tracking-tight" numberOfLines={1}>{sym.split('.')[0]}</Text>
                                                                 <View className="flex-row items-center mt-1">
                                                                     <Text className="text-text-secondary text-[10px] font-bold uppercase tracking-tight" numberOfLines={1} style={{ maxWidth: 80 }}>
                                                                         {quote?.change !== undefined ? `NSE • ` : 'NSE • EQUITY'}
@@ -381,8 +382,8 @@ const DashboardScreen = () => {
                                                                 </View>
                                                             </View>
                                                         </View>
-                                                        <View className="flex-row items-center">
-                                                            <View className="items-end mr-4">
+                                                        <View className="flex-row items-center shrink-0">
+                                                            <View className="items-end mr-3">
                                                                 <Text className="text-text-primary font-black text-lg">
                                                                     {quote?.price ? `₹${quote.price.toFixed(2)}` : '---'}
                                                                 </Text>
