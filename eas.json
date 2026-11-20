@@ -9,7 +9,8 @@
             "distribution": "internal",
             "android": {
                 "gradleCommand": ":app:assembleDebug"
-            }
+            },
+            "environment": "development"
         },
         "preview": {
             "distribution": "internal",
@@ -17,18 +18,24 @@
                 "buildType": "apk"
             },
             "env": {
+                "EXPO_PUBLIC_APP_ENV": "cloud",
+                "EXPO_PUBLIC_CLOUD_ORCHESTRATOR_URL": "https://trademasterbackend.onrender.com",
                 "EXPO_PUBLIC_PAPER_BACKEND_URL": "https://trademaster-paper-trading-service.onrender.com/api/v1",
-                "EXPO_PUBLIC_BREEZE_API_URL": "https://icici-dirct-breeze-api-interface.onrender.com"
-            }
+                "EXPO_PUBLIC_WATCHLIST_API_URL": "https://trademaster-watchlist-generation-service.onrender.com/api/v1"
+            },
+            "environment": "preview"
         },
         "production": {
             "android": {
                 "buildType": "app-bundle"
             },
             "env": {
+                "EXPO_PUBLIC_APP_ENV": "cloud",
+                "EXPO_PUBLIC_CLOUD_ORCHESTRATOR_URL": "https://trademasterbackend.onrender.com",
                 "EXPO_PUBLIC_PAPER_BACKEND_URL": "https://trademaster-paper-trading-service.onrender.com/api/v1",
-                "EXPO_PUBLIC_BREEZE_API_URL": "https://icici-dirct-breeze-api-interface.onrender.com"
-            }
+                "EXPO_PUBLIC_WATCHLIST_API_URL": "https://trademaster-watchlist-generation-service.onrender.com/api/v1"
+            },
+            "environment": "production"
         }
     },
     "submit": {
