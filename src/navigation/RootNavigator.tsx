@@ -3,11 +3,10 @@ import { View } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Home, PieChart, Activity, BookOpen, User, Zap, Search } from 'lucide-react-native';
+import { Home, PieChart, Activity, BookOpen, User, Radar, Search } from 'lucide-react-native';
 
 import DashboardScreen from '../screens/DashboardScreen';
 import WatchlistScreen from '../screens/WatchlistScreen';
-import IntradayScreen from '../screens/IntradayScreen';
 import DetailedAnalysisScreen from '../screens/DetailedAnalysisScreen';
 import PortfolioScreen from '../screens/PortfolioScreen';
 import StockDetailScreen from '../screens/StockDetailScreen';
@@ -70,7 +69,7 @@ const MainTabs = () => {
                     let Icon;
                     if (route.name === 'Dashboard') Icon = Home;
                     else if (route.name === 'Watchlist') Icon = Search;
-                    else if (route.name === 'Intraday') Icon = Zap;
+                    else if (route.name === 'Scanner') Icon = Radar;
                     else if (route.name === 'Portfolio') Icon = PieChart;
                     else if (route.name === 'Journal') Icon = BookOpen;
                     else if (route.name === 'Profile') Icon = User;
@@ -109,7 +108,8 @@ const MainTabs = () => {
         >
             <Tab.Screen name="Dashboard" component={DashboardScreen} />
             <Tab.Screen name="Watchlist" component={WatchlistScreen} />
-            <Tab.Screen name="Intraday" component={IntradayScreen} />
+            {/* Scanner: the one place for setups (it replaced the Intraday watchlist tab). */}
+            <Tab.Screen name="Scanner" component={ScannerScreen} />
             <Tab.Screen name="Journal" component={CalendarScreen} />
             <Tab.Screen name="Portfolio" component={PortfolioScreen} />
 
@@ -145,13 +145,6 @@ const MainTabs = () => {
             <Tab.Screen
                 name="Performance"
                 component={PerformanceScreen}
-                options={{
-                    tabBarItemStyle: { display: 'none' },
-                }}
-            />
-            <Tab.Screen
-                name="Scanner"
-                component={ScannerScreen}
                 options={{
                     tabBarItemStyle: { display: 'none' },
                 }}

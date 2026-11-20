@@ -224,7 +224,7 @@ export const scanner = {
     meta: () => backendJson<any>('/scanner/meta'),
     candidates: (style: ScanStyle) =>
         backendJson<{ count: number; candidates: ScanCandidate[] }>(
-            `/scanner/candidates?style=${style}&status=qualified,watchlist&limit=100`),
+            `/scanner/candidates?style=${style}&status=qualified,watchlist&limit=500`),
     executions: (limit = 100) =>
         backendJson<{ bridge: BridgeStatus; items: ScanExecution[] }>(`/scanner/executions?limit=${limit}`),
     execute: (candidateId: string) =>

@@ -3,7 +3,7 @@ import {
     View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, StatusBar, Alert,
 } from 'react-native';
 import {
-    ArrowUpRight, ArrowDownRight, ChevronDown, ChevronUp, ChevronLeft, RefreshCw, Radar, Send,
+    ArrowUpRight, ArrowDownRight, ChevronDown, ChevronUp, RefreshCw, Radar, Send,
     ShieldAlert, Target, AlertTriangle, CircleCheck, CircleX, Clock,
 } from 'lucide-react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -12,9 +12,38 @@ import { ApiError, BridgeStatus, ScanCandidate, ScanExecution, ScanStyle, scanne
 import { TEST_USER_ID } from '../config';
 
 /**
- * TradeMasterBackend's opportunity scanner: ranked candidates with entry,
- * stop and target, and the paper orders the execution bridge placed for them.
+ * TradeMasterBackend's opportunity scanner, as one tab: a compact list of
+ * setups (one row per stock and side, Bullish / Bearish, Ready / Waiting),
+ * each expanding into the full card per strategy (entry band, R:R, quantity,
+ * warnings, Chart, Send to Paper), plus the paper orders the execution
+ * bridge placed. Replaces the separate Intraday watchlist screen, which
+ * showed the same candidates in a second layout.
  */
+
+/** NSE session (Mon-Fri 09:15-15:30 IST): intraday candidates only exist then. */
+function inSession(now = new Date()): boolean {
+    // IST = UTC+5:30 with no DST, so this needs no Intl time-zone support (Hermes).
+    const ist = new Date(now.getTime() + 330 * 60_000);
+    const day = ist.getUTCDay();
+    const mins = ist.getUTCHours() * 60 + ist.getUTCMinutes();
+    return day >= 1 && day <= 5 && mins >= 9 * 60 + 15 && mins <= 15 * 60 + 30;
+}
+
+/** ₹9,200 / ₹155.33: thousands separators, no trailing .00 (no Intl needed). */
+const inr = (v?: number | null) => {
+    if (v == null) return '---';
+    const [int, dec] = Number(v).toFixed(2).split('.');
+    const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return `₹${grouped}${dec === '00' ? '' : `.${dec}`}`;
+};
+
+type Side = 'long' | 'short';
+type SignalFilter = 'ALL' | 'READY' | 'WAITING';
+interface StockGroup {
+    key: string;
+    best: ScanCandidate;           // qualified first, then the higher score
+    all: ScanCandidate[];          // every strategy that fired on this stock and side
+}
 
 const STATUS_COLOR: Record<string, string> = {
     qualified: '#10B981',
@@ -43,7 +72,10 @@ const errorText = (e: unknown) =>
 
 const ScannerScreen = () => {
     const navigation = useNavigation<any>();
-    const [style, setStyle] = useState<ScanStyle>('intraday');
+    // Intraday in market hours, swing otherwise: never empty while candidates exist.
+    const [style, setStyle] = useState<ScanStyle>(() => (inSession() ? 'intraday' : 'swing'));
+    const [side, setSide] = useState<Side>('long');
+    const [signal, setSignal] = useState<SignalFilter>('ALL');
     const [view, setView] = useState<'OPPORTUNITIES' | 'ORDERS'>('OPPORTUNITIES');
     const [candidates, setCandidates] = useState<ScanCandidate[]>([]);
     const [executions, setExecutions] = useState<ScanExecution[]>([]);
@@ -200,18 +232,16 @@ const ScannerScreen = () => {
     };
 
     const renderCandidate = (c: ScanCandidate) => {
-        const open = expanded === c.id;
+        const open = true;                 // shown inside an expanded row
         const long = c.direction === 'long';
         const color = STATUS_COLOR[c.status] || '#94A3B8';
         const exec = execByCandidate[c.id];
         const canSend = !exec || exec.status === 'failed' || exec.status === 'rejected';
         const swingShort = c.style === 'swing' && !long;
         return (
-            <TouchableOpacity
+            <View
                 key={c.id}
-                activeOpacity={0.9}
-                onPress={() => setExpanded(open ? null : c.id)}
-                className="bg-surface rounded-3xl border border-border/40 mb-3 overflow-hidden"
+                className="bg-surface/60 rounded-3xl border border-border/40 mb-3 overflow-hidden"
             >
                 <View className="p-5">
                     <View className="flex-row justify-between items-center">
@@ -303,7 +333,54 @@ const ScannerScreen = () => {
                         </View>
                     )}
                 </View>
-            </TouchableOpacity>
+            </View>
+        );
+    };
+
+    const renderRow = (g: StockGroup) => {
+        const c = g.best;
+        const open = expanded === g.key;
+        const ready = c.status === 'qualified';
+        const exec = g.all.map(x => execByCandidate[x.id]).find(Boolean);
+        return (
+            <View key={g.key} className="mb-2">
+                <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => setExpanded(open ? null : g.key)}
+                    className={`bg-surface rounded-2xl border px-4 py-3 ${open ? 'border-primary/40' : 'border-border/40'}`}
+                >
+                    <View className="flex-row items-center justify-between">
+                        <View className="flex-row items-center flex-1">
+                            <Text className="text-text-primary font-black text-base tracking-tight mr-2">{c.symbol}</Text>
+                            <View className="px-1.5 py-0.5 rounded-md" style={{ backgroundColor: ready ? '#10B98120' : '#F59E0B20' }}>
+                                <Text className="text-[9px] font-black uppercase" style={{ color: ready ? '#10B981' : '#F59E0B' }}>
+                                    {ready ? 'Ready' : 'Waiting'}
+                                </Text>
+                            </View>
+                        </View>
+                        <View className="flex-row items-center">
+                            <Text className="text-text-primary font-black text-base mr-1">{Math.round(c.score)}</Text>
+                            {open ? <ChevronUp size={16} color="#94A3B8" /> : <ChevronDown size={16} color="#94A3B8" />}
+                        </View>
+                    </View>
+                    <Text className="text-text-muted text-[11px] font-bold mt-1">
+                        {inr(c.entry_trigger)} · SL <Text className="text-error">{inr(c.stop)}</Text> · TGT{' '}
+                        <Text className="text-success">{inr(c.targets?.[0])}</Text>
+                        {c.reward_risk_net != null ? ` · R:R ${c.reward_risk_net.toFixed(1)}` : ''}
+                    </Text>
+                    {(g.all.length > 1 || exec) && (
+                        <View className="flex-row items-center mt-1.5">
+                            {g.all.length > 1 && (
+                                <Text className="text-text-muted text-[10px] font-bold mr-1">
+                                    {g.all.map(x => x.strategy).join(' + ')}
+                                </Text>
+                            )}
+                            {renderExecBadge(exec)}
+                        </View>
+                    )}
+                </TouchableOpacity>
+                {open && <View className="mt-2">{g.all.map(renderCandidate)}</View>}
+            </View>
         );
     };
 
@@ -338,24 +415,34 @@ const ScannerScreen = () => {
         );
     };
 
-    const qualified = candidates.filter(c => c.status === 'qualified');
-    const watch = candidates.filter(c => c.status !== 'qualified');
+    const groups = React.useMemo(() => {
+        const rank = (c: ScanCandidate) => (c.status === 'qualified' ? 1000 : 0) + c.score;
+        const m: Record<string, StockGroup> = {};
+        candidates.forEach(c => {
+            const key = `${c.symbol}|${c.direction}`;
+            const g = m[key] || (m[key] = { key, best: c, all: [] });
+            g.all.push(c);
+            if (rank(c) > rank(g.best)) g.best = c;
+        });
+        Object.values(m).forEach(g => g.all.sort((a, b) => rank(b) - rank(a)));
+        return Object.values(m).sort((a, b) => rank(b.best) - rank(a.best));
+    }, [candidates]);
+    const sideGroups = groups.filter(g => g.best.direction === side);
+    const shown = sideGroups.filter(g =>
+        signal === 'ALL' || (signal === 'READY') === (g.best.status === 'qualified'));
+    const count = (d: Side) => groups.filter(g => g.best.direction === d).length;
+    const readyCount = sideGroups.filter(g => g.best.status === 'qualified').length;
 
     return (
         <View className="flex-1 bg-background">
             <StatusBar barStyle="light-content" />
 
             <View className="px-6 pt-14 pb-4 flex-row justify-between items-end">
-                <View className="flex-row items-center">
-                    <TouchableOpacity onPress={() => navigation.goBack()} className="p-2 -ml-2 mr-2">
-                        <ChevronLeft size={26} color="#E1E7ED" />
-                    </TouchableOpacity>
-                    <View>
-                        <Text className="text-text-primary text-3xl font-black">Scanner</Text>
-                        <Text className="text-text-muted text-xs font-bold uppercase tracking-widest mt-1">
-                            Opportunities • {marketOpen == null ? '' : marketOpen ? 'Market open' : 'Market closed'}
-                        </Text>
-                    </View>
+                <View>
+                    <Text className="text-text-primary text-3xl font-black">Scanner</Text>
+                    <Text className="text-text-muted text-xs font-bold uppercase tracking-widest mt-1">
+                        {style === 'intraday' ? 'Intraday' : 'Swing'} setups{marketOpen == null ? '' : marketOpen ? ' • Market open' : ' • Market closed'}
+                    </Text>
                 </View>
                 <View className="flex-row">
                     <TouchableOpacity onPress={() => { setRefreshing(true); load(); }} className="p-3 bg-surface rounded-2xl border border-border/30 mr-2">
@@ -406,7 +493,8 @@ const ScannerScreen = () => {
                 </View>
             ) : (
                 <ScrollView
-                    className="flex-1 px-6"
+                    className="flex-1"
+                    contentContainerStyle={{ paddingHorizontal: 24 }}
                     showsVerticalScrollIndicator={false}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#00E0A1" />}
                 >
@@ -418,19 +506,37 @@ const ScannerScreen = () => {
 
                     {view === 'OPPORTUNITIES' ? (
                         <>
-                            {!error && candidates.length === 0 && (
-                                <Text className="text-text-muted text-center mt-16 font-bold">
-                                    No active {style} candidates.{'\n'}Tap the radar to run a scan.
+                            <View className="flex-row mb-3">
+                                {(['long', 'short'] as Side[]).map(d => (
+                                    <TouchableOpacity key={d} onPress={() => { setSide(d); setExpanded(null); }}
+                                        className={`flex-1 py-2.5 rounded-2xl items-center ${d === 'long' ? 'mr-1' : 'ml-1'} ${side === d
+                                            ? (d === 'long' ? 'bg-success/20 border border-success/40' : 'bg-error/20 border border-error/40')
+                                            : 'bg-surface border border-transparent'}`}>
+                                        <Text className={`font-black uppercase text-xs ${side === d ? (d === 'long' ? 'text-success' : 'text-error') : 'text-text-muted'}`}>
+                                            {d === 'long' ? 'Bullish' : 'Bearish'} ({count(d)})
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                            <View className="flex-row items-center mb-3">
+                                {(['ALL', 'READY', 'WAITING'] as SignalFilter[]).map(f => (
+                                    <TouchableOpacity key={f} onPress={() => setSignal(f)}
+                                        className={`px-3 py-1.5 rounded-full mr-2 ${signal === f ? 'bg-primary' : 'bg-surface border border-border/40'}`}>
+                                        <Text className={`text-[10px] font-black uppercase ${signal === f ? 'text-white' : 'text-text-muted'}`}>
+                                            {f === 'ALL' ? 'All' : f === 'READY' ? `Ready ${readyCount}` : `Waiting ${sideGroups.length - readyCount}`}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                            {!error && shown.length === 0 && (
+                                <Text className="text-text-muted text-center mt-12 font-bold leading-5">
+                                    No {signal === 'ALL' ? '' : signal.toLowerCase() + ' '}{side === 'long' ? 'bullish' : 'bearish'} {style} setups right now.{'\n'}
+                                    {style === 'intraday'
+                                        ? 'Intraday scans run every 15 min, 09:35–14:45 IST. Outside market hours, try Swing.'
+                                        : 'Swing setups come from the daily 15:45 IST scan. Tap the radar to scan now.'}
                                 </Text>
                             )}
-                            {qualified.length > 0 && (
-                                <Text className="text-text-muted text-[10px] font-black uppercase tracking-widest mb-3">Qualified • {qualified.length}</Text>
-                            )}
-                            {qualified.map(renderCandidate)}
-                            {watch.length > 0 && (
-                                <Text className="text-text-muted text-[10px] font-black uppercase tracking-widest mb-3 mt-3">Watchlist • {watch.length}</Text>
-                            )}
-                            {watch.map(renderCandidate)}
+                            {shown.map(renderRow)}
                         </>
                     ) : (
                         <>
