@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, FlatList, Pressable, ActivityIndicator, ScrollView } from 'react-native';
 import { Search, ChevronRight, X } from 'lucide-react-native';
 import { ScreenHeader, SectionLabel, EmptyState } from '../ui';
@@ -23,6 +23,8 @@ type WatchlistScreenNavigationProp = CompositeNavigationProp<
 >;
 
 const RECENT_SEARCHES_KEY = 'recent_searches';
+/** Typing pause before a search request is sent. */
+const SEARCH_DEBOUNCE_MS = 250;
 
 const WatchlistScreen = () => {
     const navigation = useNavigation<WatchlistScreenNavigationProp>();
@@ -61,37 +63,61 @@ const WatchlistScreen = () => {
         await AsyncStorage.removeItem(RECENT_SEARCHES_KEY);
     };
 
-    const searchStocks = async (text: string) => {
+    // Searches are debounced, and only the latest request's response is applied
+    // (an earlier, slower response can't overwrite newer results).
+    const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const searchSeq = useRef(0);
+    useEffect(() => () => { if (searchTimer.current) clearTimeout(searchTimer.current); }, []);
+
+    const cancelSearch = () => {
+        if (searchTimer.current) clearTimeout(searchTimer.current);
+        searchTimer.current = null;
+        searchSeq.current++;
+        setLoading(false);
+    };
+
+    const runSearch = async (text: string, seq: number) => {
+        try {
+            // Updated to use Breeze Service search endpoint
+            const data = await searchSymbols(text);
+            if (seq === searchSeq.current) setResults(Array.isArray(data) ? data : []);
+        } catch (error) {
+            console.error("Search failed:", error);
+        } finally {
+            if (seq === searchSeq.current) setLoading(false);
+        }
+    };
+
+    const searchStocks = (text: string, immediate = false) => {
         setQuery(text);
+        cancelSearch();
         if (text.length < 2) {
             setResults([]);
             return;
         }
+        setLoading(true);
+        const seq = searchSeq.current;
+        if (immediate) runSearch(text, seq);
+        else searchTimer.current = setTimeout(() => { searchTimer.current = null; runSearch(text, seq); }, SEARCH_DEBOUNCE_MS);
+    };
 
-        try {
-            setLoading(true);
-            // Updated to use Breeze Service search endpoint
-            const data = await searchSymbols(text);
-            setResults(Array.isArray(data) ? data : []);
-        } catch (error) {
-            console.error("Search failed:", error);
-        } finally {
-            setLoading(false);
-        }
+    const clearSearch = () => {
+        cancelSearch();
+        setQuery('');
+        setResults([]);
     };
 
     const selectRecentSearch = (symbol: string) => {
         const cleanSymbol = symbol.split('.')[0].toUpperCase();
         setQuery(cleanSymbol);
         setResults([]);
-        searchStocks(cleanSymbol);
+        searchStocks(cleanSymbol, true);
     };
 
     const openStock = (symbol: string) => {
         addToRecentSearches(symbol);
         navigation.navigate('StockDetail', { symbol });
-        setQuery('');
-        setResults([]);
+        clearSearch();
     };
 
     const Chip = ({ label, onPress }: { label: string; onPress: () => void }) => (
@@ -113,14 +139,14 @@ const WatchlistScreen = () => {
                         placeholderTextColor={colors.textMuted}
                         className="flex-1 ml-3 text-text-primary font-semibold text-[15px] outline-none py-3"
                         value={query}
-                        onChangeText={searchStocks}
+                        onChangeText={text => searchStocks(text)}
                         autoCapitalize="characters"
                         autoCorrect={false}
                         returnKeyType="search"
                         accessibilityLabel="Search stocks"
                     />
                     {loading ? <ActivityIndicator size="small" color={colors.primary} /> : query.length > 0 && (
-                        <Pressable onPress={() => { setQuery(''); setResults([]); }} accessibilityLabel="Clear search" hitSlop={10}>
+                        <Pressable onPress={clearSearch} accessibilityLabel="Clear search" hitSlop={10}>
                             <X size={18} color={colors.textMuted} />
                         </Pressable>
                     )}

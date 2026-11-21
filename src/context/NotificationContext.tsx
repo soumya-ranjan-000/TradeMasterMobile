@@ -1,10 +1,10 @@
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { toast } from '../components/Toast';
-import { Alert, Platform } from 'react-native';
+import { Alert, Platform, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { useAlerts } from './AlertContext';
-import { useMarketData } from './MarketDataContext';
+import { useMarketData, tickKey } from './MarketDataContext';
 import { usePositions } from './PositionContext';
 
 // Configure how notifications appear when the app is in the foreground
@@ -28,7 +28,7 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { alerts, markAsTriggered, refreshAlerts } = useAlerts();
     const { positions, refreshPositions } = usePositions();
-    const { ticks, subscribe, unsubscribe } = useMarketData();
+    const { subscribe, unsubscribe, getTick, subscribeTicks, setBackgroundWatch } = useMarketData();
     const [lastTriggeredAlert, setLastTriggeredAlert] = useState<any | null>(null);
     const processedAlerts = useRef<Set<string>>(new Set());
     const processedPositions = useRef<Set<string>>(new Set());
@@ -110,15 +110,21 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         positions.forEach(p => symbols.add(p.symbol));
 
         symbols.forEach(sym => subscribe(sym));
+        // Active alerts or open positions: keep ticks flowing in the background so
+        // alert and SL/target notifications still fire (as before the AppState change).
+        setBackgroundWatch(symbols.size > 0);
         return () => symbols.forEach(sym => unsubscribe(sym));
-    }, [alerts, positions, subscribe, unsubscribe]);
+    }, [alerts, positions, subscribe, unsubscribe, setBackgroundWatch]);
 
-    // 3. Client-side monitoring logic (Alerts & Positions)
-    useEffect(() => {
+    // 3. Client-side monitoring logic (Alerts & Positions). Runs when alerts or
+    // positions change and when a watched symbol's price changes, without
+    // re-rendering this provider on every tick.
+    const checkTriggers = useRef<() => void>(() => { });
+    checkTriggers.current = () => {
         // Monitoring Alerts
         alerts.forEach(alert => {
             if (!alert.active || alert.isTriggered || processedAlerts.current.has(alert.id)) return;
-            const tick = ticks[`NSE:${alert.symbol.split('.')[0].toUpperCase()}`];
+            const tick = getTick(tickKey(alert.symbol));
             if (tick && tick.ltp > 0) {
                 let triggered = false;
                 if (alert.condition === 'Above' && tick.ltp >= alert.price) triggered = true;
@@ -141,7 +147,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         // Monitoring Positions (SL/Target)
         positions.forEach(pos => {
             if (processedPositions.current.has(pos.position_id)) return;
-            const tick = ticks[`NSE:${pos.symbol.split('.')[0].toUpperCase()}`];
+            const tick = getTick(tickKey(pos.symbol));
 
             if (tick && tick.ltp > 0) {
                 const ltp = tick.ltp;
@@ -172,20 +178,45 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
                 }
             }
         });
-    }, [ticks, alerts, positions]);
-
-    // 4. Update last visit time periodically
+    };
+    const watchedKeys = useMemo(() => {
+        const keys = new Set<string>();
+        alerts.forEach(a => { if (a.active && !a.isTriggered) keys.add(tickKey(a.symbol)); });
+        positions.forEach(p => keys.add(tickKey(p.symbol)));
+        return Array.from(keys);
+    }, [alerts, positions]);
     useEffect(() => {
-        const timer = setInterval(() => {
-            AsyncStorage.setItem('LAST_VISIT_TIME', new Date().toISOString());
-        }, 300000);
-        return () => clearInterval(timer);
+        checkTriggers.current();
+        return subscribeTicks(watchedKeys, () => checkTriggers.current());
+    }, [alerts, positions, watchedKeys, subscribeTicks]);
+
+    // 4. Update last visit time periodically while in the foreground; going to
+    // the background records the time once and stops the timer until return.
+    useEffect(() => {
+        const write = () => { AsyncStorage.setItem('LAST_VISIT_TIME', new Date().toISOString()); };
+        let timer: ReturnType<typeof setInterval> | null =
+            AppState.currentState === 'background' ? null : setInterval(write, 300000);
+        const sub = AppState.addEventListener('change', next => {
+            if (next === 'background') {
+                if (!timer) return;
+                clearInterval(timer);
+                timer = null;
+                write();
+            } else if (next === 'active' && !timer) {
+                timer = setInterval(write, 300000);
+            }
+        });
+        return () => {
+            if (timer) clearInterval(timer);
+            sub.remove();
+        };
     }, []);
 
-    const clearNotification = () => setLastTriggeredAlert(null);
+    const clearNotification = useCallback(() => setLastTriggeredAlert(null), []);
+    const value = useMemo(() => ({ lastTriggeredAlert, clearNotification }), [lastTriggeredAlert, clearNotification]);
 
     return (
-        <NotificationContext.Provider value={{ lastTriggeredAlert, clearNotification }}>
+        <NotificationContext.Provider value={value}>
             {children}
         </NotificationContext.Provider>
     );

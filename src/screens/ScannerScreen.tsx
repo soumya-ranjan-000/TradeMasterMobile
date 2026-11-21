@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from '../components/Toast';
 import {
-    View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, StatusBar, Alert,
+    View, Text, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, StatusBar, Alert,
     Switch, Platform,
 } from 'react-native';
 import {
@@ -72,6 +72,75 @@ const errorText = (e: unknown) =>
     e instanceof ApiError
         ? (e.status === 401 ? 'Backend refused the API key (check EXPO_PUBLIC_BACKEND_API_KEY).' : e.message)
         : 'Cannot reach TradeMasterBackend.';
+
+/** Failed records the backend is holding back say so ("Waiting: daily cap…", "Not sent: …"). */
+const execStyle = (e: ScanExecution) =>
+    e.status === 'failed' && e.error?.startsWith('Waiting') ? { color: '#60A5FA', label: 'Waiting' }
+        : e.status === 'failed' && e.error?.startsWith('Not sent') ? { color: '#94A3B8', label: 'Skipped' }
+            : EXEC_STYLE[e.status];
+
+const renderExecBadge = (e?: ScanExecution) => {
+    if (!e) return null;
+    const s = execStyle(e);
+    return (
+        <View className="px-2 py-0.5 rounded-md ml-2" style={{ backgroundColor: `${s.color}20` }}>
+            <Text className="text-[11px] font-black uppercase" style={{ color: s.color }}>Paper: {s.label}</Text>
+        </View>
+    );
+};
+
+/** One stock+side row; memoized so the list only re-renders rows whose data changed. */
+const ScanRow = React.memo(({ g, open, exec, onToggle, children }: {
+    g: StockGroup;
+    open: boolean;
+    exec?: ScanExecution;
+    onToggle: (key: string) => void;
+    /** The expanded strategy cards (only for the open row). */
+    children?: React.ReactNode;
+}) => {
+    const c = g.best;
+    const ready = c.status === 'qualified';
+    return (
+        <View className="mb-2">
+            <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => onToggle(g.key)}
+                className={`bg-surface rounded-2xl border px-4 py-3 ${open ? 'border-primary/40' : 'border-border/40'}`}
+            >
+                <View className="flex-row items-center justify-between">
+                    <View className="flex-row items-center flex-1">
+                        <Text className="text-text-primary font-black text-base tracking-tight mr-2">{c.symbol}</Text>
+                        <View className="px-1.5 py-0.5 rounded-md" style={{ backgroundColor: ready ? '#10B98120' : '#F59E0B20' }}>
+                            <Text className="text-[11px] font-black uppercase" style={{ color: ready ? '#10B981' : '#F59E0B' }}>
+                                {ready ? 'Ready' : 'Waiting'}
+                            </Text>
+                        </View>
+                    </View>
+                    <View className="flex-row items-center">
+                        <Text className="text-text-primary font-black text-base mr-1">{Math.round(c.score)}</Text>
+                        {open ? <ChevronUp size={16} color="#94A3B8" /> : <ChevronDown size={16} color="#94A3B8" />}
+                    </View>
+                </View>
+                <Text className="text-text-muted text-[11px] font-bold mt-1">
+                    {inr(c.entry_trigger)} · SL <Text className="text-error">{inr(c.stop)}</Text> · TGT{' '}
+                    <Text className="text-success">{inr(c.targets?.[0])}</Text>
+                    {c.reward_risk_net != null ? ` · R:R ${c.reward_risk_net.toFixed(1)}` : ''}
+                </Text>
+                {(g.all.length > 1 || exec) && (
+                    <View className="flex-row items-center mt-1.5">
+                        {g.all.length > 1 && (
+                            <Text className="text-text-muted text-[11px] font-bold mr-1">
+                                {g.all.map(x => x.strategy).join(' + ')}
+                            </Text>
+                        )}
+                        {renderExecBadge(exec)}
+                    </View>
+                )}
+            </TouchableOpacity>
+            {open && <View className="mt-2">{children}</View>}
+        </View>
+    );
+});
 
 const ScannerScreen = () => {
     const navigation = useNavigation<any>();
@@ -292,22 +361,6 @@ const ScannerScreen = () => {
         );
     };
 
-    /** Failed records the backend is holding back say so ("Waiting: daily cap…", "Not sent: …"). */
-    const execStyle = (e: ScanExecution) =>
-        e.status === 'failed' && e.error?.startsWith('Waiting') ? { color: '#60A5FA', label: 'Waiting' }
-            : e.status === 'failed' && e.error?.startsWith('Not sent') ? { color: '#94A3B8', label: 'Skipped' }
-                : EXEC_STYLE[e.status];
-
-    const renderExecBadge = (e?: ScanExecution) => {
-        if (!e) return null;
-        const s = execStyle(e);
-        return (
-            <View className="px-2 py-0.5 rounded-md ml-2" style={{ backgroundColor: `${s.color}20` }}>
-                <Text className="text-[11px] font-black uppercase" style={{ color: s.color }}>Paper: {s.label}</Text>
-            </View>
-        );
-    };
-
     /**
      * One strategy's detail under an expanded row. The row already shows the
      * stock, READY/WAITING, score and the best strategy's levels, so this adds
@@ -384,52 +437,7 @@ const ScannerScreen = () => {
         );
     };
 
-    const renderRow = (g: StockGroup) => {
-        const c = g.best;
-        const open = expanded === g.key;
-        const ready = c.status === 'qualified';
-        const exec = g.all.map(x => execByCandidate[x.id]).find(Boolean);
-        return (
-            <View key={g.key} className="mb-2">
-                <TouchableOpacity
-                    activeOpacity={0.85}
-                    onPress={() => setExpanded(open ? null : g.key)}
-                    className={`bg-surface rounded-2xl border px-4 py-3 ${open ? 'border-primary/40' : 'border-border/40'}`}
-                >
-                    <View className="flex-row items-center justify-between">
-                        <View className="flex-row items-center flex-1">
-                            <Text className="text-text-primary font-black text-base tracking-tight mr-2">{c.symbol}</Text>
-                            <View className="px-1.5 py-0.5 rounded-md" style={{ backgroundColor: ready ? '#10B98120' : '#F59E0B20' }}>
-                                <Text className="text-[11px] font-black uppercase" style={{ color: ready ? '#10B981' : '#F59E0B' }}>
-                                    {ready ? 'Ready' : 'Waiting'}
-                                </Text>
-                            </View>
-                        </View>
-                        <View className="flex-row items-center">
-                            <Text className="text-text-primary font-black text-base mr-1">{Math.round(c.score)}</Text>
-                            {open ? <ChevronUp size={16} color="#94A3B8" /> : <ChevronDown size={16} color="#94A3B8" />}
-                        </View>
-                    </View>
-                    <Text className="text-text-muted text-[11px] font-bold mt-1">
-                        {inr(c.entry_trigger)} · SL <Text className="text-error">{inr(c.stop)}</Text> · TGT{' '}
-                        <Text className="text-success">{inr(c.targets?.[0])}</Text>
-                        {c.reward_risk_net != null ? ` · R:R ${c.reward_risk_net.toFixed(1)}` : ''}
-                    </Text>
-                    {(g.all.length > 1 || exec) && (
-                        <View className="flex-row items-center mt-1.5">
-                            {g.all.length > 1 && (
-                                <Text className="text-text-muted text-[11px] font-bold mr-1">
-                                    {g.all.map(x => x.strategy).join(' + ')}
-                                </Text>
-                            )}
-                            {renderExecBadge(exec)}
-                        </View>
-                    )}
-                </TouchableOpacity>
-                {open && <View className="mt-2">{g.all.map(c => renderCandidate(c, g.best, g.all.length > 1))}</View>}
-            </View>
-        );
-    };
+    const toggleRow = useCallback((key: string) => setExpanded(prev => (prev === key ? null : key)), []);
 
     const renderExecution = (e: ScanExecution) => {
         const s = EXEC_STYLE[e.status];
@@ -480,6 +488,19 @@ const ScannerScreen = () => {
     const count = (d: Side) => groups.filter(g => g.best.direction === d).length;
     const readyCount = sideGroups.filter(g => g.best.status === 'qualified').length;
 
+    // Virtualized list: the swing universe can yield hundreds of rows.
+    const renderOpportunity = ({ item: g }: { item: StockGroup }) => {
+        const open = expanded === g.key;
+        return (
+            <ScanRow g={g} open={open} exec={g.all.map(x => execByCandidate[x.id]).find(Boolean)} onToggle={toggleRow}>
+                {open ? g.all.map(c => renderCandidate(c, g.best, g.all.length > 1)) : null}
+            </ScanRow>
+        );
+    };
+    const renderListItem = ({ item }: { item: any }) =>
+        view === 'OPPORTUNITIES' ? renderOpportunity({ item }) : renderExecution(item);
+    const listKey = (item: any) => (view === 'OPPORTUNITIES' ? item.key : item.candidate_id);
+
     return (
         <View className="flex-1 bg-background">
             <StatusBar barStyle="light-content" />
@@ -522,67 +543,69 @@ const ScannerScreen = () => {
                     {[0, 1, 2, 3, 4].map(i => <SkeletonRow key={i} />)}
                 </View>
             ) : (
-                <ScrollView
+                <FlatList
                     className="flex-1"
+                    data={(view === 'OPPORTUNITIES' ? shown : executions) as any[]}
+                    keyExtractor={listKey}
+                    renderItem={renderListItem}
                     contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }}
                     showsVerticalScrollIndicator={false}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#00E0A1" />}
-                >
-                    {!!loadedAt && (
-                        <Text className="text-text-muted text-xs font-semibold mb-2">
-                            {syncing ? `Showing results from ${ago(loadedAt)} · updating…` : `Updated ${ago(loadedAt)}`}
-                        </Text>
-                    )}
-                    {error && (
-                        <View className="p-4 rounded-2xl bg-error/10 border border-error/20 mb-4">
-                            <Text className="text-error text-xs font-bold">{error}</Text>
-                        </View>
-                    )}
+                    ListHeaderComponent={<>
+                        {!!loadedAt && (
+                            <Text className="text-text-muted text-xs font-semibold mb-2">
+                                {syncing ? `Showing results from ${ago(loadedAt)} · updating…` : `Updated ${ago(loadedAt)}`}
+                            </Text>
+                        )}
+                        {error && (
+                            <View className="p-4 rounded-2xl bg-error/10 border border-error/20 mb-4">
+                                <Text className="text-error text-xs font-bold">{error}</Text>
+                            </View>
+                        )}
 
-                    {view === 'OPPORTUNITIES' ? (
-                        <>
-                            <View className="flex-row mb-3">
-                                {(['long', 'short'] as Side[]).map(d => (
-                                    <TouchableOpacity key={d} onPress={() => { setSide(d); setExpanded(null); }}
-                                        className={`flex-1 py-2.5 rounded-2xl items-center ${d === 'long' ? 'mr-1' : 'ml-1'} ${side === d
-                                            ? (d === 'long' ? 'bg-success/20 border border-success/40' : 'bg-error/20 border border-error/40')
-                                            : 'bg-surface border border-transparent'}`}>
-                                        <Text className={`font-black uppercase text-xs ${side === d ? (d === 'long' ? 'text-success' : 'text-error') : 'text-text-muted'}`}>
-                                            {d === 'long' ? 'Bullish' : 'Bearish'} ({count(d)})
-                                        </Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-                            <View className="flex-row items-center mb-3">
-                                {(['ALL', 'READY', 'WAITING'] as SignalFilter[]).map(f => (
-                                    <TouchableOpacity key={f} onPress={() => setSignal(f)}
-                                        className={`px-3 py-1.5 rounded-full mr-2 ${signal === f ? 'bg-primary' : 'bg-surface border border-border/40'}`}>
-                                        <Text className={`text-[11px] font-black uppercase ${signal === f ? 'text-white' : 'text-text-muted'}`}>
-                                            {f === 'ALL' ? 'All' : f === 'READY' ? `Ready ${readyCount}` : `Waiting ${sideGroups.length - readyCount}`}
-                                        </Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-                            {!error && shown.length === 0 && (
-                                <Text className="text-text-muted text-center mt-12 font-bold leading-5">
-                                    No {signal === 'ALL' ? '' : signal.toLowerCase() + ' '}{side === 'long' ? 'bullish' : 'bearish'} {style} setups right now.{'\n'}
-                                    {style === 'intraday'
-                                        ? 'Intraday scans run every 15 min, 09:35–14:45 IST. Outside market hours, try Swing.'
-                                        : 'Swing setups come from the daily 15:45 IST scan. Tap the radar to scan now.'}
-                                </Text>
-                            )}
-                            {shown.map(renderRow)}
-                        </>
-                    ) : (
-                        <>
-                            {!error && executions.length === 0 && (
-                                <Text className="text-text-muted text-center mt-16 font-bold">No scanner orders yet.</Text>
-                            )}
-                            {executions.map(renderExecution)}
-                        </>
-                    )}
-                    <View className="h-24" />
-                </ScrollView>
+                        {view === 'OPPORTUNITIES' ? (
+                            <>
+                                <View className="flex-row mb-3">
+                                    {(['long', 'short'] as Side[]).map(d => (
+                                        <TouchableOpacity key={d} onPress={() => { setSide(d); setExpanded(null); }}
+                                            className={`flex-1 py-2.5 rounded-2xl items-center ${d === 'long' ? 'mr-1' : 'ml-1'} ${side === d
+                                                ? (d === 'long' ? 'bg-success/20 border border-success/40' : 'bg-error/20 border border-error/40')
+                                                : 'bg-surface border border-transparent'}`}>
+                                            <Text className={`font-black uppercase text-xs ${side === d ? (d === 'long' ? 'text-success' : 'text-error') : 'text-text-muted'}`}>
+                                                {d === 'long' ? 'Bullish' : 'Bearish'} ({count(d)})
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                                <View className="flex-row items-center mb-3">
+                                    {(['ALL', 'READY', 'WAITING'] as SignalFilter[]).map(f => (
+                                        <TouchableOpacity key={f} onPress={() => setSignal(f)}
+                                            className={`px-3 py-1.5 rounded-full mr-2 ${signal === f ? 'bg-primary' : 'bg-surface border border-border/40'}`}>
+                                            <Text className={`text-[11px] font-black uppercase ${signal === f ? 'text-white' : 'text-text-muted'}`}>
+                                                {f === 'ALL' ? 'All' : f === 'READY' ? `Ready ${readyCount}` : `Waiting ${sideGroups.length - readyCount}`}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                                {!error && shown.length === 0 && (
+                                    <Text className="text-text-muted text-center mt-12 font-bold leading-5">
+                                        No {signal === 'ALL' ? '' : signal.toLowerCase() + ' '}{side === 'long' ? 'bullish' : 'bearish'} {style} setups right now.{'\n'}
+                                        {style === 'intraday'
+                                            ? 'Intraday scans run every 15 min, 09:35–14:45 IST. Outside market hours, try Swing.'
+                                            : 'Swing setups come from the daily 15:45 IST scan. Tap the radar to scan now.'}
+                                    </Text>
+                                )}
+                            </>
+                        ) : (
+                            <>
+                                {!error && executions.length === 0 && (
+                                    <Text className="text-text-muted text-center mt-16 font-bold">No scanner orders yet.</Text>
+                                )}
+                            </>
+                        )}
+                    </>}
+                    ListFooterComponent={<View className="h-24" />}
+                />
             )}
         </View>
     );

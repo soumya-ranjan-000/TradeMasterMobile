@@ -12,7 +12,8 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RootStackParamList, MainTabParamList } from '../navigation/RootNavigator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useMarketData } from '../context/MarketDataContext';
+import { useMarketData, useLivePrices } from '../context/MarketDataContext';
+import { useAppActive } from '../appState';
 import { IconButton, Segmented, Skeleton, SkeletonRow, EmptyState, FadeIn, confirmAction } from '../ui';
 import { haptic } from '../haptics';
 import { colors, signColor } from '../theme';
@@ -56,10 +57,30 @@ const DashboardScreen = () => {
     const [watchLoading, setWatchLoading] = useState(false);
     const [cached, setCached] = useState<{ at: number; quotes: Record<string, Quote> } | null>(null);
     const [pricesAt, setPricesAt] = useState<number | null>(null);
-    const [, setTick] = useState(0);
-    useEffect(() => { const id = setInterval(() => setTick(t => t + 1), 30_000); return () => clearInterval(id); }, []);
     const isFocused = useIsFocused();
-    const { ticks, subscribe, unsubscribe } = useMarketData();
+    const appActive = useAppActive();
+    // Re-render every 30s for the relative times ("2m ago"), only while visible.
+    const [, setTick] = useState(0);
+    useEffect(() => {
+        if (!isFocused || !appActive) return;
+        const id = setInterval(() => setTick(t => t + 1), 30_000);
+        return () => clearInterval(id);
+    }, [isFocused, appActive]);
+    const { subscribe, unsubscribe } = useMarketData();
+    // Only the watchlist symbols' ticks (each looked up as NSE:CODE, NSE:SYM, SYM),
+    // and frozen while the tab is not focused.
+    const tickKeys = React.useMemo(() => {
+        const keys = new Set<string>();
+        watchlists.forEach(wl => {
+            wl.symbols?.forEach((sym: string) => {
+                keys.add(`NSE:${bareSymbol(sym)}`);
+                keys.add(`NSE:${sym.toUpperCase()}`);
+                keys.add(sym.toUpperCase());
+            });
+        });
+        return Array.from(keys);
+    }, [watchlists]);
+    const ticks = useLivePrices(tickKeys, !isFocused);
 
     const fetchProfile = async (id: string = userId) => {
         try {
@@ -198,10 +219,20 @@ const DashboardScreen = () => {
             fetchMarketStatus();
         };
         init();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Market status: polled every 5 minutes (first fetch in init above); paused in the background
+    // and refreshed once on return.
+    const statusPollStarted = React.useRef(false);
+    useEffect(() => {
+        if (!appActive) return;
+        if (statusPollStarted.current) fetchMarketStatus();
+        statusPollStarted.current = true;
         const timer = setInterval(fetchMarketStatus, 300000); // 5 minutes
         return () => clearInterval(timer);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [appActive]);
 
     const onRefresh = () => {
         setRefreshing(true);
@@ -356,12 +387,12 @@ const DashboardScreen = () => {
 
                 {activeCategory === 'Market' && (
                     <FadeIn key="m"><View className="px-5 pt-1 pb-8">
-                        <MarketPulse active={isFocused && activeCategory === 'Market'} />
+                        <MarketPulse active={isFocused && appActive && activeCategory === 'Market'} />
                     </View></FadeIn>
                 )}
                 {activeCategory === 'Events' && (
                     <FadeIn key="e"><View className="px-5 pt-1 pb-8">
-                        <TradingStatusPanel active={isFocused && activeCategory === 'Events'} />
+                        <TradingStatusPanel active={isFocused && appActive && activeCategory === 'Events'} />
                     </View></FadeIn>
                 )}
             </ScrollView>

@@ -82,6 +82,10 @@ const TradeScreen = () => {
         init();
     }, [symbol]);
 
+    // Stable callback for the memoized SwipeButton; it always runs the latest placeOrder.
+    const placeOrderRef = React.useRef<() => void>(() => { });
+    const onSwipeComplete = React.useCallback(() => placeOrderRef.current(), []);
+
     const placeOrder = async () => {
         const qty = parseInt(quantity);
         if (!qty || qty <= 0) {
@@ -143,6 +147,7 @@ const TradeScreen = () => {
         }
     };
 
+    placeOrderRef.current = placeOrder;
     const isBuy = side === 'BUY';
 
     return (
@@ -480,7 +485,7 @@ const TradeScreen = () => {
                     side={side}
                     isBuy={isBuy}
                     loading={loading}
-                    onSwipeComplete={placeOrder}
+                    onSwipeComplete={onSwipeComplete}
                     disabled={!quantity || parseInt(quantity) <= 0}
                 />
             </View>
@@ -488,7 +493,7 @@ const TradeScreen = () => {
     );
 };
 
-const SwipeButton = ({ side, isBuy, loading, onSwipeComplete, disabled }: any) => {
+const SwipeButton = React.memo(({ side, isBuy, loading, onSwipeComplete, disabled }: any) => {
     const translateX = useSharedValue(0);
     const trackWidth = useSharedValue(0);
     const THUMB_SIZE = 58;
@@ -603,6 +608,6 @@ const SwipeButton = ({ side, isBuy, loading, onSwipeComplete, disabled }: any) =
             </Animated.View>
         </View>
     );
-};
+});
 
 export default TradeScreen;

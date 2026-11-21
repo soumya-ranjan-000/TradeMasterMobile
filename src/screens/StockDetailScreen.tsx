@@ -23,6 +23,66 @@ const CHART_HEIGHT = 220;
 const CANDLE_WIDTH_BASE = 12;
 const CANDLE_SPACING = 16;
 
+// --- Indicator Calculations ---
+const calculateSMA = (data: any[], period: number) => {
+    if (data.length < period) return [];
+    let smas = new Array(period - 1).fill(null);
+    for (let i = period - 1; i < data.length; i++) {
+        const sum = data.slice(i - period + 1, i + 1).reduce((acc, d) => acc + d.close, 0);
+        smas.push(sum / period);
+    }
+    return smas;
+};
+
+const calculateRSI = (data: any[], period: number = 14) => {
+    if (data.length <= period) return new Array(data.length).fill(null);
+    let rsis = new Array(period).fill(null);
+    let gains = 0;
+    let losses = 0;
+
+    for (let i = 1; i <= period; i++) {
+        const diff = data[i].close - data[i - 1].close;
+        if (diff > 0) gains += diff;
+        else losses -= diff;
+    }
+
+    let avgGain = gains / period;
+    let avgLoss = losses / period;
+
+    for (let i = period + 1; i < data.length; i++) {
+        const diff = data[i].close - data[i - 1].close;
+        const currentGain = diff > 0 ? diff : 0;
+        const currentLoss = diff < 0 ? -diff : 0;
+
+        avgGain = (avgGain * (period - 1) + currentGain) / period;
+        avgLoss = (avgLoss * (period - 1) + currentLoss) / period;
+
+        const rs = avgGain / (avgLoss || 1);
+        rsis.push(100 - (100 / (1 + rs)));
+    }
+    return rsis;
+};
+
+const calculateMACD = (data: any[]) => {
+    const calculateEMA = (prices: number[], period: number) => {
+        const k = 2 / (period + 1);
+        let ema = [prices[0]];
+        for (let i = 1; i < prices.length; i++) {
+            ema.push(prices[i] * k + ema[i - 1] * (1 - k));
+        }
+        return ema;
+    };
+
+    const prices = data.map(d => d.close);
+    const ema12 = calculateEMA(prices, 12);
+    const ema26 = calculateEMA(prices, 26);
+    const macdLine = ema12.map((e12, i) => e12 - ema26[i]);
+    const signalLine = calculateEMA(macdLine, 9);
+    const histogram = macdLine.map((m, i) => m - signalLine[i]);
+
+    return { macdLine, signalLine, histogram };
+};
+
 const StockDetailScreen = () => {
     const route = useRoute();
     const navigation = useNavigation<StockDetailScreenNavigationProp>();
@@ -196,16 +256,27 @@ const StockDetailScreen = () => {
         }
     }, [isWatchlistModalVisible]);
 
+    // Price scale of the loaded candles: computed once per history, shared by
+    // the chart and the touch handlers.
+    const chartScale = React.useMemo(() => {
+        if (!history.length) return null;
+        const maxHigh = Math.max(...history.map(d => d.high));
+        const minLow = Math.min(...history.map(d => d.low));
+        return { maxHigh, minLow, range: maxHigh - minLow || 1, totalWidth: history.length * CANDLE_SPACING + 40 };
+    }, [history]);
+
+    const priceAtY = (y: number) => {
+        if (!chartScale) return NaN;
+        return chartScale.maxHigh - ((y - 40) / (CHART_HEIGHT - 80)) * chartScale.range;
+    };
+
     const handleTouchStart = (evt: any) => {
         const x = evt.nativeEvent.locationX;
         const y = evt.nativeEvent.locationY;
         const index = Math.floor(x / CANDLE_SPACING);
 
         if (isDrawingMode) {
-            const maxHigh = Math.max(...history.map(d => d.high));
-            const minLow = Math.min(...history.map(d => d.low));
-            const range = maxHigh - minLow || 1;
-            const price = maxHigh - ((y - 40) / (CHART_HEIGHT - 80)) * range;
+            const price = priceAtY(y);
 
             setActiveDrawing({ startIndex: index, startPrice: price, endIndex: index, endPrice: price });
         } else {
@@ -221,10 +292,7 @@ const StockDetailScreen = () => {
         const index = Math.floor(x / CANDLE_SPACING);
 
         if (isDrawingMode && activeDrawing) {
-            const maxHigh = Math.max(...history.map(d => d.high));
-            const minLow = Math.min(...history.map(d => d.low));
-            const range = maxHigh - minLow || 1;
-            const price = maxHigh - ((y - 40) / (CHART_HEIGHT - 80)) * range;
+            const price = priceAtY(y);
 
             setActiveDrawing({ ...activeDrawing, endIndex: index, endPrice: price });
         } else if (!isDrawingMode) {
@@ -243,97 +311,235 @@ const StockDetailScreen = () => {
         }
     };
 
-    // --- Indicator Calculations ---
-    const calculateSMA = (data: any[], period: number) => {
-        if (data.length < period) return [];
-        let smas = new Array(period - 1).fill(null);
-        for (let i = period - 1; i < data.length; i++) {
-            const sum = data.slice(i - period + 1, i + 1).reduce((acc, d) => acc + d.close, 0);
-            smas.push(sum / period);
-        }
-        return smas;
-    };
-
-    const calculateRSI = (data: any[], period: number = 14) => {
-        if (data.length <= period) return new Array(data.length).fill(null);
-        let rsis = new Array(period).fill(null);
-        let gains = 0;
-        let losses = 0;
-
-        for (let i = 1; i <= period; i++) {
-            const diff = data[i].close - data[i - 1].close;
-            if (diff > 0) gains += diff;
-            else losses -= diff;
-        }
-
-        let avgGain = gains / period;
-        let avgLoss = losses / period;
-
-        for (let i = period + 1; i < data.length; i++) {
-            const diff = data[i].close - data[i - 1].close;
-            const currentGain = diff > 0 ? diff : 0;
-            const currentLoss = diff < 0 ? -diff : 0;
-
-            avgGain = (avgGain * (period - 1) + currentGain) / period;
-            avgLoss = (avgLoss * (period - 1) + currentLoss) / period;
-
-            const rs = avgGain / (avgLoss || 1);
-            rsis.push(100 - (100 / (1 + rs)));
-        }
-        return rsis;
-    };
-
-    const calculateMACD = (data: any[]) => {
-        const calculateEMA = (prices: number[], period: number) => {
-            const k = 2 / (period + 1);
-            let ema = [prices[0]];
-            for (let i = 1; i < prices.length; i++) {
-                ema.push(prices[i] * k + ema[i - 1] * (1 - k));
-            }
-            return ema;
-        };
-
-        const prices = data.map(d => d.close);
-        const ema12 = calculateEMA(prices, 12);
-        const ema26 = calculateEMA(prices, 26);
-        const macdLine = ema12.map((e12, i) => e12 - ema26[i]);
-        const signalLine = calculateEMA(macdLine, 9);
-        const histogram = macdLine.map((m, i) => m - signalLine[i]);
-
-        return { macdLine, signalLine, histogram };
-    };
-
     /** Four evenly spaced price levels, positioned with the same mapping as getY in the chart. */
     const priceAxis = React.useMemo(() => {
-        if (!history.length) return [];
-        const hi = Math.max(...history.map(d => d.high)), lo = Math.min(...history.map(d => d.low));
+        if (!chartScale) return [];
+        const hi = chartScale.maxHigh, lo = chartScale.minLow;
         const range = hi - lo || 1;
         return [0, 1, 2, 3].map(k => {
             const p = lo + range * (k / 3);
             return { p, y: 40 + (CHART_HEIGHT - 80) * (1 - (p - lo) / range) };
         });
-    }, [history]);
+    }, [chartScale]);
+
+    // The chart's SVG layers are memoized on what they draw, so a live price
+    // tick redraws only the current-price line, not every candle and indicator.
+    const getY = React.useCallback((price: number, h: number = CHART_HEIGHT) => {
+        if (!chartScale) return 0;
+        return 40 + (h - 80) * (1 - (price - chartScale.minLow) / chartScale.range);
+    }, [chartScale]);
+
+    const indicators = React.useMemo(() => ({
+        sma50: activeIndicators.includes('SMA50') ? calculateSMA(history, 50) : [],
+        sma200: activeIndicators.includes('SMA200') ? calculateSMA(history, 200) : [],
+        rsiLevels: activeIndicators.includes('RSI') ? calculateRSI(history) : [],
+        macdData: activeIndicators.includes('MACD') ? calculateMACD(history) : null,
+    }), [history, activeIndicators]);
+
+    const gridLayer = React.useMemo(() => {
+        if (!chartScale) return null;
+        return priceAxis.map(a => (
+            <Line key={a.p} x1={0} x2={chartScale.totalWidth} y1={a.y} y2={a.y} stroke="#2A2E39" strokeWidth={1} strokeDasharray="3 5" />
+        ));
+    }, [priceAxis, chartScale]);
+
+    const candleLayer = React.useMemo(() => history.map((d, i) => {
+        const isBullish = d.close >= d.open;
+        const color = isBullish ? '#10B981' : '#EF4444';
+        const x = i * CANDLE_SPACING + (CANDLE_SPACING - CANDLE_WIDTH_BASE) / 2;
+
+        const highY = getY(d.high);
+        const lowY = getY(d.low);
+        const openY = getY(d.open);
+        const closeY = getY(d.close);
+
+        const rectTop = Math.min(openY, closeY);
+        const rectHeight = Math.max(Math.abs(openY - closeY), 1.5);
+
+        const isHighlighted = selectedIndex === i;
+
+        return (
+            <React.Fragment key={i}>
+                {isHighlighted && (
+                    <Rect
+                        x={i * CANDLE_SPACING}
+                        y="0"
+                        width={CANDLE_SPACING}
+                        height={CHART_HEIGHT}
+                        fill="white"
+                        opacity="0.05"
+                    />
+                )}
+                {/* Wick */}
+                <Line
+                    x1={x + CANDLE_WIDTH_BASE / 2}
+                    y1={highY}
+                    x2={x + CANDLE_WIDTH_BASE / 2}
+                    y2={lowY}
+                    stroke={color}
+                    strokeWidth="1.2"
+                    opacity={selectedIndex !== null && !isHighlighted ? 0.3 : 1}
+                />
+                {/* Body */}
+                <Rect
+                    x={x}
+                    y={rectTop}
+                    width={CANDLE_WIDTH_BASE}
+                    height={rectHeight}
+                    fill={color}
+                    rx={2}
+                    opacity={selectedIndex !== null && !isHighlighted ? 0.3 : 1}
+                />
+            </React.Fragment>
+        );
+    }), [history, getY, selectedIndex]);
+
+    const smaLayer = React.useMemo(() => {
+        const { sma50, sma200 } = indicators;
+        return (
+            <>
+                {/* SMA Overlays */}
+                {sma50.length > 0 && (
+                    <Polyline
+                        points={sma50.map((v, i) => v !== null ? `${i * CANDLE_SPACING + CANDLE_SPACING / 2},${getY(v)}` : '').filter(p => p).join(' ')}
+                        fill="none"
+                        stroke="#3B82F6"
+                        strokeWidth="1.5"
+                        opacity="0.8"
+                    />
+                )}
+                {sma200.length > 0 && (
+                    <Polyline
+                        points={sma200.map((v, i) => v !== null ? `${i * CANDLE_SPACING + CANDLE_SPACING / 2},${getY(v)}` : '').filter(p => p).join(' ')}
+                        fill="none"
+                        stroke="#F59E0B"
+                        strokeWidth="1.5"
+                        opacity="0.8"
+                    />
+                )}
+            </>
+        );
+    }, [indicators, getY]);
+
+    const tooltipLayer = React.useMemo(() => {
+        if (selectedIndex === null || !chartScale || !history[selectedIndex]) return null;
+        const totalWidth = chartScale.totalWidth;
+        return (
+            <React.Fragment>
+                <Line
+                    x1={selectedIndex * CANDLE_SPACING + CANDLE_SPACING / 2}
+                    y1="0"
+                    x2={selectedIndex * CANDLE_SPACING + CANDLE_SPACING / 2}
+                    y2={CHART_HEIGHT}
+                    stroke="white"
+                    strokeWidth="0.5"
+                    strokeDasharray="2 2"
+                />
+                <Rect
+                    x={Math.min(selectedIndex * CANDLE_SPACING - 30, totalWidth - 80)}
+                    y={getY(history[selectedIndex].close) - 25}
+                    width="70"
+                    height="20"
+                    rx="4"
+                    fill="#1F2937"
+                />
+                <SvgText
+                    x={Math.min(selectedIndex * CANDLE_SPACING + 5, totalWidth - 45)}
+                    y={getY(history[selectedIndex].close) - 11}
+                    fill="white"
+                    fontSize="10"
+                    fontWeight="bold"
+                    textAnchor="middle"
+                >
+                    {history[selectedIndex].close.toFixed(2)}
+                </SvgText>
+            </React.Fragment>
+        );
+    }, [selectedIndex, chartScale, history, getY]);
+
+    const drawingsLayer = React.useMemo(() => drawings.map((draw, i) => (
+        <Line
+            key={`draw-${i}`}
+            x1={draw.startIndex * CANDLE_SPACING + CANDLE_SPACING / 2}
+            y1={getY(draw.startPrice)}
+            x2={draw.endIndex * CANDLE_SPACING + CANDLE_SPACING / 2}
+            y2={getY(draw.endPrice)}
+            stroke="#10B981"
+            strokeWidth="2"
+            opacity="0.6"
+        />
+    )), [drawings, getY]);
+
+    const subChartHeight = 120;
+    const subChartsLayer = React.useMemo(() => {
+        if (!chartScale) return null;
+        const totalWidth = chartScale.totalWidth;
+        const { rsiLevels, macdData } = indicators;
+        return (
+            <>
+                {/* RSI Sub-chart */}
+                {activeIndicators.includes('RSI') && (
+                    <G transform={`translate(0, ${CHART_HEIGHT})`}>
+                        <Line x1="0" y1="0" x2={totalWidth} y2="0" stroke="#2A2E39" strokeWidth="1" />
+                        <Line x1="0" y1={subChartHeight * 0.3} x2={totalWidth} y2={subChartHeight * 0.3} stroke="#2A2E39" strokeWidth="0.5" strokeDasharray="5 5" />
+                        <Line x1="0" y1={subChartHeight * 0.7} x2={totalWidth} y2={subChartHeight * 0.7} stroke="#2A2E39" strokeWidth="0.5" strokeDasharray="5 5" />
+                        <Polyline
+                            points={rsiLevels.map((v, i) => v !== null ? `${i * CANDLE_SPACING + CANDLE_SPACING / 2},${subChartHeight * (1 - v / 100)}` : '').filter(p => p).join(' ')}
+                            fill="none"
+                            stroke="#8B5CF6"
+                            strokeWidth="1.5"
+                        />
+                        <SvgText x="10" y="15" fill="#8B5CF6" fontSize="10" fontWeight="bold">RSI (14)</SvgText>
+                    </G>
+                )}
+
+                {/* MACD Sub-chart */}
+                {activeIndicators.includes('MACD') && macdData && (
+                    <G transform={`translate(0, ${CHART_HEIGHT + (activeIndicators.includes('RSI') ? subChartHeight : 0)})`}>
+                        <Line x1="0" y1="0" x2={totalWidth} y2="0" stroke="#2A2E39" strokeWidth="1" />
+                        {/* Histogram */}
+                        {macdData.histogram.map((h, i) => {
+                            const barH = Math.abs(h) * 2;
+                            return (
+                                <Rect
+                                    key={i}
+                                    x={i * CANDLE_SPACING + (CANDLE_SPACING - 3) / 2}
+                                    y={h >= 0 ? subChartHeight / 2 - barH : subChartHeight / 2}
+                                    width="3"
+                                    height={barH}
+                                    fill={h >= 0 ? '#10B981' : '#EF4444'}
+                                    opacity="0.5"
+                                />
+                            );
+                        })}
+                        {/* MACD Line */}
+                        <Polyline
+                            points={macdData.macdLine.map((v, i) => `${i * CANDLE_SPACING + CANDLE_SPACING / 2},${subChartHeight / 2 - v * 2}`).join(' ')}
+                            fill="none"
+                            stroke="#3B82F6"
+                            strokeWidth="1.2"
+                        />
+                        {/* Signal Line */}
+                        <Polyline
+                            points={macdData.signalLine.map((v, i) => `${i * CANDLE_SPACING + CANDLE_SPACING / 2},${subChartHeight / 2 - v * 2}`).join(' ')}
+                            fill="none"
+                            stroke="#F59E0B"
+                            strokeWidth="1.2"
+                        />
+                        <SvgText x="10" y="15" fill="#E1E7ED" fontSize="10" fontWeight="bold">MACD (12, 26, 9)</SvgText>
+                    </G>
+                )}
+            </>
+        );
+    }, [chartScale, indicators, activeIndicators]);
 
     const renderCandleChart = () => {
-        if (history.length === 0) return null;
+        if (history.length === 0 || !chartScale) return null;
 
-        const maxHigh = Math.max(...history.map(d => d.high));
-        const minLow = Math.min(...history.map(d => d.low));
-        const range = maxHigh - minLow || 1;
-        const totalWidth = history.length * CANDLE_SPACING + 40;
-
-        const getY = (price: number, h: number = CHART_HEIGHT) => 40 + (h - 80) * (1 - (price - minLow) / range);
-
+        const totalWidth = chartScale.totalWidth;
         const currentPrice = stockData?.price || (history.length > 0 ? history[history.length - 1].close : 0);
         const currentY = getY(currentPrice);
 
-        // Calculations for indicators
-        const sma50 = activeIndicators.includes('SMA50') ? calculateSMA(history, 50) : [];
-        const sma200 = activeIndicators.includes('SMA200') ? calculateSMA(history, 200) : [];
-        const rsiLevels = activeIndicators.includes('RSI') ? calculateRSI(history) : [];
-        const macdData = activeIndicators.includes('MACD') ? calculateMACD(history) : null;
-
-        const subChartHeight = 120;
         const totalSvgHeight = CHART_HEIGHT +
             (activeIndicators.includes('RSI') ? subChartHeight : 0) +
             (activeIndicators.includes('MACD') ? subChartHeight : 0);
@@ -349,13 +555,11 @@ const StockDetailScreen = () => {
                     </Defs>
 
                     {/* Price gridlines (labels are a fixed overlay outside the scroll) */}
-                    {priceAxis.map(a => (
-                        <Line key={a.p} x1={0} x2={totalWidth} y1={a.y} y2={a.y} stroke="#2A2E39" strokeWidth={1} strokeDasharray="3 5" />
-                    ))}
+                    {gridLayer}
 
                     {/* Main Price Chart */}
                     <G>
-                        {/* Current Price Line */}
+                        {/* Current Price Line (the only layer that follows live ticks) */}
                         <Line
                             x1="0"
                             y1={currentY}
@@ -367,123 +571,15 @@ const StockDetailScreen = () => {
                             opacity="0.3"
                         />
 
-                        {history.map((d, i) => {
-                            const isBullish = d.close >= d.open;
-                            const color = isBullish ? '#10B981' : '#EF4444';
-                            const x = i * CANDLE_SPACING + (CANDLE_SPACING - CANDLE_WIDTH_BASE) / 2;
+                        {candleLayer}
 
-                            const highY = getY(d.high);
-                            const lowY = getY(d.low);
-                            const openY = getY(d.open);
-                            const closeY = getY(d.close);
-
-                            const rectTop = Math.min(openY, closeY);
-                            const rectHeight = Math.max(Math.abs(openY - closeY), 1.5);
-
-                            const isHighlighted = selectedIndex === i;
-
-                            return (
-                                <React.Fragment key={i}>
-                                    {isHighlighted && (
-                                        <Rect
-                                            x={i * CANDLE_SPACING}
-                                            y="0"
-                                            width={CANDLE_SPACING}
-                                            height={CHART_HEIGHT}
-                                            fill="white"
-                                            opacity="0.05"
-                                        />
-                                    )}
-                                    {/* Wick */}
-                                    <Line
-                                        x1={x + CANDLE_WIDTH_BASE / 2}
-                                        y1={highY}
-                                        x2={x + CANDLE_WIDTH_BASE / 2}
-                                        y2={lowY}
-                                        stroke={color}
-                                        strokeWidth="1.2"
-                                        opacity={selectedIndex !== null && !isHighlighted ? 0.3 : 1}
-                                    />
-                                    {/* Body */}
-                                    <Rect
-                                        x={x}
-                                        y={rectTop}
-                                        width={CANDLE_WIDTH_BASE}
-                                        height={rectHeight}
-                                        fill={color}
-                                        rx={2}
-                                        opacity={selectedIndex !== null && !isHighlighted ? 0.3 : 1}
-                                    />
-                                </React.Fragment>
-                            );
-                        })}
-
-                        {/* SMA Overlays */}
-                        {sma50.length > 0 && (
-                            <Polyline
-                                points={sma50.map((v, i) => v !== null ? `${i * CANDLE_SPACING + CANDLE_SPACING / 2},${getY(v)}` : '').filter(p => p).join(' ')}
-                                fill="none"
-                                stroke="#3B82F6"
-                                strokeWidth="1.5"
-                                opacity="0.8"
-                            />
-                        )}
-                        {sma200.length > 0 && (
-                            <Polyline
-                                points={sma200.map((v, i) => v !== null ? `${i * CANDLE_SPACING + CANDLE_SPACING / 2},${getY(v)}` : '').filter(p => p).join(' ')}
-                                fill="none"
-                                stroke="#F59E0B"
-                                strokeWidth="1.5"
-                                opacity="0.8"
-                            />
-                        )}
+                        {smaLayer}
 
                         {/* Interaction Tooltip Label */}
-                        {selectedIndex !== null && (
-                            <React.Fragment>
-                                <Line
-                                    x1={selectedIndex * CANDLE_SPACING + CANDLE_SPACING / 2}
-                                    y1="0"
-                                    x2={selectedIndex * CANDLE_SPACING + CANDLE_SPACING / 2}
-                                    y2={CHART_HEIGHT}
-                                    stroke="white"
-                                    strokeWidth="0.5"
-                                    strokeDasharray="2 2"
-                                />
-                                <Rect
-                                    x={Math.min(selectedIndex * CANDLE_SPACING - 30, totalWidth - 80)}
-                                    y={getY(history[selectedIndex].close) - 25}
-                                    width="70"
-                                    height="20"
-                                    rx="4"
-                                    fill="#1F2937"
-                                />
-                                <SvgText
-                                    x={Math.min(selectedIndex * CANDLE_SPACING + 5, totalWidth - 45)}
-                                    y={getY(history[selectedIndex].close) - 11}
-                                    fill="white"
-                                    fontSize="10"
-                                    fontWeight="bold"
-                                    textAnchor="middle"
-                                >
-                                    {history[selectedIndex].close.toFixed(2)}
-                                </SvgText>
-                            </React.Fragment>
-                        )}
+                        {tooltipLayer}
 
                         {/* Drawings (Trendlines) */}
-                        {drawings.map((draw, i) => (
-                            <Line
-                                key={`draw-${i}`}
-                                x1={draw.startIndex * CANDLE_SPACING + CANDLE_SPACING / 2}
-                                y1={getY(draw.startPrice)}
-                                x2={draw.endIndex * CANDLE_SPACING + CANDLE_SPACING / 2}
-                                y2={getY(draw.endPrice)}
-                                stroke="#10B981"
-                                strokeWidth="2"
-                                opacity="0.6"
-                            />
-                        ))}
+                        {drawingsLayer}
 
                         {/* Active Drawing Preview */}
                         {activeDrawing && (
@@ -500,58 +596,7 @@ const StockDetailScreen = () => {
                         )}
                     </G>
 
-                    {/* RSI Sub-chart */}
-                    {activeIndicators.includes('RSI') && (
-                        <G transform={`translate(0, ${CHART_HEIGHT})`}>
-                            <Line x1="0" y1="0" x2={totalWidth} y2="0" stroke="#2A2E39" strokeWidth="1" />
-                            <Line x1="0" y1={subChartHeight * 0.3} x2={totalWidth} y2={subChartHeight * 0.3} stroke="#2A2E39" strokeWidth="0.5" strokeDasharray="5 5" />
-                            <Line x1="0" y1={subChartHeight * 0.7} x2={totalWidth} y2={subChartHeight * 0.7} stroke="#2A2E39" strokeWidth="0.5" strokeDasharray="5 5" />
-                            <Polyline
-                                points={rsiLevels.map((v, i) => v !== null ? `${i * CANDLE_SPACING + CANDLE_SPACING / 2},${subChartHeight * (1 - v / 100)}` : '').filter(p => p).join(' ')}
-                                fill="none"
-                                stroke="#8B5CF6"
-                                strokeWidth="1.5"
-                            />
-                            <SvgText x="10" y="15" fill="#8B5CF6" fontSize="10" fontWeight="bold">RSI (14)</SvgText>
-                        </G>
-                    )}
-
-                    {/* MACD Sub-chart */}
-                    {activeIndicators.includes('MACD') && macdData && (
-                        <G transform={`translate(0, ${CHART_HEIGHT + (activeIndicators.includes('RSI') ? subChartHeight : 0)})`}>
-                            <Line x1="0" y1="0" x2={totalWidth} y2="0" stroke="#2A2E39" strokeWidth="1" />
-                            {/* Histogram */}
-                            {macdData.histogram.map((h, i) => {
-                                const barH = Math.abs(h) * 2;
-                                return (
-                                    <Rect
-                                        key={i}
-                                        x={i * CANDLE_SPACING + (CANDLE_SPACING - 3) / 2}
-                                        y={h >= 0 ? subChartHeight / 2 - barH : subChartHeight / 2}
-                                        width="3"
-                                        height={barH}
-                                        fill={h >= 0 ? '#10B981' : '#EF4444'}
-                                        opacity="0.5"
-                                    />
-                                );
-                            })}
-                            {/* MACD Line */}
-                            <Polyline
-                                points={macdData.macdLine.map((v, i) => `${i * CANDLE_SPACING + CANDLE_SPACING / 2},${subChartHeight / 2 - v * 2}`).join(' ')}
-                                fill="none"
-                                stroke="#3B82F6"
-                                strokeWidth="1.2"
-                            />
-                            {/* Signal Line */}
-                            <Polyline
-                                points={macdData.signalLine.map((v, i) => `${i * CANDLE_SPACING + CANDLE_SPACING / 2},${subChartHeight / 2 - v * 2}`).join(' ')}
-                                fill="none"
-                                stroke="#F59E0B"
-                                strokeWidth="1.2"
-                            />
-                            <SvgText x="10" y="15" fill="#E1E7ED" fontSize="10" fontWeight="bold">MACD (12, 26, 9)</SvgText>
-                        </G>
-                    )}
+                    {subChartsLayer}
                 </Svg>
             </View>
         );

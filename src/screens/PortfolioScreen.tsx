@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { toast } from '../components/Toast';
 import { ScreenHeader, IconButton, confirmAction } from '../ui';
 import { colors, signColor } from '../theme';
@@ -14,7 +14,7 @@ import { TEST_USER_ID } from '../config';
 import { paperFetch, serverDate } from '../auth';
 import { isExchangeOpen, getMarketSession, isHolidayToday, nextMarketOpen, MarketSession } from '../api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useMarketData } from '../context/MarketDataContext';
+import { useMarketData, useLivePrices, Tick } from '../context/MarketDataContext';
 import { usePositions } from '../context/PositionContext';
 
 // --- order wording ----------------------------------------------------------------
@@ -75,6 +75,297 @@ function pendingStatus(o: any, ltp: number | null | undefined, marketOpen: boole
 const isExpired = (o: any) => /^expired/i.test(o?.error_message || '');
 const closedReason = (o: any) => o?.error_message || (o?.status === 'REJECTED' ? 'Rejected' : 'Cancelled');
 
+// --- list rows (memoized: a price tick re-renders only the rows it affects) ----------
+
+const PositionRow = React.memo(({ item, expanded: isExpanded, onToggle, onQuickExit, onModify }: {
+    item: any;
+    expanded: boolean;
+    onToggle: (id: string) => void;
+    onQuickExit: (symbol: string, currentLtp: number, positionId?: string) => void;
+    onModify: (item: any) => void;
+}) => {
+    return (
+        <View className="bg-surface rounded-[20px] border border-border mb-3 overflow-hidden">
+            <TouchableOpacity
+                onPress={() => onToggle(item.position_id)}
+                activeOpacity={0.7}
+                className="p-4"
+            >
+                <View className="flex-row justify-between items-center">
+                    <View className="flex-row items-center">
+                        <View className={`w-8 h-8 rounded-xl items-center justify-center mr-3 ${(item.unrealized_pnl || 0) >= -0.005 ? 'bg-success/10' : 'bg-error/10'}`}>
+                            <Text className={`font-bold text-base ${(item.unrealized_pnl || 0) >= -0.005 ? 'text-success' : 'text-error'}`}>{item.symbol[0]}</Text>
+                        </View>
+                        <View>
+                            <View className="flex-row items-center">
+                                <Text className="text-text-primary font-bold text-sm">{item.symbol}</Text>
+                                <Text className="text-text-muted text-[11px] font-black ml-2 px-1.5 py-0.5 rounded bg-background border border-border">
+                                    {item.product === 'DELIVERY' ? 'CNC' : 'MIS'}{item.quantity < 0 ? ' • SHORT' : ''}
+                                </Text>
+                                {item.source === 'scanner' && (
+                                    <Text className="text-primary text-[11px] font-black ml-1 px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">
+                                        SCANNER{item.strategy ? ` • ${item.strategy}` : ''}
+                                    </Text>
+                                )}
+                            </View>
+                            <Text className="text-text-muted text-[11px] font-bold">Avg {inr(item.average_price || 0)} · LTP {inr(item.current_ltp || 0)}</Text>
+                        </View>
+                    </View>
+                    <View className="items-end">
+                        <Text className="text-text-primary font-bold text-sm">{item.quantity} {item.quantity === 1 ? 'Share' : 'Shares'}</Text>
+                        <View className="flex-row items-center mt-0.5">
+                            {(item.unrealized_pnl || 0) >= -0.005 ? <ArrowUpRight size={10} color="#10B981" /> : <ArrowDownRight size={10} color="#EF4444" />}
+                            <Text className={`text-[11px] font-bold ml-1 ${(item.unrealized_pnl || 0) >= -0.005 ? 'text-success' : 'text-error'}`}>
+                                {inr(item.unrealized_pnl || 0, { sign: true })}
+                            </Text>
+                        </View>
+                    </View>
+                </View>
+            </TouchableOpacity>
+
+            {isExpanded && (
+                <View className="px-4 pb-4 pt-0">
+                    <View className="h-[1px] bg-border mb-3" />
+
+                    <View className="flex-row justify-between items-end mb-3">
+                        <View>
+                            <Text className="text-text-secondary text-[11px] uppercase font-bold tracking-widest">Invested</Text>
+                            <Text className="text-text-primary font-bold text-xs">{inr(item.quantity * item.average_price)}</Text>
+                        </View>
+                        <View className="items-end">
+                            <Text className="text-text-secondary text-[11px] uppercase font-bold tracking-widest">Day Change</Text>
+                            <View className="flex-row items-center">
+                                <Text className={`font-bold text-xs ${(item.day_change_perc || 0) >= 0 ? 'text-success' : 'text-error'}`}>
+                                    {(item.day_change_perc || 0) >= 0 ? '+' : '-'}{(item.day_change_perc || 0).toFixed(2)}%
+                                </Text>
+                                <Text className={`text-[11px] font-bold ml-1 ${(item.day_change_perc || 0) >= 0 ? 'text-success opacity-80' : 'text-error opacity-80'}`}>
+                                    ({inr((item.day_change_abs || 0) * item.quantity, { sign: true })})
+                                </Text>
+                            </View>
+                        </View>
+                    </View>
+
+                    <View className="flex-row gap-2 mb-3">
+                        <TouchableOpacity
+                            onPress={() => onQuickExit(item.symbol, item.current_ltp || item.average_price, item.position_id)}
+                            className="flex-1 bg-error/10 border border-error/20 py-2 rounded-lg items-center justify-center"
+                        >
+                            <Text className="text-error font-black text-[11px] uppercase tracking-wider">Quick Exit</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => onModify(item)}
+                            className="flex-1 bg-surface border border-border py-2 rounded-lg items-center justify-center"
+                        >
+                            <Text className="text-text-primary font-bold text-[11px] uppercase tracking-wider">Modify</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    <View className="flex-row justify-between bg-background/50 rounded-lg p-2 px-3">
+                        <View className="flex-row items-center">
+                            <ShieldCheck size={10} color="#6B7280" />
+                            <Text className="text-text-muted text-[11px] font-bold ml-1 uppercase">SL: {item.stop_loss ? inr(item.stop_loss) : 'NONE'}</Text>
+                        </View>
+                        <View className="flex-row items-center">
+                            <Target size={10} color="#6B7280" />
+                            <Text className="text-text-muted text-[11px] font-bold ml-1 uppercase">TP: {item.target ? inr(item.target) : 'NONE'}</Text>
+                        </View>
+                        {item.trailing_sl && (
+                            <View className="flex-row items-center">
+                                <History size={10} color="#6B7280" />
+                                <Text className="text-text-muted text-[11px] font-bold ml-1 uppercase">TSL: {item.trailing_sl.toFixed(2)}</Text>
+                            </View>
+                        )}
+                    </View>
+                </View>
+            )}
+        </View>
+    );
+});
+
+const OrderHeaderRow = React.memo(({ item }: { item: any }) => {
+    return (
+        <View className="py-4 px-2 flex-row justify-between items-center">
+            <Text className="text-text-muted font-black text-[11px] uppercase tracking-[2px] flex-1 mr-3">{item.title}</Text>
+            <View className="bg-surface px-2 py-0.5 rounded-md border border-border/50">
+                <Text className="text-text-muted text-[11px] font-bold">
+                    {item.unit === 'order'
+                        ? `${item.count} ${item.count === 1 ? 'order' : 'orders'}`
+                        : `${item.count} ${item.count === 1 ? 'Trade' : 'Trades'}`}
+                </Text>
+            </View>
+        </View>
+    );
+});
+
+const PendingOrderRow = React.memo(({ item, ltp, marketOpen, opensAtMs, loading, onSelect, onCancel }: {
+    item: any;
+    ltp: number | undefined;
+    marketOpen: boolean;
+    opensAtMs: number;
+    loading: boolean;
+    /** Minute counter: re-renders the relative times ("Today, …", "Mon 9:15"). */
+    clock: number;
+    onSelect: (order: any) => void;
+    onCancel: (order: any) => void;
+}) => {
+    const isBuy = item.side !== 'SELL';
+    const status = pendingStatus(item, ltp, marketOpen, new Date(opensAtMs));
+    const rule = entryRule(item);
+    const risk = [item.stop_loss ? `SL ${px(item.stop_loss)}` : '', item.target ? `Target ${px(item.target)}` : ''].filter(Boolean).join(' · ');
+    return (
+        <View className="bg-surface rounded-2xl border border-primary/20 mb-3 overflow-hidden">
+            <TouchableOpacity
+                onPress={() => onSelect(item)}
+                activeOpacity={0.7}
+                className="p-4 pb-3"
+                accessibilityRole="button"
+                accessibilityLabel={`Pending: ${sideWord(item.side)} ${item.quantity} ${item.symbol}. ${rule}. ${status.text}`}
+                accessibilityHint="Opens the order details"
+            >
+                <View className="flex-row justify-between items-start">
+                    <View className="flex-1 mr-3">
+                        <View className="flex-row items-center">
+                            <View className={`px-2 py-0.5 rounded-md mr-2 ${isBuy ? 'bg-success/10' : 'bg-error/10'}`}>
+                                <Text className={`text-[11px] font-black ${isBuy ? 'text-success' : 'text-error'}`}>{item.side}</Text>
+                            </View>
+                            <Text className="text-text-primary font-bold text-sm flex-shrink" numberOfLines={1}>{item.quantity} × {item.symbol}</Text>
+                        </View>
+                        <View className="flex-row items-center flex-wrap mt-1.5">
+                            <Text className="text-text-muted text-[11px] font-black px-1.5 py-0.5 rounded bg-background border border-border">
+                                {productTag(item.product)}
+                            </Text>
+                            {item.source === 'scanner' && (
+                                <Text className="text-primary text-[11px] font-black ml-1 px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">
+                                    SCANNER{item.strategy ? ` • ${item.strategy}` : ''}
+                                </Text>
+                            )}
+                        </View>
+                    </View>
+                    <View className="items-end">
+                        <Text className="text-text-muted text-[11px]">{istWhen(serverDate(item.created_at))}</Text>
+                        {(item.reserved_amount || 0) > 0 && (
+                            <Text className="text-text-muted text-[11px] mt-0.5">{inr(item.reserved_amount, { decimals: 0, compact: true })} held</Text>
+                        )}
+                    </View>
+                </View>
+
+                <Text className="text-text-primary text-[13px] font-bold mt-3">{rule}</Text>
+                {!!risk && <Text className="text-text-muted text-[11px] font-bold mt-1">{risk}</Text>}
+                <View className="flex-row items-center mt-1">
+                    <Clock size={11} color={colors.textMuted} />
+                    <Text className="text-text-muted text-[11px] font-semibold ml-1">{validityText(item)}</Text>
+                </View>
+                <Text className="text-xs font-bold mt-2" style={{ color: status.color }}>{status.text}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+                disabled={loading}
+                onPress={() => onCancel(item)}
+                accessibilityRole="button"
+                accessibilityLabel={`Cancel the ${item.side} order for ${item.quantity} ${item.symbol}`}
+                className="border-t border-border/50 py-2.5 items-center"
+            >
+                <Text className={`font-black text-[11px] uppercase tracking-wider ${loading ? 'text-error/50' : 'text-error'}`}>Cancel order</Text>
+            </TouchableOpacity>
+        </View>
+    );
+});
+
+const ClosedOrderRow = React.memo(({ item, onSelect }: { item: any; clock: number; onSelect: (order: any) => void }) => {
+    const isBuy = item.side !== 'SELL';
+    const tag = isExpired(item) ? 'EXPIRED' : item.status;
+    return (
+        <TouchableOpacity
+            onPress={() => onSelect(item)}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={`${tag}: ${sideWord(item.side)} ${item.quantity} ${item.symbol}. ${closedReason(item)}`}
+            className="bg-surface rounded-2xl border border-border mb-2 px-4 py-3"
+        >
+            <View className="flex-row justify-between items-center">
+                <View className="flex-row items-center flex-1 mr-2">
+                    <Text className={`text-[11px] font-black mr-2 ${isBuy ? 'text-success' : 'text-error'}`}>{item.side}</Text>
+                    <Text className="text-text-primary text-xs font-bold flex-shrink" numberOfLines={1}>{item.quantity} × {item.symbol}</Text>
+                    <Text className="text-text-muted text-[11px] font-black ml-2 px-1.5 py-0.5 rounded bg-background border border-border">{tag}</Text>
+                </View>
+                <Text className="text-text-muted text-[11px]">{istWhen(orderTime(item))}</Text>
+            </View>
+            <Text className="text-text-secondary text-[11px] mt-1" numberOfLines={2}>{closedReason(item)}</Text>
+        </TouchableOpacity>
+    );
+});
+
+const TradeRow = React.memo(({ item, expanded: isExpanded, onToggle, onSelect }: {
+    item: any;
+    expanded: boolean;
+    onToggle: (id: string) => void;
+    onSelect: (order: any) => void;
+}) => {
+    return (
+        <View className="bg-surface rounded-2xl border border-border mb-3 overflow-hidden">
+            <TouchableOpacity
+                onPress={() => onToggle(item.id)}
+                activeOpacity={0.7}
+                className="p-4"
+            >
+                <View className="flex-row justify-between items-center">
+                    <View className="flex-row items-center">
+                        <View className={`w-7 h-7 rounded-lg items-center justify-center mr-3 ${item.status === 'CLOSED' ? 'bg-primary/20' : 'bg-success/10'}`}>
+                            <Briefcase size={12} color={item.status === 'CLOSED' ? '#00E0A1' : '#10B981'} />
+                        </View>
+                        <View>
+                            <Text className="text-text-primary font-bold text-sm">{item.symbol}</Text>
+                            <Text className="text-text-muted text-[11px] font-bold uppercase tracking-widest">
+                                {item.status} TRADE • {item.orders.length} EXECUTIONS
+                            </Text>
+                        </View>
+                    </View>
+                    <View className="items-end">
+                        <Text className={`font-black text-sm ${item.realized_pnl >= 0 ? 'text-success' : 'text-error'}`}>
+                            {inr(item.realized_pnl, { sign: true })}
+                        </Text>
+                        <View className="flex-row items-center">
+                            <Text className="text-text-muted text-[11px] mr-1">{istClock(serverDate(item.timestamp))}</Text>
+                            {isExpanded ? <ChevronDown size={12} color="#6B7280" /> : <ChevronRight size={12} color="#6B7280" />}
+                        </View>
+                    </View>
+                </View>
+            </TouchableOpacity>
+
+            {isExpanded && (
+                <View className="bg-background/40 border-t border-border/50 p-4 pt-2">
+                    {item.orders.map((ord: any, idx: number) => (
+                        <TouchableOpacity
+                            key={ord.order_id}
+                            onPress={() => onSelect(ord)}
+                            className={`flex-row justify-between items-center py-3 ${idx !== item.orders.length - 1 ? 'border-b border-border/30' : ''}`}
+                        >
+                            <View className="flex-row items-center">
+                                <View className={`px-2 py-0.5 rounded-md mr-3 ${ord.side === 'BUY' ? 'bg-success/10' : 'bg-error/10'}`}>
+                                    <Text className={`text-[11px] font-black ${ord.side === 'BUY' ? 'text-success' : 'text-error'}`}>{ord.side}</Text>
+                                </View>
+                                <View>
+                                    <Text className="text-text-primary text-xs font-bold">
+                                        {ord.side === 'BUY' ? 'Bought' : 'Sold'} {ord.quantity} @ {inr(ord.average_fill_price)}
+                                    </Text>
+                                    <View className="flex-row items-center mt-0.5">
+                                        <Text className="text-text-muted text-[11px] font-bold uppercase tracking-tighter">Value {inr(ord.quantity * ord.average_fill_price)}</Text>
+                                        <Text className="text-text-muted text-[11px] ml-2 opacity-50">• {istClock(serverDate(ord.filled_at || ord.created_at))}</Text>
+                                    </View>
+                                </View>
+                            </View>
+                            {ord.realized_pnl !== undefined && ord.realized_pnl !== null ? (
+                                <Text className={`text-[11px] font-black ${(ord.realized_pnl || 0) >= -0.005 ? 'text-success' : 'text-error'}`}>
+                                    {inr(ord.realized_pnl || 0, { sign: true })}
+                                </Text>
+                            ) : null}
+                        </TouchableOpacity>
+                    ))}
+                </View>
+            )}
+        </View>
+    );
+});
+
 const PortfolioScreen = () => {
     const navigation = useNavigation<CompositeNavigationProp<
         BottomTabNavigationProp<MainTabParamList, 'Portfolio'>,
@@ -96,13 +387,13 @@ const PortfolioScreen = () => {
     const [newTrailingSL, setNewTrailingSL] = useState('');
     const [selectedOrder, setSelectedOrder] = useState<any>(null);
 
-    const { ticks, subscribe, unsubscribe } = useMarketData();
+    const { subscribe, unsubscribe } = useMarketData();
     const isFocused = useIsFocused();
 
     // NSE session (holiday + next_session from the market pulse) for pending-order status.
     const [session, setSession] = useState<MarketSession | null>(null);
     // Re-render every minute so "waiting for market open" flips at 09:15.
-    const [, setClockTick] = useState(0);
+    const [clockTick, setClockTick] = useState(0);
     React.useEffect(() => {
         if (!isFocused) return;
         const id = setInterval(() => setClockTick(t => t + 1), 60_000);
@@ -111,12 +402,15 @@ const PortfolioScreen = () => {
     const nowDate = new Date();
     const marketOpen = isExchangeOpen(nowDate) && !isHolidayToday(session, nowDate);
     const opensAt = nextMarketOpen(session?.next_session, nowDate);
+    const opensAtMs = opensAt.getTime();
 
     // Live prices for pending orders while the Orders tab is visible. subscribe/
     // unsubscribe change identity on every tick, so they are read through a ref.
     const subRef = React.useRef({ subscribe, unsubscribe });
     subRef.current = { subscribe, unsubscribe };
-    const pendingSymbolsKey = Array.from(new Set(orders.filter(o => o.status === 'PENDING').map(o => String(o.symbol)))).sort().join(',');
+    const pendingSymbolsKey = useMemo(
+        () => Array.from(new Set(orders.filter(o => o.status === 'PENDING').map(o => String(o.symbol)))).sort().join(','),
+        [orders]);
     React.useEffect(() => {
         if (!isFocused || activeTab !== 'ORDERS' || !pendingSymbolsKey) return;
         const syms = pendingSymbolsKey.split(',');
@@ -124,24 +418,46 @@ const PortfolioScreen = () => {
         return () => syms.forEach(sym => subRef.current.unsubscribe(sym));
     }, [isFocused, activeTab, pendingSymbolsKey]);
 
-    // Apply live prices to positions for real-time P&L
+    // Ticks for the open positions and pending orders only, frozen while unfocused.
+    const tickKeys = useMemo(() => {
+        const keys = new Set<string>();
+        positions.forEach(p => keys.add(`NSE:${stockCode(p.symbol)}`));
+        if (pendingSymbolsKey) pendingSymbolsKey.split(',').forEach(sym => keys.add(`NSE:${stockCode(sym)}`));
+        return Array.from(keys);
+    }, [positions, pendingSymbolsKey]);
+    const ticks = useLivePrices(tickKeys, !isFocused);
+
+    // Apply live prices to positions for real-time P&L. A position whose tick did
+    // not change keeps its previous object, so its memoized row is not re-rendered.
+    const livePosCache = useRef(new Map<any, { tick: Tick; value: any }>());
     const livePositions = React.useMemo(() => {
-        return positions.map(pos => {
+        const prevCache = livePosCache.current;
+        const nextCache = new Map<any, { tick: Tick; value: any }>();
+        const result = positions.map(pos => {
             const stock_code = pos.symbol.split('.')[0].toUpperCase();
             const tick = ticks[`NSE:${stock_code}`];
             if (tick) {
+                const hit = prevCache.get(pos);
+                if (hit && hit.tick === tick) {
+                    nextCache.set(pos, hit);
+                    return hit.value;
+                }
                 const current_ltp = tick.ltp;
                 const unrealized_pnl = (current_ltp - pos.average_price) * pos.quantity;
-                return {
+                const value = {
                     ...pos,
                     current_ltp,
                     unrealized_pnl,
                     day_change_abs: tick.day_change_abs,
                     day_change_perc: tick.day_change_perc
                 };
+                nextCache.set(pos, { tick, value });
+                return value;
             }
             return pos;
         });
+        livePosCache.current = nextCache;
+        return result;
     }, [positions, ticks]);
 
     const fetchData = async () => {
@@ -152,11 +468,13 @@ const PortfolioScreen = () => {
             setUserId(uid);
             getMarketSession().then(setSession).catch(() => { });
 
+            // Positions are synced in parallel with the rest.
             const [ordRes, accRes, tRes, dRes] = await Promise.all([
                 paperFetch(`/orders/${uid}`),
                 paperFetch(`/account/${uid}`),
                 paperFetch(`/trades/${uid}`),
-                paperFetch(`/stats/daily/${uid}`)
+                paperFetch(`/stats/daily/${uid}`),
+                refreshPositions(),
             ]);
 
             const ordData = await ordRes.json();
@@ -168,9 +486,6 @@ const PortfolioScreen = () => {
             setAccount(accData);
             setTrades(Array.isArray(tData) ? tData : []);
             setDailyPnl(dData && typeof dData === 'object' && !Array.isArray(dData) ? dData : {});
-
-            // Sync positions too
-            await refreshPositions();
         } catch (error) {
             console.error("Error fetching data:", error);
         } finally {
@@ -309,25 +624,52 @@ const PortfolioScreen = () => {
     const [expandedTrades, setExpandedTrades] = useState<string[]>([]);
     const [expandedPositions, setExpandedPositions] = useState<string[]>([]);
 
-    const toggleTrade = (id: string) => {
+    const toggleTrade = useCallback((id: string) => {
         setExpandedTrades(prev =>
             prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]
         );
-    };
+    }, []);
 
-    const togglePosition = (id: string) => {
+    const togglePosition = useCallback((id: string) => {
         setExpandedPositions(prev =>
             prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
         );
-    };
+    }, []);
 
-    const groupedTrades = useCallback(() => {
+    // Row callbacks with a stable identity (memoized rows); they call the latest handlers.
+    const handlers = useRef({ quickExit, confirmCancel });
+    handlers.current = { quickExit, confirmCancel };
+    const onQuickExit = useCallback((symbol: string, currentLtp: number, positionId?: string) => {
+        handlers.current.quickExit(symbol, currentLtp, positionId);
+    }, []);
+    const onCancelOrder = useCallback((o: any) => handlers.current.confirmCancel(o), []);
+    const onModify = useCallback((item: any) => {
+        setModifyingPos(item);
+        setNewSL(item.stop_loss?.toString() || '');
+        setNewTarget(item.target?.toString() || '');
+        setNewTrailingSL(item.trailing_sl?.toString() || '');
+    }, []);
+
+    const groupedTrades = useMemo(() => {
         if (!trades || trades.length === 0) return [];
 
+        // Orders by id (with their position in `orders` and parsed creation time),
+        // instead of scanning every order for every trade.
+        const byId = new Map<string, { o: any; idx: number; at: number }>();
+        orders.forEach((o, idx) => {
+            if (!byId.has(o.order_id)) byId.set(o.order_id, { o, idx, at: serverDate(o.created_at)?.getTime() ?? 0 });
+        });
+
         return trades.map(t => {
-            // Find orders belonging to this trade
-            const tradeOrders = orders.filter(o => t.order_ids.includes(o.order_id))
-                .sort((a, b) => (serverDate(b.created_at)?.getTime() ?? 0) - (serverDate(a.created_at)?.getTime() ?? 0));
+            // Find orders belonging to this trade (newest first; ties keep the `orders` order)
+            const entries: { o: any; idx: number; at: number }[] = [];
+            new Set<string>(t.order_ids || []).forEach(id => {
+                const e = byId.get(id);
+                if (e) entries.push(e);
+            });
+            const tradeOrders = entries
+                .sort((a, b) => (b.at - a.at) || (a.idx - b.idx))
+                .map(e => e.o);
 
             return {
                 id: t.position_id,
@@ -341,8 +683,8 @@ const PortfolioScreen = () => {
         });
     }, [trades, orders]);
 
-    const tradeData = useCallback(() => {
-        const rawTrades = groupedTrades();
+    const tradeData = useMemo(() => {
+        const rawTrades = groupedTrades;
         const openTrades = rawTrades.filter(t => t.status !== 'CLOSED');
         const closedTrades = rawTrades.filter(t => t.status === 'CLOSED');
 
@@ -391,286 +733,37 @@ const PortfolioScreen = () => {
         }
 
         return sections;
-    }, [trades, orders])();
+    }, [groupedTrades, orders]);
 
-    const renderPosition = ({ item }: { item: any }) => {
-        const isExpanded = expandedPositions.includes(item.position_id);
+    const renderPosition = useCallback(({ item }: { item: any }) => (
+        <PositionRow
+            item={item}
+            expanded={expandedPositions.includes(item.position_id)}
+            onToggle={togglePosition}
+            onQuickExit={onQuickExit}
+            onModify={onModify}
+        />
+    ), [expandedPositions, togglePosition, onQuickExit, onModify]);
 
-        return (
-            <View className="bg-surface rounded-[20px] border border-border mb-3 overflow-hidden">
-                <TouchableOpacity
-                    onPress={() => togglePosition(item.position_id)}
-                    activeOpacity={0.7}
-                    className="p-4"
-                >
-                    <View className="flex-row justify-between items-center">
-                        <View className="flex-row items-center">
-                            <View className={`w-8 h-8 rounded-xl items-center justify-center mr-3 ${(item.unrealized_pnl || 0) >= -0.005 ? 'bg-success/10' : 'bg-error/10'}`}>
-                                <Text className={`font-bold text-base ${(item.unrealized_pnl || 0) >= -0.005 ? 'text-success' : 'text-error'}`}>{item.symbol[0]}</Text>
-                            </View>
-                            <View>
-                                <View className="flex-row items-center">
-                                    <Text className="text-text-primary font-bold text-sm">{item.symbol}</Text>
-                                    <Text className="text-text-muted text-[11px] font-black ml-2 px-1.5 py-0.5 rounded bg-background border border-border">
-                                        {item.product === 'DELIVERY' ? 'CNC' : 'MIS'}{item.quantity < 0 ? ' • SHORT' : ''}
-                                    </Text>
-                                    {item.source === 'scanner' && (
-                                        <Text className="text-primary text-[11px] font-black ml-1 px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">
-                                            SCANNER{item.strategy ? ` • ${item.strategy}` : ''}
-                                        </Text>
-                                    )}
-                                </View>
-                                <Text className="text-text-muted text-[11px] font-bold">Avg {inr(item.average_price || 0)} · LTP {inr(item.current_ltp || 0)}</Text>
-                            </View>
-                        </View>
-                        <View className="items-end">
-                            <Text className="text-text-primary font-bold text-sm">{item.quantity} {item.quantity === 1 ? 'Share' : 'Shares'}</Text>
-                            <View className="flex-row items-center mt-0.5">
-                                {(item.unrealized_pnl || 0) >= -0.005 ? <ArrowUpRight size={10} color="#10B981" /> : <ArrowDownRight size={10} color="#EF4444" />}
-                                <Text className={`text-[11px] font-bold ml-1 ${(item.unrealized_pnl || 0) >= -0.005 ? 'text-success' : 'text-error'}`}>
-                                    {inr(item.unrealized_pnl || 0, { sign: true })}
-                                </Text>
-                            </View>
-                        </View>
-                    </View>
-                </TouchableOpacity>
-
-                {isExpanded && (
-                    <View className="px-4 pb-4 pt-0">
-                        <View className="h-[1px] bg-border mb-3" />
-
-                        <View className="flex-row justify-between items-end mb-3">
-                            <View>
-                                <Text className="text-text-secondary text-[11px] uppercase font-bold tracking-widest">Invested</Text>
-                                <Text className="text-text-primary font-bold text-xs">{inr(item.quantity * item.average_price)}</Text>
-                            </View>
-                            <View className="items-end">
-                                <Text className="text-text-secondary text-[11px] uppercase font-bold tracking-widest">Day Change</Text>
-                                <View className="flex-row items-center">
-                                    <Text className={`font-bold text-xs ${(item.day_change_perc || 0) >= 0 ? 'text-success' : 'text-error'}`}>
-                                        {(item.day_change_perc || 0) >= 0 ? '+' : '-'}{(item.day_change_perc || 0).toFixed(2)}%
-                                    </Text>
-                                    <Text className={`text-[11px] font-bold ml-1 ${(item.day_change_perc || 0) >= 0 ? 'text-success opacity-80' : 'text-error opacity-80'}`}>
-                                        ({inr((item.day_change_abs || 0) * item.quantity, { sign: true })})
-                                    </Text>
-                                </View>
-                            </View>
-                        </View>
-
-                        <View className="flex-row gap-2 mb-3">
-                            <TouchableOpacity
-                                onPress={() => quickExit(item.symbol, item.current_ltp || item.average_price, item.position_id)}
-                                className="flex-1 bg-error/10 border border-error/20 py-2 rounded-lg items-center justify-center"
-                            >
-                                <Text className="text-error font-black text-[11px] uppercase tracking-wider">Quick Exit</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    setModifyingPos(item);
-                                    setNewSL(item.stop_loss?.toString() || '');
-                                    setNewTarget(item.target?.toString() || '');
-                                    setNewTrailingSL(item.trailing_sl?.toString() || '');
-                                }}
-                                className="flex-1 bg-surface border border-border py-2 rounded-lg items-center justify-center"
-                            >
-                                <Text className="text-text-primary font-bold text-[11px] uppercase tracking-wider">Modify</Text>
-                            </TouchableOpacity>
-                        </View>
-
-                        <View className="flex-row justify-between bg-background/50 rounded-lg p-2 px-3">
-                            <View className="flex-row items-center">
-                                <ShieldCheck size={10} color="#6B7280" />
-                                <Text className="text-text-muted text-[11px] font-bold ml-1 uppercase">SL: {item.stop_loss ? inr(item.stop_loss) : 'NONE'}</Text>
-                            </View>
-                            <View className="flex-row items-center">
-                                <Target size={10} color="#6B7280" />
-                                <Text className="text-text-muted text-[11px] font-bold ml-1 uppercase">TP: {item.target ? inr(item.target) : 'NONE'}</Text>
-                            </View>
-                            {item.trailing_sl && (
-                                <View className="flex-row items-center">
-                                    <History size={10} color="#6B7280" />
-                                    <Text className="text-text-muted text-[11px] font-bold ml-1 uppercase">TSL: {item.trailing_sl.toFixed(2)}</Text>
-                                </View>
-                            )}
-                        </View>
-                    </View>
-                )}
-            </View>
-        );
-    };
-
-    const renderOrder = ({ item }: { item: any }) => {
-        if (item.itemType === 'HEADER') {
-            return (
-                <View className="py-4 px-2 flex-row justify-between items-center">
-                    <Text className="text-text-muted font-black text-[11px] uppercase tracking-[2px] flex-1 mr-3">{item.title}</Text>
-                    <View className="bg-surface px-2 py-0.5 rounded-md border border-border/50">
-                        <Text className="text-text-muted text-[11px] font-bold">
-                            {item.unit === 'order'
-                                ? `${item.count} ${item.count === 1 ? 'order' : 'orders'}`
-                                : `${item.count} ${item.count === 1 ? 'Trade' : 'Trades'}`}
-                        </Text>
-                    </View>
-                </View>
-            );
-        }
-
+    const renderOrder = useCallback(({ item }: { item: any }) => {
+        if (item.itemType === 'HEADER') return <OrderHeaderRow item={item} />;
         if (item.itemType === 'PENDING_ORDER') {
-            const isBuy = item.side !== 'SELL';
-            const ltp = ticks[`NSE:${stockCode(item.symbol)}`]?.ltp;
-            const status = pendingStatus(item, ltp, marketOpen, opensAt);
-            const rule = entryRule(item);
-            const risk = [item.stop_loss ? `SL ${px(item.stop_loss)}` : '', item.target ? `Target ${px(item.target)}` : ''].filter(Boolean).join(' · ');
             return (
-                <View className="bg-surface rounded-2xl border border-primary/20 mb-3 overflow-hidden">
-                    <TouchableOpacity
-                        onPress={() => setSelectedOrder(item)}
-                        activeOpacity={0.7}
-                        className="p-4 pb-3"
-                        accessibilityRole="button"
-                        accessibilityLabel={`Pending: ${sideWord(item.side)} ${item.quantity} ${item.symbol}. ${rule}. ${status.text}`}
-                        accessibilityHint="Opens the order details"
-                    >
-                        <View className="flex-row justify-between items-start">
-                            <View className="flex-1 mr-3">
-                                <View className="flex-row items-center">
-                                    <View className={`px-2 py-0.5 rounded-md mr-2 ${isBuy ? 'bg-success/10' : 'bg-error/10'}`}>
-                                        <Text className={`text-[11px] font-black ${isBuy ? 'text-success' : 'text-error'}`}>{item.side}</Text>
-                                    </View>
-                                    <Text className="text-text-primary font-bold text-sm flex-shrink" numberOfLines={1}>{item.quantity} × {item.symbol}</Text>
-                                </View>
-                                <View className="flex-row items-center flex-wrap mt-1.5">
-                                    <Text className="text-text-muted text-[11px] font-black px-1.5 py-0.5 rounded bg-background border border-border">
-                                        {productTag(item.product)}
-                                    </Text>
-                                    {item.source === 'scanner' && (
-                                        <Text className="text-primary text-[11px] font-black ml-1 px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">
-                                            SCANNER{item.strategy ? ` • ${item.strategy}` : ''}
-                                        </Text>
-                                    )}
-                                </View>
-                            </View>
-                            <View className="items-end">
-                                <Text className="text-text-muted text-[11px]">{istWhen(serverDate(item.created_at))}</Text>
-                                {(item.reserved_amount || 0) > 0 && (
-                                    <Text className="text-text-muted text-[11px] mt-0.5">{inr(item.reserved_amount, { decimals: 0, compact: true })} held</Text>
-                                )}
-                            </View>
-                        </View>
-
-                        <Text className="text-text-primary text-[13px] font-bold mt-3">{rule}</Text>
-                        {!!risk && <Text className="text-text-muted text-[11px] font-bold mt-1">{risk}</Text>}
-                        <View className="flex-row items-center mt-1">
-                            <Clock size={11} color={colors.textMuted} />
-                            <Text className="text-text-muted text-[11px] font-semibold ml-1">{validityText(item)}</Text>
-                        </View>
-                        <Text className="text-xs font-bold mt-2" style={{ color: status.color }}>{status.text}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        disabled={loading}
-                        onPress={() => confirmCancel(item)}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Cancel the ${item.side} order for ${item.quantity} ${item.symbol}`}
-                        className="border-t border-border/50 py-2.5 items-center"
-                    >
-                        <Text className={`font-black text-[11px] uppercase tracking-wider ${loading ? 'text-error/50' : 'text-error'}`}>Cancel order</Text>
-                    </TouchableOpacity>
-                </View>
+                <PendingOrderRow
+                    item={item}
+                    ltp={ticks[`NSE:${stockCode(item.symbol)}`]?.ltp}
+                    marketOpen={marketOpen}
+                    opensAtMs={opensAtMs}
+                    loading={loading}
+                    clock={clockTick}
+                    onSelect={setSelectedOrder}
+                    onCancel={onCancelOrder}
+                />
             );
         }
-
-        if (item.itemType === 'CLOSED_ORDER') {
-            const isBuy = item.side !== 'SELL';
-            const tag = isExpired(item) ? 'EXPIRED' : item.status;
-            return (
-                <TouchableOpacity
-                    onPress={() => setSelectedOrder(item)}
-                    activeOpacity={0.7}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${tag}: ${sideWord(item.side)} ${item.quantity} ${item.symbol}. ${closedReason(item)}`}
-                    className="bg-surface rounded-2xl border border-border mb-2 px-4 py-3"
-                >
-                    <View className="flex-row justify-between items-center">
-                        <View className="flex-row items-center flex-1 mr-2">
-                            <Text className={`text-[11px] font-black mr-2 ${isBuy ? 'text-success' : 'text-error'}`}>{item.side}</Text>
-                            <Text className="text-text-primary text-xs font-bold flex-shrink" numberOfLines={1}>{item.quantity} × {item.symbol}</Text>
-                            <Text className="text-text-muted text-[11px] font-black ml-2 px-1.5 py-0.5 rounded bg-background border border-border">{tag}</Text>
-                        </View>
-                        <Text className="text-text-muted text-[11px]">{istWhen(orderTime(item))}</Text>
-                    </View>
-                    <Text className="text-text-secondary text-[11px] mt-1" numberOfLines={2}>{closedReason(item)}</Text>
-                </TouchableOpacity>
-            );
-        }
-
-        const isExpanded = expandedTrades.includes(item.id);
-
-        return (
-            <View className="bg-surface rounded-2xl border border-border mb-3 overflow-hidden">
-                <TouchableOpacity
-                    onPress={() => toggleTrade(item.id)}
-                    activeOpacity={0.7}
-                    className="p-4"
-                >
-                    <View className="flex-row justify-between items-center">
-                        <View className="flex-row items-center">
-                            <View className={`w-7 h-7 rounded-lg items-center justify-center mr-3 ${item.status === 'CLOSED' ? 'bg-primary/20' : 'bg-success/10'}`}>
-                                <Briefcase size={12} color={item.status === 'CLOSED' ? '#00E0A1' : '#10B981'} />
-                            </View>
-                            <View>
-                                <Text className="text-text-primary font-bold text-sm">{item.symbol}</Text>
-                                <Text className="text-text-muted text-[11px] font-bold uppercase tracking-widest">
-                                    {item.status} TRADE • {item.orders.length} EXECUTIONS
-                                </Text>
-                            </View>
-                        </View>
-                        <View className="items-end">
-                            <Text className={`font-black text-sm ${item.realized_pnl >= 0 ? 'text-success' : 'text-error'}`}>
-                                {inr(item.realized_pnl, { sign: true })}
-                            </Text>
-                            <View className="flex-row items-center">
-                                <Text className="text-text-muted text-[11px] mr-1">{istClock(serverDate(item.timestamp))}</Text>
-                                {isExpanded ? <ChevronDown size={12} color="#6B7280" /> : <ChevronRight size={12} color="#6B7280" />}
-                            </View>
-                        </View>
-                    </View>
-                </TouchableOpacity>
-
-                {isExpanded && (
-                    <View className="bg-background/40 border-t border-border/50 p-4 pt-2">
-                        {item.orders.map((ord: any, idx: number) => (
-                            <TouchableOpacity
-                                key={ord.order_id}
-                                onPress={() => setSelectedOrder(ord)}
-                                className={`flex-row justify-between items-center py-3 ${idx !== item.orders.length - 1 ? 'border-b border-border/30' : ''}`}
-                            >
-                                <View className="flex-row items-center">
-                                    <View className={`px-2 py-0.5 rounded-md mr-3 ${ord.side === 'BUY' ? 'bg-success/10' : 'bg-error/10'}`}>
-                                        <Text className={`text-[11px] font-black ${ord.side === 'BUY' ? 'text-success' : 'text-error'}`}>{ord.side}</Text>
-                                    </View>
-                                    <View>
-                                        <Text className="text-text-primary text-xs font-bold">
-                                            {ord.side === 'BUY' ? 'Bought' : 'Sold'} {ord.quantity} @ {inr(ord.average_fill_price)}
-                                        </Text>
-                                        <View className="flex-row items-center mt-0.5">
-                                            <Text className="text-text-muted text-[11px] font-bold uppercase tracking-tighter">Value {inr(ord.quantity * ord.average_fill_price)}</Text>
-                                            <Text className="text-text-muted text-[11px] ml-2 opacity-50">• {istClock(serverDate(ord.filled_at || ord.created_at))}</Text>
-                                        </View>
-                                    </View>
-                                </View>
-                                {ord.realized_pnl !== undefined && ord.realized_pnl !== null ? (
-                                    <Text className={`text-[11px] font-black ${(ord.realized_pnl || 0) >= -0.005 ? 'text-success' : 'text-error'}`}>
-                                        {inr(ord.realized_pnl || 0, { sign: true })}
-                                    </Text>
-                                ) : null}
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                )}
-            </View>
-        );
-    };
-
+        if (item.itemType === 'CLOSED_ORDER') return <ClosedOrderRow item={item} clock={clockTick} onSelect={setSelectedOrder} />;
+        return <TradeRow item={item} expanded={expandedTrades.includes(item.id)} onToggle={toggleTrade} onSelect={setSelectedOrder} />;
+    }, [ticks, marketOpen, opensAtMs, loading, clockTick, onCancelOrder, expandedTrades, toggleTrade]);
     return (
         <View className="flex-1 bg-background">
             <StatusBar barStyle="light-content" backgroundColor="#0E1116" />

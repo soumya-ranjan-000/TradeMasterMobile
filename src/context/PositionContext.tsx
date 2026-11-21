@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TEST_USER_ID } from '../config';
 import { paperFetch } from '../auth';
+import { useAppActive } from '../appState';
 
 interface Position {
     position_id: string;
@@ -28,34 +29,52 @@ const PositionContext = createContext<PositionContextType | undefined>(undefined
 export const PositionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [positions, setPositions] = useState<Position[]>([]);
     const [loading, setLoading] = useState(false);
+    const appActive = useAppActive();
+    // Response body of the last applied fetch: an identical poll result keeps the
+    // same array, so consumers (and NotificationContext's subscriptions) don't churn.
+    const lastSignature = useRef<string | null>(null);
+    const started = useRef(false);
 
-    const refreshPositions = useCallback(async () => {
+    /** `silent`: background poll, no loading flag. */
+    const load = useCallback(async (silent: boolean) => {
         try {
-            setLoading(true);
+            if (!silent) setLoading(true);
             const savedId = await AsyncStorage.getItem('USER_ID');
             const uid = savedId || TEST_USER_ID;
 
             const res = await paperFetch(`/positions/${uid}`);
             if (res.ok) {
-                const data = await res.json();
-                setPositions(Array.isArray(data) ? data : []);
+                const text = await res.text();
+                if (text !== lastSignature.current) {
+                    const data = JSON.parse(text);
+                    lastSignature.current = text;
+                    setPositions(Array.isArray(data) ? data : []);
+                }
             }
         } catch (error) {
             console.error("Failed to fetch positions:", error);
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     }, []);
 
+    const refreshPositions = useCallback(() => load(false), [load]);
+
     useEffect(() => {
-        refreshPositions();
+        // Paused in the background; on return to the foreground, refresh once and resume.
+        if (!appActive) return;
+        // First load shows the loading state (as before); later polls are silent.
+        load(started.current);
+        started.current = true;
         // Poll positions every 30 seconds to keep stay in sync with auto-triggers
-        const timer = setInterval(refreshPositions, 30000);
+        const timer = setInterval(() => load(true), 30000);
         return () => clearInterval(timer);
-    }, [refreshPositions]);
+    }, [load, appActive]);
+
+    const value = useMemo(() => ({ positions, loading, refreshPositions }), [positions, loading, refreshPositions]);
 
     return (
-        <PositionContext.Provider value={{ positions, loading, refreshPositions }}>
+        <PositionContext.Provider value={value}>
             {children}
         </PositionContext.Provider>
     );

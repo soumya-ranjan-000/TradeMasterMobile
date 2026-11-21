@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Switch, TextInput, ActivityIndicator, StatusBar, Platform, RefreshControl } from 'react-native';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { Bell, BellPlus, BellRing, Trash2, Smartphone } from 'lucide-react-native';
@@ -28,29 +28,59 @@ const AlertsScreen = () => {
     const [searchLoading, setSearchLoading] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
 
+    // Symbol picked from the results. The live price (for validation) is only
+    // subscribed for a picked symbol, or for typed text that matches a search
+    // result exactly, not for every partial string typed.
+    const [chosenSymbol, setChosenSymbol] = useState<string | null>(null);
+    const priceSymbol = useMemo(() => {
+        const typed = newSymbol.trim().toUpperCase();
+        if (!typed) return undefined;
+        if (chosenSymbol && newSymbol === chosenSymbol) return newSymbol;
+        return searchResults.some(r => String(r.symbol || '').toUpperCase() === typed) ? newSymbol : undefined;
+    }, [newSymbol, chosenSymbol, searchResults]);
+
     // Get live price for the selected symbol for validation
-    const liveTick = useLivePrice(newSymbol);
+    const liveTick = useLivePrice(priceSymbol);
     const currentPrice = liveTick?.ltp || 0;
 
-    const handleSearch = async (text: string) => {
+    // Debounced search; only the latest request's response is applied.
+    const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const searchSeq = useRef(0);
+    useEffect(() => () => { if (searchTimer.current) clearTimeout(searchTimer.current); }, []);
+
+    const cancelSearch = () => {
+        if (searchTimer.current) clearTimeout(searchTimer.current);
+        searchTimer.current = null;
+        searchSeq.current++;
+        setSearchLoading(false);
+    };
+
+    const handleSearch = (text: string) => {
         setNewSymbol(text);
+        cancelSearch();
         if (text.length < 2) {
             setSearchResults([]);
             return;
         }
 
-        try {
-            setSearchLoading(true);
-            const data = await searchSymbols(text);
-            setSearchResults(Array.isArray(data) ? data : []);
-        } catch (error) {
-            console.error("Symbol search failed:", error);
-        } finally {
-            setSearchLoading(false);
-        }
+        setSearchLoading(true);
+        const seq = searchSeq.current;
+        searchTimer.current = setTimeout(async () => {
+            searchTimer.current = null;
+            try {
+                const data = await searchSymbols(text);
+                if (seq === searchSeq.current) setSearchResults(Array.isArray(data) ? data : []);
+            } catch (error) {
+                console.error("Symbol search failed:", error);
+            } finally {
+                if (seq === searchSeq.current) setSearchLoading(false);
+            }
+        }, 250);
     };
 
     const selectSymbol = (symbol: string) => {
+        cancelSearch();
+        setChosenSymbol(symbol);
         setNewSymbol(symbol);
         setSearchResults([]);
     };
@@ -92,7 +122,9 @@ const AlertsScreen = () => {
             if (success) {
                 haptic.success();
                 setShowAddAlert(false);
+                cancelSearch();
                 setNewSymbol('');
+                setChosenSymbol(null);
                 setNewPrice('');
                 setSearchResults([]);
             } else {
