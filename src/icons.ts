@@ -68,3 +68,4 @@ export { default as CircleX } from 'lucide-react-native/dist/esm/icons/circle-x.
 export { default as LocateFixed } from 'lucide-react-native/dist/esm/icons/locate-fixed.js';
 export { default as MessageSquareText } from 'lucide-react-native/dist/esm/icons/message-square-text.js';
 export { default as Send } from 'lucide-react-native/dist/esm/icons/send.js';
+export { default as Moon } from 'lucide-react-native/dist/esm/icons/moon.js';

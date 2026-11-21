@@ -227,6 +227,75 @@ export interface EconomicCalendar {
 }
 export const getEconomicCalendar = (days = 7) => backendJson<EconomicCalendar>(`/market/calendar?days=${days}`);
 
+// --- overnight cues (shadow mode, /overnight) ---------------------------------------
+/**
+ * The backend's 08:35 IST shadow-mode snapshot: each sector's expected opening
+ * gap from overnight global moves, overnight news classified into events, and a
+ * pre-open check of pending swing orders. Informational only: it changes no
+ * scores or orders yet.
+ */
+export type OvernightDirection = 'up' | 'down' | 'flat' | 'none';
+export interface OvernightDriver {
+    ticker: string; name: string; move_pct: number; unit: '%' | 'pp' | string;
+    z: number | null; contribution_pct: number;
+}
+export interface OvernightCue {
+    key: string; label: string;
+    status: 'ok' | 'partial' | 'unavailable' | string;
+    expected_gap_pct: number | null; z: number | null;
+    direction: OvernightDirection | string;
+    relative_to_market_pct?: number | null;
+    drivers?: OvernightDriver[];
+    missing?: string[];
+    session?: string | null;
+    fit?: { r2?: number | null; n?: number | null } | null;
+    detail?: string | null;
+}
+export type OvernightSource = 'ai' | 'cache' | 'keywords' | 'price' | 'none' | string;
+export interface OvernightEvent {
+    type: string; label: string;
+    sectors?: { sector: string; direction: -1 | 1 | number }[];
+    severity: 'low' | 'medium' | 'high' | string;
+    confidence?: number | null;
+    evidence?: number[];
+    source: OvernightSource;
+}
+export interface OvernightPreopen {
+    order_id: string; symbol: string; quantity: number; limit: number | null;
+    sector?: string | null; verdict: 'hold' | 'warn' | 'ok' | string; reasons?: string[];
+}
+export interface OvernightSnapshot {
+    day: string;                         // YYYY-MM-DD (IST trading day)
+    generated_at: string;                // ISO UTC
+    shadow_mode?: boolean;
+    z_threshold?: number;
+    cues?: Record<string, OvernightCue>;
+    events?: OvernightEvent[];
+    news?: { headlines?: number; source?: OvernightSource; fallbacks_tried?: string[];
+             sample?: { id: number | string; title: string; publisher?: string }[] } | null;
+    preopen?: OvernightPreopen[];
+    preopen_status?: { ok: boolean; detail?: string | null } | null;
+    data?: { ok: boolean; detail?: string | null } | null;
+    outcome?: { sectors?: Record<string, { actual: { gap_pct: number | null; intra_pct?: number | null } | null;
+                                           predicted_gap_pct?: number | null }> } | null;
+}
+export interface OvernightAccuracy {
+    days_with_outcome: number;
+    sectors?: Record<string, { days: number; direction_hit_rate: number | null; strong_hit_rate?: number | null }>;
+    event_sources?: Record<string, { calls: number; hit_rate: number | null }>;
+}
+
+/** Latest snapshot, or null before the first run (404). Other failures throw. */
+export async function getOvernight(): Promise<OvernightSnapshot | null> {
+    try {
+        return await backendJson<OvernightSnapshot>('/overnight/latest');
+    } catch (e) {
+        if (e instanceof ApiError && e.status === 404) return null;
+        throw e;
+    }
+}
+export const getOvernightAccuracy = () => backendJson<OvernightAccuracy>('/overnight/accuracy');
+
 // --- search ------------------------------------------------------------------------
 const bare = (s: string) => s.toUpperCase().trim().replace(/\.(NS|BO)$/, '');
 

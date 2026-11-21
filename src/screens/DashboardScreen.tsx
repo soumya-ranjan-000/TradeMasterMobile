@@ -6,6 +6,7 @@ import { TEST_USER_ID } from '../config';
 import { paperFetch } from '../auth';
 import { getMarketStatus, getMarketSession, isHolidayToday, nextMarketOpen } from '../api';
 import MarketPulse from '../components/MarketPulse';
+import OvernightCues from '../components/OvernightCues';
 import TradingStatusPanel from '../components/TradingStatusPanel';
 import { useNavigation, CompositeNavigationProp, useIsFocused } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -57,6 +58,8 @@ const DashboardScreen = () => {
     const [watchLoading, setWatchLoading] = useState(false);
     const [cached, setCached] = useState<{ at: number; quotes: Record<string, Quote> } | null>(null);
     const [pricesAt, setPricesAt] = useState<number | null>(null);
+    // Bumped by pull-to-refresh so the Market tab's overnight card reloads.
+    const [overnightRefresh, setOvernightRefresh] = useState(0);
     const isFocused = useIsFocused();
     const appActive = useAppActive();
     // Re-render every 30s for the relative times ("2m ago"), only while visible.
@@ -236,6 +239,7 @@ const DashboardScreen = () => {
 
     const onRefresh = () => {
         setRefreshing(true);
+        if (activeCategory === 'Market') setOvernightRefresh(n => n + 1);
         Promise.all([fetchProfile(userId), fetchWatchlists(userId), fetchMarketStatus()]).finally(() => setRefreshing(false));
     };
 
@@ -388,6 +392,9 @@ const DashboardScreen = () => {
                 {activeCategory === 'Market' && (
                     <FadeIn key="m"><View className="px-5 pt-1 pb-8">
                         <MarketPulse active={isFocused && appActive && activeCategory === 'Market'} />
+                        <View className="mt-6">
+                            <OvernightCues active={isFocused && appActive && activeCategory === 'Market'} refreshKey={overnightRefresh} />
+                        </View>
                     </View></FadeIn>
                 )}
                 {activeCategory === 'Events' && (
