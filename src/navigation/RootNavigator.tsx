@@ -1,11 +1,13 @@
-import React from 'react';
-import { View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, ActivityIndicator } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { NavigationContainer, DarkTheme } from '@react-navigation/native';
+import { NavigationContainer, DarkTheme, createNavigationContainerRef } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Home, PieChart, BookOpen, User, Radar, Search } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme';
+import { restoreSession, onSignedOut } from '../auth';
+import { toast } from '../components/Toast';
 
 import DashboardScreen from '../screens/DashboardScreen';
 import WatchlistScreen from '../screens/WatchlistScreen';
@@ -19,6 +21,7 @@ import ProfileScreen from '../screens/ProfileScreen';
 import AlertsScreen from '../screens/AlertsScreen';
 import PerformanceScreen from '../screens/PerformanceScreen';
 import ScannerScreen from '../screens/ScannerScreen';
+import ScanLoginScreen from '../screens/ScanLoginScreen';
 
 // Types for Navigation
 export type RootStackParamList = {
@@ -30,6 +33,7 @@ export type RootStackParamList = {
     Performance: undefined;
     Scanner: undefined;
     DetailedAnalysis: { symbol: string; analysis: any };
+    ScanLogin: undefined;
 };
 
 export type MainTabParamList = {
@@ -159,11 +163,39 @@ const MainTabs = () => {
     );
 };
 
+const navigationRef = createNavigationContainerRef<RootStackParamList>();
+
 const RootNavigator = () => {
+    // Signed in already? Decided once at start from the stored token (see auth.restoreSession).
+    const [initialRoute, setInitialRoute] = useState<'Login' | 'MainTabs' | null>(null);
+
+    useEffect(() => {
+        restoreSession()
+            .then(state => setInitialRoute(state === 'signed-in' ? 'MainTabs' : 'Login'))
+            .catch(() => setInitialRoute('Login'));
+    }, []);
+
+    // Any paper-service 401 (token expired/revoked) lands here: back to Login.
+    useEffect(() => onSignedOut(() => {
+        if (!navigationRef.isReady()) return;
+        const root = navigationRef.getRootState();
+        if (root?.routes?.[root.index ?? 0]?.name === 'Login') return;
+        toast.info('Signed out', 'Your session ended. Sign in again with your PIN.');
+        navigationRef.reset({ index: 0, routes: [{ name: 'Login' }] });
+    }), []);
+
+    if (!initialRoute) {
+        return (
+            <View style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }}>
+                <ActivityIndicator color={colors.primary} />
+            </View>
+        );
+    }
+
     return (
-        <NavigationContainer theme={TradeMasterTheme}>
+        <NavigationContainer theme={TradeMasterTheme} ref={navigationRef}>
             <Stack.Navigator
-                initialRouteName="Login"
+                initialRouteName={initialRoute}
                 screenOptions={{
                     headerStyle: {
                         backgroundColor: '#1C1F26',
@@ -201,6 +233,11 @@ const RootNavigator = () => {
                 <Stack.Screen
                     name="Performance"
                     component={PerformanceScreen}
+                    options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                    name="ScanLogin"
+                    component={ScanLoginScreen}
                     options={{ headerShown: false }}
                 />
             </Stack.Navigator>

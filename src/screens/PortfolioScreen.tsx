@@ -10,7 +10,8 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RootStackParamList, MainTabParamList } from '../navigation/RootNavigator';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Briefcase, ArrowUpRight, ArrowDownRight, History, Layers, Info, ShieldCheck, X, Target, TrendingUp, ChevronDown, ChevronRight, BarChart3 } from 'lucide-react-native';
-import { API_URL, TEST_USER_ID } from '../config';
+import { TEST_USER_ID } from '../config';
+import { paperFetch } from '../auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMarketData } from '../context/MarketDataContext';
 import { usePositions } from '../context/PositionContext';
@@ -67,10 +68,10 @@ const PortfolioScreen = () => {
             setUserId(uid);
 
             const [ordRes, accRes, tRes, dRes] = await Promise.all([
-                fetch(`${API_URL}/orders/${uid}`),
-                fetch(`${API_URL}/account/${uid}`),
-                fetch(`${API_URL}/trades/${uid}`),
-                fetch(`${API_URL}/stats/daily/${uid}`)
+                paperFetch(`/orders/${uid}`),
+                paperFetch(`/account/${uid}`),
+                paperFetch(`/trades/${uid}`),
+                paperFetch(`/stats/daily/${uid}`)
             ]);
 
             const ordData = await ordRes.json();
@@ -106,7 +107,7 @@ const PortfolioScreen = () => {
         if (!modifyingPos) return;
         try {
             setLoading(true);
-            const response = await fetch(`${API_URL}/positions`, {
+            const response = await paperFetch(`/positions`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -136,7 +137,7 @@ const PortfolioScreen = () => {
     const quickExit = async (symbol: string, currentLtp: number, positionId?: string) => {
         try {
             setLoading(true);
-            const response = await fetch(`${API_URL}/positions/close`, {
+            const response = await paperFetch(`/positions/close`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -167,7 +168,7 @@ const PortfolioScreen = () => {
     const cancelOrder = async (orderId: string) => {
         try {
             setLoading(true);
-            const response = await fetch(`${API_URL}/orders/${userId}/${orderId}`, {
+            const response = await paperFetch(`/orders/${userId}/${orderId}`, {
                 method: 'DELETE',
             });
             if (response.ok) {

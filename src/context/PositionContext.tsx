@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL, TEST_USER_ID } from '../config';
+import { TEST_USER_ID } from '../config';
+import { paperFetch } from '../auth';
 
 interface Position {
     position_id: string;
@@ -34,7 +35,7 @@ export const PositionProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             const savedId = await AsyncStorage.getItem('USER_ID');
             const uid = savedId || TEST_USER_ID;
 
-            const res = await fetch(`${API_URL}/positions/${uid}`);
+            const res = await paperFetch(`/positions/${uid}`);
             if (res.ok) {
                 const data = await res.json();
                 setPositions(Array.isArray(data) ? data : []);

@@ -4,7 +4,8 @@ import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft, TrendingUp, Target, BarChart3, PieChart as PieIcon, ArrowUpRight, ArrowDownRight, Info, RefreshCw } from 'lucide-react-native';
 import { ScreenHeader, IconButton } from '../ui';
 import { colors } from '../theme';
-import { API_URL, TEST_USER_ID } from '../config';
+import { TEST_USER_ID } from '../config';
+import { paperFetch } from '../auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Path, Rect, Circle, G, Line, Text as SvgText, Defs, LinearGradient as SVGGradiant, Stop } from 'react-native-svg';
 
@@ -25,7 +26,7 @@ const PerformanceScreen = () => {
             const uid = savedId || TEST_USER_ID;
 
             // Closed trades, NET of charges (paper service /analytics).
-            const res = await fetch(`${API_URL}/analytics/${encodeURIComponent(uid)}`);
+            const res = await paperFetch(`/analytics/${encodeURIComponent(uid)}`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const a = await res.json();
             setStats({

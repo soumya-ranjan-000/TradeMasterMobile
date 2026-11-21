@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL, TEST_USER_ID } from '../config';
+import { TEST_USER_ID } from '../config';
+import { paperFetch } from '../auth';
 
 interface SmartAlert {
     id: string;
@@ -39,7 +40,7 @@ export const AlertProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             const uid = savedId || TEST_USER_ID;
             setUserId(uid);
 
-            const res = await fetch(`${API_URL}/alerts/${uid}`);
+            const res = await paperFetch(`/alerts/${uid}`);
             if (res.ok) {
                 const data = await res.json();
                 const mappedAlerts = data.map((a: any) => ({
@@ -68,7 +69,7 @@ export const AlertProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const createAlert = async (symbol: string, price: number, condition: string) => {
         try {
-            const res = await fetch(`${API_URL}/alerts`, {
+            const res = await paperFetch(`/alerts`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -95,7 +96,7 @@ export const AlertProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             // Update local cache first (Optimistic UI)
             setAlerts(prev => prev.map(a => a.id === id ? { ...a, active } : a));
 
-            await fetch(`${API_URL}/alerts`, {
+            await paperFetch(`/alerts`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -116,7 +117,7 @@ export const AlertProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             // Update local cache first
             setAlerts(prev => prev.filter(a => a.id !== id));
 
-            await fetch(`${API_URL}/alerts/${userId}/${id}`, {
+            await paperFetch(`/alerts/${userId}/${id}`, {
                 method: 'DELETE'
             });
         } catch (error) {
@@ -133,7 +134,7 @@ export const AlertProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             ));
 
             // Inform backend
-            await fetch(`${API_URL}/alerts/trigger`, {
+            await paperFetch(`/alerts/trigger`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

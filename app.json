@@ -36,6 +36,16 @@
         "projectId": "f80b9dfa-eb92-418d-b96b-4c97875c383c"
       }
     },
-    "owner": "souranj"
+    "owner": "souranj",
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "TradeMaster uses the camera to scan the QR code on TradeMaster Web so you can approve signing in there.",
+          "recordAudioAndroid": false
+        }
+      ]
+    ]
   }
 }

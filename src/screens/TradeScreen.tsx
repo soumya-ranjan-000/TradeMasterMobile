@@ -13,7 +13,8 @@ import Animated, {
     interpolate,
     Extrapolate
 } from 'react-native-reanimated';
-import { API_URL, TEST_USER_ID } from '../config';
+import { TEST_USER_ID } from '../config';
+import { paperFetch } from '../auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLivePrice } from '../context/MarketDataContext';
 import { RootStackParamList, MainTabParamList } from '../navigation/RootNavigator';
@@ -108,7 +109,7 @@ const TradeScreen = () => {
                 client_order_id: clientOrderId.current
             };
 
-            const response = await fetch(`${API_URL}/orders`, {
+            const response = await paperFetch(`/orders`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(orderPayload)

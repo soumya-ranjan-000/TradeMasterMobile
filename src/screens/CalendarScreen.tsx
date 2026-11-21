@@ -5,7 +5,8 @@ import { colors, signColor } from '../theme';
 import { inr, groupIN, istDate } from '../format';
 import { useFocusEffect } from '@react-navigation/native';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
-import { API_URL, TEST_USER_ID } from '../config';
+import { TEST_USER_ID } from '../config';
+import { paperFetch } from '../auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const CalendarScreen = () => {
@@ -18,7 +19,7 @@ const CalendarScreen = () => {
             setLoading(true);
             const savedId = await AsyncStorage.getItem('USER_ID');
             const uid = savedId || TEST_USER_ID;
-            const res = await fetch(`${API_URL}/stats/daily/${uid}`);
+            const res = await paperFetch(`/stats/daily/${uid}`);
             const data = await res.json();
             setPnlData(data);
         } catch (error) {

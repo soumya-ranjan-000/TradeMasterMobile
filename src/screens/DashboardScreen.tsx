@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, RefreshControl, StatusBar, Pressable } from 'react-native';
-import { Bell, Trash2, ListPlus } from 'lucide-react-native';
+import { Bell, Trash2, ListPlus, ScanLine } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { API_URL, TEST_USER_ID } from '../config';
+import { TEST_USER_ID } from '../config';
+import { paperFetch } from '../auth';
 import { getMarketStatus } from '../api';
 import MarketPulse from '../components/MarketPulse';
 import TradingStatusPanel from '../components/TradingStatusPanel';
@@ -59,7 +60,7 @@ const DashboardScreen = () => {
 
     const fetchProfile = async (id: string = userId) => {
         try {
-            const res = await fetch(`${API_URL}/profile/${id}`);
+            const res = await paperFetch(`/profile/${id}`);
             if (res.ok) setProfile(await res.json());
         } catch (error) {
             console.error("Failed to fetch profile:", error);
@@ -93,7 +94,7 @@ const DashboardScreen = () => {
     const fetchWatchlists = async (id: string = userId) => {
         try {
             setWatchLoading(true);
-            const res = await fetch(`${API_URL}/watchlists/${id}`);
+            const res = await paperFetch(`/watchlists/${id}`);
             const data = await res.json();
             setWatchlists(Array.isArray(data) ? data : []);
         } catch (error) {
@@ -115,7 +116,7 @@ const DashboardScreen = () => {
         if (!watchlistId) return;
         confirmAction('Delete watchlist', `Delete "${name}" (${count} ${count === 1 ? 'stock' : 'stocks'})? This can't be undone.`, 'Delete', async () => {
             try {
-                const res = await fetch(`${API_URL}/watchlists/${userId}/${watchlistId}`, {
+                const res = await paperFetch(`/watchlists/${userId}/${watchlistId}`, {
                     method: 'DELETE', headers: { 'Accept': 'application/json' },
                 });
                 if (res.ok) fetchWatchlists(userId);
@@ -128,7 +129,7 @@ const DashboardScreen = () => {
     const removeFromWatchlist = (watchlistId: string, listName: string, symbol: string) => {
         confirmAction('Remove stock', `Remove ${bareSymbol(symbol)} from "${listName}"?`, 'Remove', async () => {
             try {
-                const res = await fetch(`${API_URL}/watchlists/remove`, {
+                const res = await paperFetch(`/watchlists/remove`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ user_id: userId, watchlist_id: watchlistId, symbol }),
@@ -264,6 +265,11 @@ const DashboardScreen = () => {
                         style={{ borderColor: `${statusColor}55`, backgroundColor: `${statusColor}14` }}>
                         <View className="w-1.5 h-1.5 rounded-full mr-1.5" style={{ backgroundColor: statusColor }} />
                         <Text className="text-xs font-bold" style={{ color: statusColor }}>{statusText.replace('Market ', '').replace(/^./, c => c.toUpperCase())}</Text>
+                    </View>
+                    <View className="mr-2">
+                        <IconButton label="Log in to TradeMaster Web: scan QR code" onPress={() => navigation.navigate('ScanLogin')}>
+                            <ScanLine size={20} color={colors.textPrimary} />
+                        </IconButton>
                     </View>
                     <IconButton label="Alerts" onPress={() => navigation.navigate('Alerts')}>
                         <Bell size={20} color={colors.primary} />

@@ -8,7 +8,8 @@ import { ChevronLeft, TrendingUp, TrendingDown, Plus, X, Search, ListPlus } from
 import { IconButton } from '../ui';
 import { colors } from '../theme';
 import { inr, pct, num } from '../format';
-import { API_URL, TEST_USER_ID } from '../config';
+import { TEST_USER_ID } from '../config';
+import { paperFetch } from '../auth';
 import { getHistory, isExchangeOpen } from '../api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Rect, Line, Defs, LinearGradient as SVGGradiant, Stop, Text as SvgText, Path, Polyline, G } from 'react-native-svg';
@@ -108,7 +109,7 @@ const StockDetailScreen = () => {
             const savedId = await AsyncStorage.getItem('USER_ID');
             const uid = savedId || TEST_USER_ID;
             setUserId(uid);
-            const response = await fetch(`${API_URL}/watchlists/${uid}`);
+            const response = await paperFetch(`/watchlists/${uid}`);
             const data = await response.json();
             setUserWatchlists(Array.isArray(data) ? data : []);
         } catch (error) {
@@ -121,7 +122,7 @@ const StockDetailScreen = () => {
     const addToWatchlist = async (watchlistId: string) => {
         try {
             setWatchLoading(true);
-            const response = await fetch(`${API_URL}/watchlists/add`, {
+            const response = await paperFetch(`/watchlists/add`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -164,7 +165,7 @@ const StockDetailScreen = () => {
         }
         try {
             setWatchLoading(true);
-            const response = await fetch(`${API_URL}/watchlists`, {
+            const response = await paperFetch(`/watchlists`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
