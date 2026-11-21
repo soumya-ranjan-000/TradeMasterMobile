@@ -68,6 +68,41 @@ export function istDateTime(d?: Date | string | number | null): string {
     return `${day === istDate(Date.now()) ? 'Today' : day}, ${istTime(d)}`;
 }
 
+/** "3:30 PM" IST (12-hour clock). */
+export function istClock(d?: Date | string | number | null): string {
+    if (d == null) return '—';
+    const t = ist(d);
+    if (isNaN(t.getTime())) return '—';
+    const h = t.getUTCHours();
+    return `${h % 12 || 12}:${pad(t.getUTCMinutes())} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
+/** "2026-11-21": the IST calendar day. */
+export function istDayKey(d?: Date | string | number | null): string {
+    if (d == null) return '';
+    const t = ist(d);
+    return isNaN(t.getTime()) ? '' : `${t.getUTCFullYear()}-${pad(t.getUTCMonth() + 1)}-${pad(t.getUTCDate())}`;
+}
+
+/** "Today, 9:26 AM" or "20 Nov, 9:26 AM" (IST, 12-hour). */
+export function istWhen(d?: Date | string | number | null): string {
+    if (d == null) return '—';
+    const day = istDate(d);
+    if (day === '—') return '—';
+    return `${day === istDate(Date.now()) ? 'Today' : day}, ${istClock(d)}`;
+}
+
+/**
+ * How to name the IST day of a coming moment: "" when it is today, the
+ * weekday ("Mon") within the next 6 days, else the date ("30 Nov").
+ */
+export function istDayLabel(d: Date | string | number, now: Date | number = Date.now()): string {
+    const a = istDayKey(d), b = istDayKey(now);
+    if (!a || a === b) return '';
+    const days = Math.round((Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86_400_000);
+    return days > 0 && days <= 6 ? DAYS[ist(d).getUTCDay()] : istDate(d);
+}
+
 /** "just now", "5 min ago", "3 h ago", then the date. */
 export function ago(d?: Date | string | number | null, now = Date.now()): string {
     if (d == null) return '—';

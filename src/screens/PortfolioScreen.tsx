@@ -2,19 +2,78 @@ import React, { useState, useCallback } from 'react';
 import { toast } from '../components/Toast';
 import { ScreenHeader, IconButton, confirmAction } from '../ui';
 import { colors, signColor } from '../theme';
-import { inr } from '../format';
+import { inr, istClock, istDate, istDayKey, istDayLabel, istWhen } from '../format';
 import { View, Text, FlatList, RefreshControl, TouchableOpacity, ScrollView, StatusBar, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
 import { useFocusEffect, useNavigation, CompositeNavigationProp, useIsFocused } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RootStackParamList, MainTabParamList } from '../navigation/RootNavigator';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Briefcase, ArrowUpRight, ArrowDownRight, History, Layers, Info, ShieldCheck, X, Target, TrendingUp, ChevronDown, ChevronRight, BarChart3 } from 'lucide-react-native';
+import { Briefcase, ArrowUpRight, ArrowDownRight, History, Layers, Info, ShieldCheck, X, Target, TrendingUp, ChevronDown, ChevronRight, BarChart3, Clock, Lock } from 'lucide-react-native';
 import { TEST_USER_ID } from '../config';
-import { paperFetch } from '../auth';
+import { paperFetch, serverDate } from '../auth';
+import { isExchangeOpen, getMarketSession, isHolidayToday, nextMarketOpen, MarketSession } from '../api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMarketData } from '../context/MarketDataContext';
 import { usePositions } from '../context/PositionContext';
+
+// --- order wording ----------------------------------------------------------------
+const productTag = (p?: string) => (p === 'DELIVERY' ? 'CNC' : 'MIS');
+const sideWord = (side?: string) => (side === 'SELL' ? 'Sell' : 'Buy');
+const px = (v?: number | null) => inr(v, { trim: true });
+const stockCode = (symbol: string) => symbol.split('.')[0].toUpperCase();
+/** Server time an order last changed (cancel/expiry time for closed orders). */
+const orderTime = (o: any) => serverDate(o.updated_at || o.created_at);
+
+/** Lower and upper edge of a band order (BUY: trigger..limit, SELL: limit..trigger). */
+const bandOf = (o: any): [number, number] =>
+    [Math.min(o.trigger_price, o.price), Math.max(o.trigger_price, o.price)];
+
+/** "Buy between ₹9,200 – ₹9,266" / "Buy at ≤ ₹1,398.35" / "Sell at ≥ ₹…" / "Buy at market price". */
+function entryRule(o: any): string {
+    const s = sideWord(o.side);
+    if (o.order_type !== 'LIMIT') return `${s} at market price`;
+    if (o.trigger_price != null) {
+        const [lo, hi] = bandOf(o);
+        return `${s} between ${px(lo)} – ${px(hi)}`;
+    }
+    return `${s} at ${o.side === 'SELL' ? '≥' : '≤'} ${px(o.price)}`;
+}
+
+/** "Day order · expires today 3:30 PM" / "Until cancelled" / "Expires Tue 24 Nov, 3:30 PM". */
+function validityText(o: any): string {
+    const exp = serverDate(o.expires_at);
+    const when = exp
+        ? (istDayKey(exp) === istDayKey(Date.now()) ? `today ${istClock(exp)}` : `${istDate(exp, true)}, ${istClock(exp)}`)
+        : null;
+    if (o.validity === 'DAY') return `Day order · ${when ? `expires ${when}` : 'cancelled at the close if not filled'}`;
+    if (when) return `Expires ${when}`;
+    return 'Until cancelled';
+}
+
+/** What a pending order is waiting for, given the session and the live price. */
+function pendingStatus(o: any, ltp: number | null | undefined, marketOpen: boolean, opensAt: Date): { text: string; color: string } {
+    if (!marketOpen) {
+        const day = istDayLabel(opensAt);
+        return { text: `Waiting for market open · ${day || 'today'} ${istClock(opensAt)}`, color: colors.warning };
+    }
+    if (!ltp || ltp <= 0) return { text: 'Market open · waiting for a live price', color: colors.textMuted };
+    const l = `LTP ${px(ltp)}`;
+    if (o.order_type !== 'LIMIT') return { text: `${l} · filling at market`, color: colors.success };
+    const off = (edge: number) => `${((Math.abs(ltp - edge) / edge) * 100).toFixed(1)}%`;
+    if (o.trigger_price != null) {
+        const [lo, hi] = bandOf(o);
+        if (ltp >= lo && ltp <= hi) return { text: `${l} · inside band — filling`, color: colors.success };
+        return { text: ltp < lo ? `${l} · ${off(lo)} below band` : `${l} · ${off(hi)} above band`, color: colors.textSecondary };
+    }
+    const fillable = o.side === 'SELL' ? ltp >= o.price : ltp <= o.price;
+    if (fillable) return { text: `${l} · at limit — filling`, color: colors.success };
+    return { text: `${l} · ${off(o.price)} ${ltp > o.price ? 'above' : 'below'} limit`, color: colors.textSecondary };
+}
+
+/** CANCELLED / REJECTED orders the server expired carry "Expired…" as their reason. */
+const isExpired = (o: any) => /^expired/i.test(o?.error_message || '');
+const closedReason = (o: any) => o?.error_message || (o?.status === 'REJECTED' ? 'Rejected' : 'Cancelled');
 
 const PortfolioScreen = () => {
     const navigation = useNavigation<CompositeNavigationProp<
@@ -39,6 +98,31 @@ const PortfolioScreen = () => {
 
     const { ticks, subscribe, unsubscribe } = useMarketData();
     const isFocused = useIsFocused();
+
+    // NSE session (holiday + next_session from the market pulse) for pending-order status.
+    const [session, setSession] = useState<MarketSession | null>(null);
+    // Re-render every minute so "waiting for market open" flips at 09:15.
+    const [, setClockTick] = useState(0);
+    React.useEffect(() => {
+        if (!isFocused) return;
+        const id = setInterval(() => setClockTick(t => t + 1), 60_000);
+        return () => clearInterval(id);
+    }, [isFocused]);
+    const nowDate = new Date();
+    const marketOpen = isExchangeOpen(nowDate) && !isHolidayToday(session, nowDate);
+    const opensAt = nextMarketOpen(session?.next_session, nowDate);
+
+    // Live prices for pending orders while the Orders tab is visible. subscribe/
+    // unsubscribe change identity on every tick, so they are read through a ref.
+    const subRef = React.useRef({ subscribe, unsubscribe });
+    subRef.current = { subscribe, unsubscribe };
+    const pendingSymbolsKey = Array.from(new Set(orders.filter(o => o.status === 'PENDING').map(o => String(o.symbol)))).sort().join(',');
+    React.useEffect(() => {
+        if (!isFocused || activeTab !== 'ORDERS' || !pendingSymbolsKey) return;
+        const syms = pendingSymbolsKey.split(',');
+        syms.forEach(sym => subRef.current.subscribe(sym));
+        return () => syms.forEach(sym => subRef.current.unsubscribe(sym));
+    }, [isFocused, activeTab, pendingSymbolsKey]);
 
     // Apply live prices to positions for real-time P&L
     const livePositions = React.useMemo(() => {
@@ -66,6 +150,7 @@ const PortfolioScreen = () => {
             const savedId = await AsyncStorage.getItem('USER_ID');
             const uid = savedId || TEST_USER_ID;
             setUserId(uid);
+            getMarketSession().then(setSession).catch(() => { });
 
             const [ordRes, accRes, tRes, dRes] = await Promise.all([
                 paperFetch(`/orders/${uid}`),
@@ -187,6 +272,11 @@ const PortfolioScreen = () => {
         }
     };
 
+    const confirmCancel = (o: any) => {
+        const held = (o.reserved_amount || 0) > 0 ? ` The ${inr(o.reserved_amount, { decimals: 0 })} held for it goes back to your cash.` : '';
+        confirmAction('Cancel order', `Cancel ${o.side} ${o.quantity} ${o.symbol}?\n${entryRule(o)}.${held}`, 'Cancel order', () => cancelOrder(o.order_id), true);
+    };
+
     const totalUnrealizedPnL = livePositions.reduce((acc, pos) => acc + (pos.unrealized_pnl || 0), 0);
     // Shorts carry a negative quantity: exposure is the absolute value.
     const totalInvested = livePositions.reduce((acc, pos) => acc + (Math.abs(pos.quantity) * pos.average_price), 0);
@@ -196,8 +286,7 @@ const PortfolioScreen = () => {
 
     // Today's realized P&L, NET of charges, for the IST trading day. Order
     // realized_pnl is gross (charges are separate), so it is not summed here.
-    const istToday = new Date(Date.now() + (new Date().getTimezoneOffset() + 330) * 60000);
-    const istKey = `${istToday.getFullYear()}-${String(istToday.getMonth() + 1).padStart(2, '0')}-${String(istToday.getDate()).padStart(2, '0')}`;
+    const istKey = istDayKey(Date.now());
     const todayRealizedPnL = dailyPnl[istKey] || 0;
 
     // 1. "Today" Performance = Today's Realized + Today's Unrealized variation
@@ -210,6 +299,8 @@ const PortfolioScreen = () => {
     const currentPortfolioPerc = totalInvested !== 0 ? (currentPortfolioPnL / totalInvested) * 100 : 0;
 
     const currentVal = (totalInvested || 0) + (totalUnrealizedPnL || 0);
+    // `balance` is FREE cash; pending orders hold `reserved` on top of it.
+    const reserved = Number(account?.reserved) || 0;
 
     // Keep lifetime stats for potential Analytics usage
     const allRealizedPnL = orders.reduce((acc, ord) => acc + (ord.realized_pnl || 0), 0);
@@ -236,7 +327,7 @@ const PortfolioScreen = () => {
         return trades.map(t => {
             // Find orders belonging to this trade
             const tradeOrders = orders.filter(o => t.order_ids.includes(o.order_id))
-                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                .sort((a, b) => (serverDate(b.created_at)?.getTime() ?? 0) - (serverDate(a.created_at)?.getTime() ?? 0));
 
             return {
                 id: t.position_id,
@@ -261,7 +352,7 @@ const PortfolioScreen = () => {
         const sections: any[] = [];
 
         if (pendingOrders.length > 0) {
-            sections.push({ itemType: 'HEADER', title: 'Pending Orders', count: pendingOrders.length });
+            sections.push({ itemType: 'HEADER', title: 'Pending Orders', count: pendingOrders.length, unit: 'order' });
             pendingOrders.forEach(o => sections.push({ itemType: 'PENDING_ORDER', ...o }));
         }
 
@@ -270,20 +361,32 @@ const PortfolioScreen = () => {
             openTrades.forEach(t => sections.push({ itemType: 'TRADE', ...t }));
         }
 
+        // Cancelled / expired / rejected orders from the last 3 days, newest first.
+        const cutoff = Date.now() - 3 * 86_400_000;
+        const closedOrders = orders
+            .filter(o => (o.status === 'CANCELLED' || o.status === 'REJECTED') && (orderTime(o)?.getTime() ?? 0) >= cutoff)
+            .sort((a, b) => (orderTime(b)?.getTime() ?? 0) - (orderTime(a)?.getTime() ?? 0));
+        if (closedOrders.length > 0) {
+            sections.push({ itemType: 'HEADER', title: 'Cancelled & expired (last 3 days)', count: closedOrders.length, unit: 'order' });
+            closedOrders.forEach(o => sections.push({ itemType: 'CLOSED_ORDER', ...o }));
+        }
+
         if (closedTrades.length > 0) {
             // Group closed trades by date
+            // Keyed by IST day (YYYY-MM-DD) so the keys sort as strings.
             const groupedByDate: Record<string, any[]> = {};
             closedTrades.forEach(t => {
-                const date = new Date(t.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-                if (!groupedByDate[date]) groupedByDate[date] = [];
-                groupedByDate[date].push(t);
+                const key = istDayKey(serverDate(t.timestamp)) || 'unknown';
+                if (!groupedByDate[key]) groupedByDate[key] = [];
+                groupedByDate[key].push(t);
             });
 
             // Sort dates descending
-            const sortedDates = Object.keys(groupedByDate).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
-            sortedDates.forEach(date => {
-                sections.push({ itemType: 'HEADER', title: date, count: groupedByDate[date].length });
-                groupedByDate[date].forEach(t => sections.push({ itemType: 'TRADE', ...t }));
+            const sortedDates = Object.keys(groupedByDate).sort((a, b) => b.localeCompare(a));
+            sortedDates.forEach(key => {
+                const title = key === 'unknown' ? 'Earlier' : `${istDate(serverDate(`${key}T00:00:00`))} ${key.slice(0, 4)}`;
+                sections.push({ itemType: 'HEADER', title, count: groupedByDate[key].length });
+                groupedByDate[key].forEach(t => sections.push({ itemType: 'TRADE', ...t }));
             });
         }
 
@@ -400,44 +503,103 @@ const PortfolioScreen = () => {
         if (item.itemType === 'HEADER') {
             return (
                 <View className="py-4 px-2 flex-row justify-between items-center">
-                    <Text className="text-text-muted font-black text-[11px] uppercase tracking-[2px]">{item.title}</Text>
+                    <Text className="text-text-muted font-black text-[11px] uppercase tracking-[2px] flex-1 mr-3">{item.title}</Text>
                     <View className="bg-surface px-2 py-0.5 rounded-md border border-border/50">
-                        <Text className="text-text-muted text-[11px] font-bold">{item.count} {item.count === 1 ? 'Trade' : 'Trades'}</Text>
+                        <Text className="text-text-muted text-[11px] font-bold">
+                            {item.unit === 'order'
+                                ? `${item.count} ${item.count === 1 ? 'order' : 'orders'}`
+                                : `${item.count} ${item.count === 1 ? 'Trade' : 'Trades'}`}
+                        </Text>
                     </View>
                 </View>
             );
         }
 
         if (item.itemType === 'PENDING_ORDER') {
+            const isBuy = item.side !== 'SELL';
+            const ltp = ticks[`NSE:${stockCode(item.symbol)}`]?.ltp;
+            const status = pendingStatus(item, ltp, marketOpen, opensAt);
+            const rule = entryRule(item);
+            const risk = [item.stop_loss ? `SL ${px(item.stop_loss)}` : '', item.target ? `Target ${px(item.target)}` : ''].filter(Boolean).join(' · ');
             return (
-                <View className="bg-surface rounded-2xl border border-secondary/30 mb-3 overflow-hidden shadow-sm shadow-secondary/5">
+                <View className="bg-surface rounded-2xl border border-primary/20 mb-3 overflow-hidden">
                     <TouchableOpacity
                         onPress={() => setSelectedOrder(item)}
                         activeOpacity={0.7}
-                        className="p-4"
+                        className="p-4 pb-3"
+                        accessibilityRole="button"
+                        accessibilityLabel={`Pending: ${sideWord(item.side)} ${item.quantity} ${item.symbol}. ${rule}. ${status.text}`}
+                        accessibilityHint="Opens the order details"
                     >
-                        <View className="flex-row justify-between items-center">
-                            <View className="flex-row items-center">
-                                <View className={`w-7 h-7 rounded-lg items-center justify-center mr-3 bg-secondary/10`}>
-                                    <TrendingUp size={12} color="#00E0A1" />
+                        <View className="flex-row justify-between items-start">
+                            <View className="flex-1 mr-3">
+                                <View className="flex-row items-center">
+                                    <View className={`px-2 py-0.5 rounded-md mr-2 ${isBuy ? 'bg-success/10' : 'bg-error/10'}`}>
+                                        <Text className={`text-[11px] font-black ${isBuy ? 'text-success' : 'text-error'}`}>{item.side}</Text>
+                                    </View>
+                                    <Text className="text-text-primary font-bold text-sm flex-shrink" numberOfLines={1}>{item.quantity} × {item.symbol}</Text>
                                 </View>
-                                <View>
-                                    <Text className="text-text-primary font-bold text-sm">{item.symbol}</Text>
-                                    <Text className="text-primary text-[11px] font-black uppercase tracking-widest">
-                                        PENDING {item.order_type} ORDER
+                                <View className="flex-row items-center flex-wrap mt-1.5">
+                                    <Text className="text-text-muted text-[11px] font-black px-1.5 py-0.5 rounded bg-background border border-border">
+                                        {productTag(item.product)}
                                     </Text>
+                                    {item.source === 'scanner' && (
+                                        <Text className="text-primary text-[11px] font-black ml-1 px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">
+                                            SCANNER{item.strategy ? ` • ${item.strategy}` : ''}
+                                        </Text>
+                                    )}
                                 </View>
                             </View>
                             <View className="items-end">
-                                <View className={`px-2 py-0.5 rounded-md mb-1 ${item.side === 'BUY' ? 'bg-success/10' : 'bg-error/10'}`}>
-                                    <Text className={`text-[11px] font-black ${item.side === 'BUY' ? 'text-success' : 'text-error'}`}>{item.side}</Text>
-                                </View>
-                                <Text className="text-text-primary font-black text-xs">{inr(item.price)}</Text>
-                                <Text className="text-text-muted text-[11px] mt-0.5">{new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                                <Text className="text-text-muted text-[11px]">{istWhen(serverDate(item.created_at))}</Text>
+                                {(item.reserved_amount || 0) > 0 && (
+                                    <Text className="text-text-muted text-[11px] mt-0.5">{inr(item.reserved_amount, { decimals: 0, compact: true })} held</Text>
+                                )}
                             </View>
                         </View>
+
+                        <Text className="text-text-primary text-[13px] font-bold mt-3">{rule}</Text>
+                        {!!risk && <Text className="text-text-muted text-[11px] font-bold mt-1">{risk}</Text>}
+                        <View className="flex-row items-center mt-1">
+                            <Clock size={11} color={colors.textMuted} />
+                            <Text className="text-text-muted text-[11px] font-semibold ml-1">{validityText(item)}</Text>
+                        </View>
+                        <Text className="text-xs font-bold mt-2" style={{ color: status.color }}>{status.text}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        disabled={loading}
+                        onPress={() => confirmCancel(item)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Cancel the ${item.side} order for ${item.quantity} ${item.symbol}`}
+                        className="border-t border-border/50 py-2.5 items-center"
+                    >
+                        <Text className={`font-black text-[11px] uppercase tracking-wider ${loading ? 'text-error/50' : 'text-error'}`}>Cancel order</Text>
                     </TouchableOpacity>
                 </View>
+            );
+        }
+
+        if (item.itemType === 'CLOSED_ORDER') {
+            const isBuy = item.side !== 'SELL';
+            const tag = isExpired(item) ? 'EXPIRED' : item.status;
+            return (
+                <TouchableOpacity
+                    onPress={() => setSelectedOrder(item)}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${tag}: ${sideWord(item.side)} ${item.quantity} ${item.symbol}. ${closedReason(item)}`}
+                    className="bg-surface rounded-2xl border border-border mb-2 px-4 py-3"
+                >
+                    <View className="flex-row justify-between items-center">
+                        <View className="flex-row items-center flex-1 mr-2">
+                            <Text className={`text-[11px] font-black mr-2 ${isBuy ? 'text-success' : 'text-error'}`}>{item.side}</Text>
+                            <Text className="text-text-primary text-xs font-bold flex-shrink" numberOfLines={1}>{item.quantity} × {item.symbol}</Text>
+                            <Text className="text-text-muted text-[11px] font-black ml-2 px-1.5 py-0.5 rounded bg-background border border-border">{tag}</Text>
+                        </View>
+                        <Text className="text-text-muted text-[11px]">{istWhen(orderTime(item))}</Text>
+                    </View>
+                    <Text className="text-text-secondary text-[11px] mt-1" numberOfLines={2}>{closedReason(item)}</Text>
+                </TouchableOpacity>
             );
         }
 
@@ -467,7 +629,7 @@ const PortfolioScreen = () => {
                                 {inr(item.realized_pnl, { sign: true })}
                             </Text>
                             <View className="flex-row items-center">
-                                <Text className="text-text-muted text-[11px] mr-1">{new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                                <Text className="text-text-muted text-[11px] mr-1">{istClock(serverDate(item.timestamp))}</Text>
                                 {isExpanded ? <ChevronDown size={12} color="#6B7280" /> : <ChevronRight size={12} color="#6B7280" />}
                             </View>
                         </View>
@@ -492,7 +654,7 @@ const PortfolioScreen = () => {
                                         </Text>
                                         <View className="flex-row items-center mt-0.5">
                                             <Text className="text-text-muted text-[11px] font-bold uppercase tracking-tighter">Value {inr(ord.quantity * ord.average_fill_price)}</Text>
-                                            <Text className="text-text-muted text-[11px] ml-2 opacity-50">• {new Date(ord.created_at).toLocaleTimeString()}</Text>
+                                            <Text className="text-text-muted text-[11px] ml-2 opacity-50">• {istClock(serverDate(ord.filled_at || ord.created_at))}</Text>
                                         </View>
                                     </View>
                                 </View>
@@ -526,7 +688,7 @@ const PortfolioScreen = () => {
                 <View className="bg-surface rounded-3xl border border-border p-4">
                     <Text className="text-text-muted text-xs font-semibold">Account value</Text>
                     <Text className="text-text-primary text-[28px] font-black mt-0.5" style={{ fontVariant: ['tabular-nums'] }}>
-                        {account ? inr((account.balance ?? 0) + (currentVal || 0)) : '—'}
+                        {account ? inr((account.balance ?? 0) + reserved + (currentVal || 0)) : '—'}
                     </Text>
                     <Text className="text-[13px] font-bold" style={{ color: signColor(totalPnLToday) }}>
                         {inr(totalPnLToday || 0, { sign: true })} today
@@ -547,6 +709,14 @@ const PortfolioScreen = () => {
                             </Text>
                         </View>
                     </View>
+                    {reserved > 0 && (
+                        <View className="flex-row items-center mt-2" accessibilityLabel={`${inr(reserved, { decimals: 0 })} held for pending orders, not included in cash`}>
+                            <Lock size={11} color={colors.textMuted} />
+                            <Text className="text-text-muted text-xs font-semibold ml-1.5" style={{ fontVariant: ['tabular-nums'] }}>
+                                Held for orders {inr(reserved, { decimals: 0 })} · not in Cash
+                            </Text>
+                        </View>
+                    )}
                 </View>
             </View>
 
@@ -606,7 +776,7 @@ const PortfolioScreen = () => {
             ) : (
                 <FlatList
                     data={tradeData}
-                    keyExtractor={(item, index) => item.itemType === 'HEADER' ? `header-${item.title}-${index}` : item.id}
+                    keyExtractor={(item, index) => item.itemType === 'HEADER' ? `header-${item.title}-${index}` : String(item.id || item.order_id || index)}
                     contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
                     renderItem={renderOrder}
                     refreshControl={
@@ -794,7 +964,7 @@ const PortfolioScreen = () => {
                                         </Text>
                                     </View>
                                     <Text className="text-text-muted text-xs font-bold uppercase tracking-tight">
-                                        {new Date(selectedOrder?.created_at).toLocaleString()}
+                                        {istWhen(serverDate(selectedOrder?.created_at))}
                                     </Text>
                                 </View>
                             </View>
@@ -811,15 +981,15 @@ const PortfolioScreen = () => {
                                 <View>
                                     <Text className="text-text-secondary text-[11px] uppercase font-bold tracking-widest mb-1">Quantity</Text>
                                     <Text className="text-text-primary text-xl font-black">
-                                        {selectedOrder?.status === 'PENDING' ? selectedOrder?.quantity : selectedOrder?.filled_quantity} Shares
+                                        {selectedOrder?.status === 'FILLED' ? selectedOrder?.filled_quantity : selectedOrder?.quantity} Shares
                                     </Text>
                                 </View>
                                 <View className="items-end">
                                     <Text className="text-text-secondary text-[11px] uppercase font-bold tracking-widest mb-1">
-                                        {selectedOrder?.status === 'PENDING' ? 'Limit Price' : 'Avg. Fill Price'}
+                                        {selectedOrder?.status === 'FILLED' ? 'Avg. Fill Price' : selectedOrder?.order_type === 'LIMIT' ? 'Limit Price' : 'Price'}
                                     </Text>
                                     <Text className="text-text-primary text-xl font-black">
-                                        {inr(selectedOrder?.status === 'PENDING' ? selectedOrder?.price : selectedOrder?.average_fill_price)}
+                                        {inr(selectedOrder?.status === 'FILLED' ? selectedOrder?.average_fill_price : selectedOrder?.price)}
                                     </Text>
                                 </View>
                             </View>
@@ -830,18 +1000,36 @@ const PortfolioScreen = () => {
                                         {selectedOrder?.side === 'BUY' ? 'Estimated Investment' : 'Target Value'}
                                     </Text>
                                     <Text className="text-text-primary font-black">
-                                        {inr((selectedOrder?.status === 'PENDING' ? selectedOrder?.quantity : (selectedOrder?.filled_quantity || 0)) *
-                                            (selectedOrder?.status === 'PENDING' ? selectedOrder?.price : (selectedOrder?.average_fill_price || 0)))}
+                                        {inr((selectedOrder?.status === 'FILLED' ? (selectedOrder?.filled_quantity || 0) : selectedOrder?.quantity) *
+                                            (selectedOrder?.status === 'FILLED' ? (selectedOrder?.average_fill_price || 0) : selectedOrder?.price))}
                                     </Text>
                                 </View>
                                 <View className="flex-row justify-between">
                                     <Text className="text-text-secondary font-bold">Order Type</Text>
-                                    <Text className="text-text-primary font-black">{selectedOrder?.order_type}</Text>
+                                    <Text className="text-text-primary font-black">{selectedOrder?.order_type} · {productTag(selectedOrder?.product)}</Text>
                                 </View>
                                 <View className="flex-row justify-between">
                                     <Text className="text-text-secondary font-bold">Status</Text>
-                                    <Text className="text-primary font-black">{selectedOrder?.status}</Text>
+                                    <Text className="text-primary font-black">{isExpired(selectedOrder) ? 'EXPIRED' : selectedOrder?.status}</Text>
                                 </View>
+                                {selectedOrder?.status === 'PENDING' && (
+                                    <>
+                                        <View className="flex-row justify-between">
+                                            <Text className="text-text-secondary font-bold mr-4">Entry</Text>
+                                            <Text className="text-text-primary font-bold flex-shrink text-right">{entryRule(selectedOrder)}</Text>
+                                        </View>
+                                        <View className="flex-row justify-between">
+                                            <Text className="text-text-secondary font-bold mr-4">Validity</Text>
+                                            <Text className="text-text-primary font-bold flex-shrink text-right">{validityText(selectedOrder)}</Text>
+                                        </View>
+                                        {(selectedOrder?.reserved_amount || 0) > 0 && (
+                                            <View className="flex-row justify-between">
+                                                <Text className="text-text-secondary font-bold">Cash held</Text>
+                                                <Text className="text-text-primary font-bold">{inr(Number(selectedOrder?.reserved_amount))}</Text>
+                                            </View>
+                                        )}
+                                    </>
+                                )}
 
                                 {(selectedOrder?.charges || 0) > 0 && (
                                     <View className="flex-row justify-between">
@@ -867,22 +1055,25 @@ const PortfolioScreen = () => {
                                     </>
                                 )}
 
-                                {selectedOrder?.error_message && (
+                                {(selectedOrder?.status === 'CANCELLED' || selectedOrder?.status === 'REJECTED') ? (
+                                    <View className="mt-2 p-3 bg-error/10 rounded-xl border border-error/20">
+                                        <Text className="text-text-secondary text-[11px] font-bold uppercase tracking-widest mb-1">Reason</Text>
+                                        <Text className="text-text-primary text-xs font-bold">{closedReason(selectedOrder)}</Text>
+                                    </View>
+                                ) : selectedOrder?.error_message ? (
                                     <View className="mt-2 p-3 bg-primary/10 rounded-xl border border-primary/20">
                                         <Text className="text-primary text-[11px] font-bold uppercase tracking-widest text-center">
                                             Note: {selectedOrder?.error_message}
                                         </Text>
                                     </View>
-                                )}
+                                ) : null}
                             </View>
                         </View>
 
                         {selectedOrder?.status === 'PENDING' && (
                             <TouchableOpacity
                                 disabled={loading}
-                                onPress={() => {
-                                    confirmAction('Cancel order', 'Cancel this pending order?', 'Cancel order', () => cancelOrder(selectedOrder.order_id), true);
-                                }}
+                                onPress={() => confirmCancel(selectedOrder)}
                                 className={`mt-6 ${loading ? 'bg-error/5' : 'bg-error/10'} border border-error/20 py-4 rounded-2xl items-center`}
                             >
                                 {loading ? (

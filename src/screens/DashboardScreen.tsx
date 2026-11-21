@@ -4,7 +4,7 @@ import { Bell, Trash2, ListPlus, ScanLine } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TEST_USER_ID } from '../config';
 import { paperFetch } from '../auth';
-import { getMarketStatus } from '../api';
+import { getMarketStatus, getMarketSession, isHolidayToday, nextMarketOpen } from '../api';
 import MarketPulse from '../components/MarketPulse';
 import TradingStatusPanel from '../components/TradingStatusPanel';
 import { useNavigation, CompositeNavigationProp, useIsFocused } from '@react-navigation/native';
@@ -16,7 +16,7 @@ import { useMarketData } from '../context/MarketDataContext';
 import { IconButton, Segmented, Skeleton, SkeletonRow, EmptyState, FadeIn, confirmAction } from '../ui';
 import { haptic } from '../haptics';
 import { colors, signColor } from '../theme';
-import { inr, pct, ago, bareSymbol } from '../format';
+import { inr, pct, ago, bareSymbol, istDayLabel } from '../format';
 
 interface ProfileData {
     full_name: string;
@@ -48,6 +48,8 @@ const DashboardScreen = () => {
     const [profile, setProfile] = useState<ProfileData | null>(null);
     const [refreshing, setRefreshing] = useState(false);
     const [marketStatus, setMarketStatus] = useState<{ is_open: boolean; halted?: boolean; message: string } | null>(null);
+    // YYYY-MM-DD of the next NSE session (market pulse), for "opens Mon 9:15".
+    const [nextSession, setNextSession] = useState<string | null>(null);
     const [activeCategory, setActiveCategory] = useState<Tab>('Watchlists');
     const [watchlists, setWatchlists] = useState<any[]>([]);
     const [watchLoading, setWatchLoading] = useState(false);
@@ -106,7 +108,11 @@ const DashboardScreen = () => {
 
     const fetchMarketStatus = async () => {
         try {
-            setMarketStatus(await getMarketStatus());
+            const [status, session] = await Promise.all([getMarketStatus(), getMarketSession()]);
+            // The clock-based status does not know exchange holidays; the pulse does.
+            const holiday = !status.halted && status.is_open && isHolidayToday(session);
+            setMarketStatus(holiday ? { ...status, is_open: false, message: 'Market Closed' } : status);
+            setNextSession(session?.next_session ?? null);
         } catch (e) {
             console.log("Failed to fetch market status");
         }
@@ -194,6 +200,13 @@ const DashboardScreen = () => {
     const initials = fullName.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
     const statusColor = !marketStatus ? colors.textMuted : marketStatus.halted ? colors.warning : marketStatus.is_open ? colors.success : colors.error;
     const statusText = !marketStatus ? 'Checking market…' : marketStatus.halted ? 'Trading halted' : marketStatus.is_open ? 'Market open' : 'Market closed';
+    // Closed (not halted): say when it reopens, e.g. "Closed · opens Mon 9:15" / "Closed · opens 9:15".
+    const opensAt = marketStatus && !marketStatus.halted && !marketStatus.is_open ? nextMarketOpen(nextSession) : null;
+    const opensDay = opensAt ? istDayLabel(opensAt) : '';
+    const badgeText = opensAt
+        ? `Closed · opens ${opensDay ? `${opensDay} ` : ''}9:15`
+        : statusText.replace('Market ', '').replace(/^./, c => c.toUpperCase());
+    const badgeLabel = opensAt ? `Market closed, opens ${opensDay ? `${opensDay} ` : 'today '}at 9:15 AM` : statusText;
     const anyLive = Object.keys(liveQuotes).length > 0;
 
     const renderStock = (wl: any, sym: string) => {
@@ -261,10 +274,10 @@ const DashboardScreen = () => {
                             <Text className="text-text-primary font-black text-xl" numberOfLines={1}>{firstName}</Text>
                         </View>
                     </Pressable>
-                    <View className="flex-row items-center px-2.5 py-1.5 rounded-full mr-2 border" accessibilityLabel={statusText}
+                    <View className="flex-row items-center px-2.5 py-1.5 rounded-full mr-2 border" accessibilityLabel={badgeLabel}
                         style={{ borderColor: `${statusColor}55`, backgroundColor: `${statusColor}14` }}>
                         <View className="w-1.5 h-1.5 rounded-full mr-1.5" style={{ backgroundColor: statusColor }} />
-                        <Text className="text-xs font-bold" style={{ color: statusColor }}>{statusText.replace('Market ', '').replace(/^./, c => c.toUpperCase())}</Text>
+                        <Text className="text-xs font-bold" style={{ color: statusColor }} numberOfLines={1}>{badgeText}</Text>
                     </View>
                     <View className="mr-2">
                         <IconButton label="Log in to TradeMaster Web: scan QR code" onPress={() => navigation.navigate('ScanLogin')}>

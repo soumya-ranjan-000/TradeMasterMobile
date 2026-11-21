@@ -44,6 +44,8 @@ const TradeScreen = () => {
     const [showRiskPanel, setShowRiskPanel] = useState(false);
     const [orderType, setOrderType] = useState<'MARKET' | 'LIMIT'>('MARKET');
     const [limitPrice, setLimitPrice] = useState('');
+    // LIMIT only. DAY: cancelled at the session close if unfilled. GTC: until cancelled.
+    const [validity, setValidity] = useState<'DAY' | 'GTC'>('DAY');
     // INTRADAY: squared off automatically at 15:15 IST, shorts allowed.
     // DELIVERY: held overnight, long only (a SELL can only reduce holdings).
     const [product, setProduct] = useState<'INTRADAY' | 'DELIVERY'>('INTRADAY');
@@ -62,6 +64,7 @@ const TradeScreen = () => {
         setShowRiskPanel(false);
         setOrderType('MARKET');
         setLimitPrice('');
+        setValidity('DAY');
         setProduct('INTRADAY');
     }, [params?.symbol, params?.side]);
 
@@ -106,6 +109,7 @@ const TradeScreen = () => {
                 target: target ? parseFloat(target) : null,
                 trailing_sl: trailingStopLoss ? parseFloat(trailingStopLoss) : null,
                 product: product,
+                ...(orderType === 'LIMIT' ? { validity } : {}),
                 client_order_id: clientOrderId.current
             };
 
@@ -121,7 +125,7 @@ const TradeScreen = () => {
                 const charges = order.charges ? ` · Charges ${inr(Number(order.charges))}` : '';
                 const message = order.status === 'FILLED'
                     ? `${side === 'BUY' ? 'Bought' : 'Sold'} ${order.filled_quantity || quantity} ${symbol} @ ${inr(Number(order.average_fill_price))} (${product})${charges}`
-                    : `${side} Limit Order for ${quantity} ${symbol} placed at ${inr(parseFloat(limitPrice))} (${product})`;
+                    : `${side} Limit Order for ${quantity} ${symbol} placed at ${inr(parseFloat(limitPrice))} (${product}) · ${validity === 'GTC' ? 'until cancelled' : 'day order'}`;
                 haptic.success(); toast.success(order.status === "FILLED" ? "Order filled" : "Order placed", message);
                 // Navigate to Portfolio (sibling tab)
                 navigation.navigate('Portfolio' as any);
@@ -300,6 +304,27 @@ const TradeScreen = () => {
                                     </TouchableOpacity>
                                 ))}
                             </View>
+
+                            {/* Validity: how long the pending order stays open */}
+                            <Text className="text-text-secondary text-[11px] uppercase font-black tracking-widest mt-8 mb-3">Validity</Text>
+                            <View className="bg-background p-1 rounded-2xl flex-row border border-border">
+                                {([['DAY', 'Day'], ['GTC', 'Until cancelled']] as const).map(([v, label]) => (
+                                    <TouchableOpacity
+                                        key={v}
+                                        onPress={() => setValidity(v)}
+                                        accessibilityRole="button"
+                                        accessibilityState={{ selected: validity === v }}
+                                        className={`flex-1 py-3 rounded-xl items-center ${validity === v ? 'bg-primary-blue shadow-lg shadow-primary-blue/20' : ''}`}
+                                    >
+                                        <Text className={`text-xs font-black tracking-wider ${validity === v ? 'text-white' : 'text-text-muted'}`}>{label}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                            <Text className="text-text-muted text-[11px] mt-2 text-center">
+                                {validity === 'DAY'
+                                    ? 'Cancelled at the session close (3:30 PM IST) if not filled'
+                                    : 'Stays open across sessions until it fills or you cancel it'}
+                            </Text>
                         </View>
                     )}
                 </View>
@@ -421,6 +446,12 @@ const TradeScreen = () => {
                             <View className="flex-row justify-between">
                                 <Text className="text-text-secondary font-medium">Limit Price</Text>
                                 <Text className="text-text-primary font-bold">{inr(parseFloat(limitPrice))}</Text>
+                            </View>
+                        )}
+                        {orderType === 'LIMIT' && (
+                            <View className="flex-row justify-between">
+                                <Text className="text-text-secondary font-medium">Validity</Text>
+                                <Text className="text-text-primary font-bold">{validity === 'DAY' ? 'Day' : 'Until cancelled'}</Text>
                             </View>
                         )}
                         <View className="flex-row justify-between">

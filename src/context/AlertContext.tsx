@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TEST_USER_ID } from '../config';
-import { paperFetch } from '../auth';
+import { paperFetch, serverDate } from '../auth';
 
 interface SmartAlert {
     id: string;
@@ -50,9 +50,10 @@ export const AlertProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     condition: a.condition,
                     active: a.active,
                     isTriggered: a.is_triggered,
-                    triggeredAt: a.triggered_at,
+                    // Naive UTC from the server: normalise to ISO with a zone for the screens.
+                    triggeredAt: serverDate(a.triggered_at)?.toISOString() ?? undefined,
                     triggeredPrice: a.triggered_price,
-                    createdAt: a.created_at
+                    createdAt: serverDate(a.created_at)?.toISOString() ?? a.created_at
                 }));
                 setAlerts(mappedAlerts);
             }

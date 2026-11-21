@@ -13,7 +13,8 @@ import { ApiError, BridgeStatus, ScanCandidate, ScanExecution, ScanStyle, scanne
 import { TEST_USER_ID } from '../config';
 import { confirmAction, Skeleton, SkeletonRow, ScreenHeader, IconButton, Segmented } from '../ui';
 import { colors } from '../theme';
-import { ago, inr as fmtInr } from '../format';
+import { ago, inr as fmtInr, istClock } from '../format';
+import { serverDate } from '../auth';
 
 /**
  * TradeMasterBackend's opportunity scanner, as one tab: a compact list of
@@ -60,7 +61,9 @@ const EXEC_STYLE: Record<ScanExecution['status'], { color: string; label: string
 const rupee = inr;
 const timeAgo = (iso?: string | null) => {
     if (!iso) return '';
-    const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+    const at = serverDate(iso);
+    if (!at) return '';
+    const mins = Math.max(0, Math.round((Date.now() - at.getTime()) / 60000));
     if (mins < 60) return `${mins}m ago`;
     if (mins < 60 * 24) return `${Math.round(mins / 60)}h ago`;
     return `${Math.round(mins / 1440)}d ago`;
@@ -355,7 +358,7 @@ const ScannerScreen = () => {
                     <Text className="text-[11px] font-bold mt-2" style={{ color: execStyle(exec).color }}>Paper: {exec.error}</Text>
                 )}
                 <Text className="text-text-muted text-[11px] mt-2">
-                    Updated {timeAgo(c.updated_at)}{c.expires_at ? ` • expires ${new Date(c.expires_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
+                    Updated {timeAgo(c.updated_at)}{c.expires_at ? ` • expires ${istClock(serverDate(c.expires_at))}` : ''}
                     {c.entry_confirmed_at ? ' • entry confirmed' : ''}
                 </Text>
 

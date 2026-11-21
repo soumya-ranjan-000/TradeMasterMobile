@@ -134,6 +134,66 @@ export interface MarketPulse {
 }
 export const getMarketPulse = () => backendJson<MarketPulse>('/market/pulse');
 
+// --- next session (when closed markets reopen) ----------------------------------------
+export type MarketSession = NonNullable<MarketPulse['session']>;
+
+let sessionCache: { at: number; value: MarketSession | null } | null = null;
+let sessionLoading: Promise<MarketSession | null> | null = null;
+
+/**
+ * The NSE session block from the market pulse (status, holiday, next_session),
+ * cached for 10 minutes because the pulse is a heavy call. null if unavailable.
+ */
+export function getMarketSession(maxAgeMs = 10 * 60_000): Promise<MarketSession | null> {
+    if (sessionCache && Date.now() - sessionCache.at < maxAgeMs) return Promise.resolve(sessionCache.value);
+    if (!sessionLoading) {
+        sessionLoading = getMarketPulse()
+            .then(p => p?.session ?? null)
+            .catch(() => null)
+            .then(value => {
+                sessionCache = { at: Date.now(), value };
+                sessionLoading = null;
+                return value;
+            });
+    }
+    return sessionLoading;
+}
+
+const DAY_MS = 86_400_000;
+const OPEN_MIN = 9 * 60 + 15;
+const IST_MS = IST_OFFSET_MIN * 60_000;
+
+/** True when the pulse says today is an NSE holiday (the clock alone would call it open). */
+export function isHolidayToday(session?: MarketSession | null, now: Date = new Date()): boolean {
+    if (!session?.holiday || !session.next_session) return false;
+    const t = new Date(now.getTime() + IST_MS);
+    const today = `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}-${String(t.getUTCDate()).padStart(2, '0')}`;
+    return session.next_session > today;
+}
+
+/**
+ * When the NSE cash session next opens (09:15 IST): `next_session`
+ * (YYYY-MM-DD, holidays included) while it is still ahead, else the next
+ * weekday (holidays not modelled).
+ */
+export function nextMarketOpen(nextSession?: string | null, now: Date = new Date()): Date {
+    const nowMs = now.getTime();
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(nextSession || '');
+    if (m) {
+        const at = Date.UTC(+m[1], +m[2] - 1, +m[3], 9, 15) - IST_MS;
+        if (at > nowMs) return new Date(at);
+    }
+    // Work in "IST as UTC" so the getUTC* fields read as IST.
+    const t = new Date(nowMs + IST_MS);
+    let day = Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate());
+    const weekday = (ms: number) => { const d = new Date(ms).getUTCDay(); return d >= 1 && d <= 5; };
+    const mins = t.getUTCHours() * 60 + t.getUTCMinutes();
+    if (!(weekday(day) && mins < OPEN_MIN)) {
+        do { day += DAY_MS; } while (!weekday(day));
+    }
+    return new Date(day + OPEN_MIN * 60_000 - IST_MS);
+}
+
 /** Raw events GO/NO-GO from the economic service (via the backend). */
 export interface NextEvent {
     name: string; currency?: string; time?: string; event_at?: string; scope?: string;
