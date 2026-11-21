@@ -22,6 +22,7 @@ import AlertsScreen from '../screens/AlertsScreen';
 import PerformanceScreen from '../screens/PerformanceScreen';
 import ScannerScreen from '../screens/ScannerScreen';
 import ScanLoginScreen from '../screens/ScanLoginScreen';
+import BriefingScreen from '../screens/BriefingScreen';
 
 // Types for Navigation
 export type RootStackParamList = {
@@ -34,6 +35,7 @@ export type RootStackParamList = {
     Scanner: undefined;
     DetailedAnalysis: { symbol: string; analysis: any };
     ScanLogin: undefined;
+    Briefing: undefined;
 };
 
 export type MainTabParamList = {
@@ -244,6 +246,11 @@ const RootNavigator = () => {
                 <Stack.Screen
                     name="ScanLogin"
                     component={ScanLoginScreen}
+                    options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                    name="Briefing"
+                    component={BriefingScreen}
                     options={{ headerShown: false }}
                 />
             </Stack.Navigator>

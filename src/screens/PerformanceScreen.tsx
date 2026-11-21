@@ -2,15 +2,21 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, StatusBar, Dimensions } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft, TrendingUp, Target, BarChart3, PieChart as PieIcon, ArrowUpRight, ArrowDownRight, Info, RefreshCw } from '../icons';
-import { ScreenHeader, IconButton } from '../ui';
+import { ScreenHeader, IconButton, Segmented, FadeIn } from '../ui';
 import { colors } from '../theme';
 import StrategyScorecard from '../components/StrategyScorecard';
+import RiskGuard from '../components/RiskGuard';
+import Journal from '../components/Journal';
+import Readiness from '../components/Readiness';
 import { TEST_USER_ID } from '../config';
 import { paperFetch } from '../auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Path, Rect, Circle, G, Line, Text as SvgText, Defs, LinearGradient as SVGGradiant, Stop } from 'react-native-svg';
 
 const { width } = Dimensions.get('window');
+/** Evidence sections under the analytics; only the selected one is mounted (and fetches). */
+const SECTIONS = ['Scorecard', 'Risk', 'Journal', 'Readiness'] as const;
+type Section = typeof SECTIONS[number];
 const CHART_WIDTH = width - 48;
 const CHART_HEIGHT = 200;
 
@@ -20,6 +26,7 @@ const PerformanceScreen = () => {
     const [stats, setStats] = useState<any>(null);
     const [equityCurve, setEquityCurve] = useState<any[]>([]);
     const [scorecardKey, setScorecardKey] = useState(0);
+    const [section, setSection] = useState<Section>('Scorecard');
 
     const fetchAnalytics = async () => {
         try {
@@ -118,7 +125,7 @@ const PerformanceScreen = () => {
                 right={<IconButton label="Refresh analytics" onPress={() => { fetchAnalytics(); setScorecardKey(k => k + 1); }}><RefreshCw size={18} color={colors.primary} /></IconButton>}
             />
 
-            {/* One ScrollView in every state so the scorecard (its own backend call) stays mounted. */}
+            {/* One ScrollView in every state so the evidence sections (their own backend calls) stay mounted. */}
             <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false}>
             {loading ? (
                 <View className="items-center justify-center py-16">
@@ -215,7 +222,13 @@ const PerformanceScreen = () => {
                 </>
             )}
 
-                <StrategyScorecard refreshKey={scorecardKey} />
+                <View className="mb-5">
+                    <Segmented options={SECTIONS} value={section} onChange={setSection} />
+                </View>
+                {section === 'Scorecard' && <FadeIn key="s"><StrategyScorecard refreshKey={scorecardKey} /></FadeIn>}
+                {section === 'Risk' && <FadeIn key="r"><RiskGuard refreshKey={scorecardKey} /></FadeIn>}
+                {section === 'Journal' && <FadeIn key="j"><Journal refreshKey={scorecardKey} /></FadeIn>}
+                {section === 'Readiness' && <FadeIn key="y"><Readiness refreshKey={scorecardKey} /></FadeIn>}
                 <View className="h-20" />
             </ScrollView>
         </View>

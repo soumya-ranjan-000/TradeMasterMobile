@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, RefreshControl, StatusBar, Pressable } from 'react-native';
-import { Bell, Trash2, ListPlus, ScanLine } from '../icons';
+import { Bell, Trash2, ListPlus, ScanLine, Newspaper } from '../icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TEST_USER_ID } from '../config';
 import { paperFetch } from '../auth';
@@ -314,7 +314,7 @@ const DashboardScreen = () => {
                 {/* Header: who, market state, alerts */}
                 <View className="flex-row items-center px-5 pb-4" style={{ paddingTop: Math.max(insets.top, 12) + 14 }}>
                     <Pressable onPress={() => navigation.navigate('Profile')} accessibilityRole="button" accessibilityLabel="Open profile"
-                        className="flex-row items-center flex-1 mr-3 active:opacity-70">
+                        className="flex-row items-center flex-1 mr-3 active:opacity-70" style={{ minWidth: 72 }}>
                         <View className="w-11 h-11 rounded-full bg-surface border border-border items-center justify-center mr-3">
                             <Text className="text-text-primary font-black text-[15px]">{initials}</Text>
                         </View>
@@ -324,9 +324,14 @@ const DashboardScreen = () => {
                         </View>
                     </Pressable>
                     <View className="flex-row items-center px-2.5 py-1.5 rounded-full mr-2 border" accessibilityLabel={badgeLabel}
-                        style={{ borderColor: `${statusColor}55`, backgroundColor: `${statusColor}14` }}>
+                        style={{ borderColor: `${statusColor}55`, backgroundColor: `${statusColor}14`, flexShrink: 1 }}>
                         <View className="w-1.5 h-1.5 rounded-full mr-1.5" style={{ backgroundColor: statusColor }} />
-                        <Text className="text-xs font-bold" style={{ color: statusColor }} numberOfLines={1}>{badgeText}</Text>
+                        <Text className="text-xs font-bold" style={{ color: statusColor, flexShrink: 1 }} numberOfLines={1}>{badgeText}</Text>
+                    </View>
+                    <View className="mr-2">
+                        <IconButton label="Daily briefing" onPress={() => navigation.navigate('Briefing')}>
+                            <Newspaper size={20} color={colors.textPrimary} />
+                        </IconButton>
                     </View>
                     <View className="mr-2">
                         <IconButton label="Log in to TradeMaster Web: scan QR code" onPress={() => navigation.navigate('ScanLogin')}>

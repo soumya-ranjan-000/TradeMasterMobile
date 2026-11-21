@@ -502,8 +502,160 @@ export interface Scorecard {
     };
     execution_gap: { pairs: number; avg_gap_pct?: number | null };
     recommendations: ScoreRecommendation[];
+    /** Same replayed trades under other exit rules (evidence only; live exits unchanged). */
+    exit_lab?: ExitLab | null;
+}
+
+/** How an exit rule compares with the current exits ("baseline"). */
+export type ExitVsCurrent = 'better' | 'worse' | 'no_clear_difference' | 'same' | 'not_enough';
+export type ExitLabScope = 'all' | 'intraday' | 'swing';
+export interface ExitLabCell {
+    trades?: number | null;
+    expectancy_r?: number | null;       // average R per trade
+    win_rate?: number | null;           // 0..1
+    total_r?: number | null;
+    verdict?: ScoreVerdict;
+    ci_r?: [number, number] | null;
+    diff_vs_current_r?: number | null;  // this rule minus current exits, R per trade
+    diff_ci_r?: [number, number] | null;
+    vs_current?: ExitVsCurrent;
+}
+export interface ExitLab {
+    /** key -> label; "baseline" = the current exits (the reference). */
+    policies?: Record<string, string>;
+    by?: Partial<Record<ExitLabScope, Record<string, ExitLabCell>>>;
+    finding?: string | null;
+    note?: string | null;
 }
 
 /** Which strategies make money. `sinceDays` limits it to recent setups; omit for all history. */
 export const getScorecard = (sinceDays?: number) =>
     backendJson<Scorecard>(`/scanner/scorecard${sinceDays ? `?since_days=${sinceDays}` : ''}`);
+
+// --- risk guard (backend scanner/risk_guard.py; shadow mode) --------------------------
+export type LimitState = 'ok' | 'near' | 'breached';
+export interface RiskLimit { value: number | null; limit: number | null; state: LimitState }
+export type RiskLimitKey = 'daily_loss' | 'open_risk' | 'positions' | 'max_sector_count' | 'max_sector_exposure';
+export interface RiskSnapshot {
+    ok: boolean;
+    detail?: string | null;
+    at?: string | null;
+    capital?: number | null;
+    positions?: number | null;
+    pending_orders?: number | null;
+    open_risk?: number | null;          // ₹
+    open_risk_pct?: number | null;      // % of capital
+    unprotected?: string[];             // symbols without a stop
+    day_pnl?: number | null;
+    day_pnl_pct?: number | null;
+    /** Sorted by value, largest first. pct = % of capital. */
+    sectors?: Record<string, { count: number; value: number; pct: number }>;
+    /** daily_loss.value = today's LOSS in % (positive = losing). */
+    limits?: Partial<Record<RiskLimitKey, RiskLimit>>;
+    results_risk?: { symbol: string; kind: 'position' | 'pending' | string; date?: string | null; event?: string | null; advice?: string | null }[];
+}
+export interface RiskGuardEvent {
+    at: string;
+    symbol: string;
+    strategy?: string | null;
+    style?: string | null;
+    trigger?: string | null;
+    order_value?: number | null;
+    order_risk?: number | null;
+    breaches?: { limit: string; value?: number | null; max?: number | null; message?: string | null }[];
+    action?: string | null;             // "would block (shadow mode)" | "blocked"
+}
+export interface RiskGuardStatus {
+    config?: {
+        shadow_mode?: boolean; daily_loss_limit_pct?: number; max_open_risk_pct?: number; max_positions?: number;
+        max_positions_per_sector?: number; unprotected_risk_pct?: number; [k: string]: any;
+    };
+    sector_cap_pct?: number | null;
+    shadow_mode?: boolean;
+    account?: string | null;
+    snapshot?: RiskSnapshot | null;
+    events?: RiskGuardEvent[];          // newest first
+}
+export const getRiskGuard = () => backendJson<RiskGuardStatus>('/scanner/risk-guard');
+
+// --- trade journal (backend scanner/journal.py) ----------------------------------------
+export interface JournalTrade {
+    symbol: string;
+    closed_at: string;
+    net: number | null;
+    strategy?: string | null;
+    exit_reason?: string | null;
+    tags?: Record<string, string | number | boolean | null>;
+}
+export interface JournalTagStat {
+    tag: string;
+    value: string;
+    trades: number;
+    win_rate: number | null;            // 0..1
+    avg_net?: number | null;
+    total_net?: number | null;
+    vs_overall_pp: number | null;       // percentage points vs the overall win rate
+}
+export interface JournalSummary {
+    at: string;
+    days: number;
+    trades: number;
+    source: 'ai' | 'rules' | string;
+    fallback_reason?: string | null;
+    lines: string[];
+}
+export interface Journal {
+    days: number;
+    trades: JournalTrade[];
+    patterns?: {
+        trades: number;
+        win_rate: number | null;        // 0..1
+        total_net?: number | null;
+        by_tag?: JournalTagStat[];
+        highlights?: JournalTagStat[];
+    } | null;
+    summary: JournalSummary | null;
+}
+export const getJournal = (days = 30) => backendJson<Journal>(`/scanner/journal?days=${days}`);
+/** Summarise the last 7 days now (AI with a rules fallback); returns the stored summary. */
+export const summariseJournal = () => backendJson<JournalSummary>('/scanner/journal/summary', { method: 'POST' });
+
+// --- real-money readiness (backend scanner/readiness.py) ---------------------------------
+export interface ReadinessCheck {
+    key: string;
+    label: string;
+    status: 'pass' | 'fail' | 'unknown';
+    value: unknown;
+    target?: string | null;
+    why?: string | null;
+}
+export interface Readiness {
+    ready: boolean;
+    passed: number;
+    total: number;
+    checks: ReadinessCheck[];
+    note?: string | null;
+}
+export const getReadiness = () => backendJson<Readiness>('/scanner/readiness');
+
+// --- briefings (backend scanner/briefing.py) ---------------------------------------------
+export type BriefingKind = 'premarket' | 'postmarket';
+export interface Briefing {
+    kind: BriefingKind;
+    day: string;                        // YYYY-MM-DD (IST trading day)
+    title: string;
+    generated_at: string;               // ISO UTC
+    sections: { title: string; lines: string[]; note?: string | null }[];
+}
+/** Latest briefing of a kind, or null before the first one (404). Other failures throw. */
+export async function getBriefing(kind: BriefingKind): Promise<Briefing | null> {
+    try {
+        return await backendJson<Briefing>(`/scanner/briefings/latest?kind=${kind}`);
+    } catch (e) {
+        if (e instanceof ApiError && e.status === 404) return null;
+        throw e;
+    }
+}
+/** Build a briefing now without sending it to Telegram. */
+export const runBriefing = (kind: BriefingKind) =>
+    backendJson<Briefing>(`/scanner/briefings/${kind}/run?send=false`, { method: 'POST' });

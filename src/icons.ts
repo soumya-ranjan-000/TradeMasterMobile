@@ -69,3 +69,8 @@ export { default as LocateFixed } from 'lucide-react-native/dist/esm/icons/locat
 export { default as MessageSquareText } from 'lucide-react-native/dist/esm/icons/message-square-text.js';
 export { default as Send } from 'lucide-react-native/dist/esm/icons/send.js';
 export { default as Moon } from 'lucide-react-native/dist/esm/icons/moon.js';
+export { default as Newspaper } from 'lucide-react-native/dist/esm/icons/newspaper.js';
+export { default as Sunrise } from 'lucide-react-native/dist/esm/icons/sunrise.js';
+export { default as Sunset } from 'lucide-react-native/dist/esm/icons/sunset.js';
+export { default as CircleDashed } from 'lucide-react-native/dist/esm/icons/circle-dashed.js';
+export { default as Sparkles } from 'lucide-react-native/dist/esm/icons/sparkles.js';

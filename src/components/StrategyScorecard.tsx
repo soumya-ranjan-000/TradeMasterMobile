@@ -3,12 +3,14 @@ import { View, Text, Pressable } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { ChevronDown, ChevronUp, History, Info } from '../icons';
 import {
-    getScorecard, PaperCell, RecentForm, Scorecard, ScoreAction, ScoreRecommendation, ScoreVerdict, SimCell,
+    getScorecard, ExitLab, ExitLabScope, ExitVsCurrent, PaperCell, RecentForm, Scorecard, ScoreAction, ScoreRecommendation,
+    ScoreVerdict, SimCell,
 } from '../api';
 import { colors, signColor } from '../theme';
 import { inr, pct } from '../format';
 import { ErrorState, EmptyState, Skeleton } from '../ui';
 import { haptic } from '../haptics';
+import { Chips, Container, fmtR, fmtRate, Pill, SubTitle } from './evidenceUi';
 
 /**
  * Performance screen "Strategy scorecard": which scanner strategies make money,
@@ -39,28 +41,8 @@ const TREND_ARROW: Record<string, string> = { improving: '↑', worsening: '↓'
 /** Best scores first; "?" = setups without a score. */
 const BUCKET_ORDER = ['85+', '75-85', '65-75', '<65', '?'];
 
-const fmtR = (v?: number | null) =>
-    v == null || !isFinite(v) ? '—' : `${v < 0 ? '−' : v > 0 ? '+' : ''}${Math.abs(v).toFixed(2)}R`;
-const fmtRate = (r?: number | null) => (r == null || !isFinite(r) ? '—' : `${Math.round(r * 100)}%`);
 const verdictOf = (v?: string | null) => VERDICT[v as ScoreVerdict] ?? VERDICT.not_enough;
 const actionOf = (a?: string | null) => ACTION[a as ScoreAction] ?? ACTION.keep_collecting;
-
-const Pill = ({ text, color }: { text: string; color: string }) => (
-    <View className="px-2 py-0.5 rounded-full border" style={{ borderColor: `${color}55`, backgroundColor: `${color}14` }}>
-        <Text className="text-[10px] font-black uppercase" style={{ color }} numberOfLines={1}>{text}</Text>
-    </View>
-);
-
-const SubTitle = ({ children, right }: { children: React.ReactNode; right?: string }) => (
-    <View className="flex-row items-end justify-between mb-3">
-        <Text className="text-text-muted text-[11px] font-black uppercase tracking-widest">{children}</Text>
-        {!!right && <Text className="text-text-muted text-[11px] font-bold">{right}</Text>}
-    </View>
-);
-
-const Container = ({ children }: { children: React.ReactNode }) => (
-    <View className="bg-surface rounded-[32px] border border-border p-5 mb-6">{children}</View>
-);
 
 function simLine(sim?: SimCell): string {
     if (!sim || !sim.trades) return 'No simulated trades';
@@ -129,6 +111,71 @@ function StrategyCard({ name, rec, sim, form, pap, paperOk, expanded, onToggle }
                 </View>
             )}
         </Pressable>
+    );
+}
+
+// --- exit lab: the same replayed trades under other exit rules (evidence only) ---------
+const EXIT_SCOPES: { key: ExitLabScope; label: string }[] = [
+    { key: 'all', label: 'All' },
+    { key: 'intraday', label: 'Intraday' },
+    { key: 'swing', label: 'Swing' },
+];
+const VS_CURRENT: Record<ExitVsCurrent, { label: string; color: string }> = {
+    better: { label: 'Better', color: colors.success },
+    worse: { label: 'Worse', color: colors.error },
+    no_clear_difference: { label: 'No clear diff', color: colors.blue },
+    same: { label: 'Same', color: colors.textMuted },
+    not_enough: { label: 'Too few', color: colors.textMuted },
+};
+const EXIT_ORDER = ['baseline', 'breakeven', 'partial_t2', 'trail_1r', 'time_stop'];
+
+function ExitLabBlock({ lab }: { lab: ExitLab }) {
+    const [scope, setScope] = useState<ExitLabScope>('all');
+    const policies = lab.policies || {};
+    const cells = lab.by?.[scope] || {};
+    const known = [...EXIT_ORDER, ...Object.keys(policies), ...Object.keys(cells)];
+    const keys = [...new Set(known)].filter(k => policies[k] != null || cells[k] != null);
+    return (
+        <Container>
+            <SubTitle>Exit lab</SubTitle>
+            <Chips options={EXIT_SCOPES} value={scope} onChange={setScope} a11y={o => `${o.label} trades`} />
+            {!!lab.finding && (
+                <Text className="text-text-secondary text-xs font-semibold mt-3 leading-4">{lab.finding}</Text>
+            )}
+            <View className="mt-2">
+                {keys.map((k, i) => {
+                    const c = cells[k];
+                    const isBase = k === 'baseline';
+                    const vs = VS_CURRENT[c?.vs_current as ExitVsCurrent] ?? VS_CURRENT.not_enough;
+                    const diff = c?.diff_vs_current_r;
+                    const showDiff = !isBase && diff != null && isFinite(diff) && c?.vs_current !== 'same' && c?.vs_current !== 'not_enough';
+                    const chip = isBase ? 'Current' : `${vs.label}${showDiff ? ` ${fmtR(diff)}` : ''}`;
+                    const label = policies[k] || k.replace(/_/g, ' ');
+                    return (
+                        <View key={k} className={`flex-row items-center py-2.5 ${i ? 'border-t border-border' : ''}`}
+                            accessibilityLabel={`${label}: ${c?.trades ?? 0} trades, ${fmtR(c?.expectancy_r)} per trade, ${chip}`}>
+                            <View className="flex-1 mr-2">
+                                <Text className="text-text-primary text-[13px] font-bold" numberOfLines={1}>{label}</Text>
+                                <Text className="text-text-muted text-[11px] font-semibold mt-0.5" numberOfLines={1}>
+                                    {c?.trades ?? 0} trade{c?.trades === 1 ? '' : 's'}{c?.win_rate != null ? ` · win ${fmtRate(c.win_rate)}` : ''}
+                                </Text>
+                            </View>
+                            <View className="items-end">
+                                <Text className="text-[13px] font-bold" style={{ color: signColor(c?.expectancy_r) }}>
+                                    {fmtR(c?.expectancy_r)}<Text className="text-text-muted text-[11px] font-semibold">/trade</Text>
+                                </Text>
+                                <View className="mt-1"><Pill text={chip} color={isBase ? colors.textSecondary : vs.color} /></View>
+                            </View>
+                        </View>
+                    );
+                })}
+                {keys.length === 0 && <Text className="text-text-muted text-xs mt-2">No exit-rule replays yet.</Text>}
+            </View>
+            <Text className="text-text-muted text-[11px] font-bold leading-4 mt-3">
+                Same trades, other exit rules — evidence only, live exits unchanged.
+            </Text>
+            {!!lab.note && <Text className="text-text-muted text-[11px] leading-4 mt-1">{lab.note}</Text>}
+        </Container>
     );
 }
 
@@ -314,6 +361,8 @@ export default function StrategyScorecard({ refreshKey = 0 }: { refreshKey?: num
                     })}
                 </Container>
             )}
+
+            {!!data.exit_lab && (data.exit_lab.policies || data.exit_lab.by) && <ExitLabBlock lab={data.exit_lab} />}
 
             <View className="p-4 bg-primary/5 rounded-2xl border border-primary/10 flex-row items-start mb-6">
                 <Info size={16} color={colors.primary} style={{ marginTop: 1 }} />
