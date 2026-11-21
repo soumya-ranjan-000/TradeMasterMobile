@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import NetInfo from '@react-native-community/netinfo';
-import { WifiOff } from 'lucide-react-native';
+import { WifiOff } from '../icons';
 import { colors } from '../theme';
 
 /**

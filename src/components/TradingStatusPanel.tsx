@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
-import { Clock, ShieldAlert, ShieldCheck, ShieldQuestion, CalendarClock, Landmark } from 'lucide-react-native';
+import { Clock, ShieldAlert, ShieldCheck, ShieldQuestion, CalendarClock, Landmark } from '../icons';
 import {
     getTradingStatus, getMarketPulse, getEconomicCalendar, isExchangeOpen,
     TradingStatus, MarketPulse, EconomicCalendar,

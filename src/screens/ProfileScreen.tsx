@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, ScrollView, Pressable, RefreshControl, StatusBar, TextInput, ActivityIndicator } from 'react-native';
-import { LogOut, Bell, ChevronRight, BarChart3, PieChart, KeyRound, ScanLine, Lock, Smartphone, Monitor } from 'lucide-react-native';
+import { LogOut, Bell, ChevronRight, BarChart3, PieChart, KeyRound, ScanLine, Lock, Smartphone, Monitor } from '../icons';
 import { TEST_USER_ID } from '../config';
 import { paperFetch, signOut, listSessions, revokeSession, changePin, authErrorText, serverDate, SessionInfo } from '../auth';
 import { toast } from '../components/Toast';

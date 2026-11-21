@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, StatusBar, Dimensions } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { ChevronLeft, TrendingUp, Target, BarChart3, PieChart as PieIcon, ArrowUpRight, ArrowDownRight, Info, RefreshCw } from 'lucide-react-native';
+import { ChevronLeft, TrendingUp, Target, BarChart3, PieChart as PieIcon, ArrowUpRight, ArrowDownRight, Info, RefreshCw } from '../icons';
 import { ScreenHeader, IconButton } from '../ui';
 import { colors } from '../theme';
 import { TEST_USER_ID } from '../config';

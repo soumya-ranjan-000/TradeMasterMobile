@@ -4,7 +4,7 @@ import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Pressable,
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/RootNavigator';
-import { ChevronLeft, TrendingUp, TrendingDown, Plus, X, Search, ListPlus } from 'lucide-react-native';
+import { ChevronLeft, TrendingUp, TrendingDown, Plus, X, Search, ListPlus } from '../icons';
 import { IconButton } from '../ui';
 import { colors } from '../theme';
 import { inr, pct, num } from '../format';
@@ -13,7 +13,7 @@ import { paperFetch } from '../auth';
 import { getHistory, isExchangeOpen } from '../api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Rect, Line, Defs, LinearGradient as SVGGradiant, Stop, Text as SvgText, Path, Polyline, G } from 'react-native-svg';
-import { Activity, Settings2, PencilLine, BarChart3, Calendar } from 'lucide-react-native';
+import { Activity, Settings2, PencilLine, BarChart3, Calendar } from '../icons';
 import { useLivePrice } from '../context/MarketDataContext';
 
 type StockDetailScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'StockDetail'>;

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, RefreshControl, StatusBar, Pressable } from 'react-native';
-import { Bell, Trash2, ListPlus, ScanLine } from 'lucide-react-native';
+import { Bell, Trash2, ListPlus, ScanLine } from '../icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TEST_USER_ID } from '../config';
 import { paperFetch } from '../auth';

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, FlatList, Pressable, ActivityIndicator, ScrollView } from 'react-native';
-import { Search, ChevronRight, X } from 'lucide-react-native';
+import { Search, ChevronRight, X } from '../icons';
 import { ScreenHeader, SectionLabel, EmptyState } from '../ui';
 import { colors } from '../theme';
 import { searchSymbols } from '../api';

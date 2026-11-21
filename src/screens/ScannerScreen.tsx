@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import {
     ChevronDown, ChevronUp, RefreshCw, Radar, Send, AlertTriangle, CircleCheck, CircleX, Clock,
-} from 'lucide-react-native';
+} from '../icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ApiError, BridgeStatus, ScanCandidate, ScanExecution, ScanStyle, scanner } from '../api';

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { AlertTriangle, RefreshCw } from 'lucide-react-native';
+import { AlertTriangle, RefreshCw } from '../icons';
 import { getMarketPulse, MarketPulse as Pulse, PulseFactor } from '../api';
 
 /**

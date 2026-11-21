@@ -5,7 +5,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, Pressable, Animated, ViewStyle, StyleProp, Platform, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, RefreshCw, CloudOff } from 'lucide-react-native';
+import { ChevronLeft, RefreshCw, CloudOff } from '../icons';
 import { colors } from '../theme';
 import { haptic } from '../haptics';
 

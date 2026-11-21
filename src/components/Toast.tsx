@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CheckCircle2, XCircle, Info } from 'lucide-react-native';
+import { CheckCircle2, XCircle, Info } from '../icons';
 import { colors } from '../theme';
 
 /**

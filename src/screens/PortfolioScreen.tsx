@@ -9,7 +9,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { RootStackParamList, MainTabParamList } from '../navigation/RootNavigator';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Briefcase, ArrowUpRight, ArrowDownRight, History, Layers, Info, ShieldCheck, X, Target, TrendingUp, ChevronDown, ChevronRight, BarChart3, Clock, Lock } from 'lucide-react-native';
+import { Briefcase, ArrowUpRight, ArrowDownRight, History, Layers, Info, ShieldCheck, X, Target, TrendingUp, ChevronDown, ChevronRight, BarChart3, Clock, Lock } from '../icons';
 import { TEST_USER_ID } from '../config';
 import { paperFetch, serverDate } from '../auth';
 import { isExchangeOpen, getMarketSession, isHolidayToday, nextMarketOpen, MarketSession } from '../api';

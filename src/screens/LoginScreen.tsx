@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { haptic } from '../haptics';
 import { View, Text, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowRight, Lock, Key, ShieldCheck } from 'lucide-react-native';
+import { ArrowRight, Lock, Key, ShieldCheck } from '../icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';

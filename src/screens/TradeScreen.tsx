@@ -4,7 +4,7 @@ import { haptic } from '../haptics';
 import { inr } from '../format';
 import { View, Text, TouchableOpacity, TextInput, Alert, ActivityIndicator, StatusBar, ScrollView, KeyboardAvoidingView, Platform, PanResponder, Dimensions } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
-import { ChevronLeft, Info, HelpCircle, ShieldCheck, Zap, Target, ChevronsRight } from 'lucide-react-native';
+import { ChevronLeft, Info, HelpCircle, ShieldCheck, Zap, Target, ChevronsRight } from '../icons';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,

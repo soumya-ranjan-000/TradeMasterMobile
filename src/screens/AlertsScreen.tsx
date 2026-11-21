@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Switch, TextInput, ActivityIndicator, StatusBar, Platform, RefreshControl } from 'react-native';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
-import { Bell, BellPlus, BellRing, Trash2, Smartphone } from 'lucide-react-native';
+import { Bell, BellPlus, BellRing, Trash2, Smartphone } from '../icons';
 import { ScreenHeader, IconButton, SectionLabel, EmptyState, confirmAction } from '../ui';
 import { colors } from '../theme';
 import { haptic } from '../haptics';

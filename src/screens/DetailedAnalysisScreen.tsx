@@ -10,7 +10,7 @@ import {
     LocateFixed,
     Layers,
     MessageSquareText
-} from 'lucide-react-native';
+} from '../icons';
 
 const DetailedAnalysisScreen = () => {
     const route = useRoute();

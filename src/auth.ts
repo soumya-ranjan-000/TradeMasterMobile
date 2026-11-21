@@ -243,6 +243,12 @@ export async function loginWithPin(userId: string, pin: string): Promise<DeviceS
 export async function restoreSession(): Promise<'signed-in' | 'signed-out'> {
     const token = await getToken();
     if (!token) return 'signed-out';
+    // Returning user: open the app right away and verify in the background. A 401
+    // there goes through paperFetch's normal sign-out (toast + reset to Login).
+    if (await AsyncStorage.getItem('USER_ID')) {
+        verifySessionInBackground();
+        return 'signed-in';
+    }
     try {
         const res = await paperFetch('/auth/me', {}, { signOutOn401: false, timeoutMs: 8000 });
         if (res.status === 401) {
@@ -261,6 +267,19 @@ export async function restoreSession(): Promise<'signed-in' | 'signed-out'> {
         // Offline / timeout: fall back to the cached account below.
     }
     return (await AsyncStorage.getItem('USER_ID')) ? 'signed-in' : 'signed-out';
+}
+
+function verifySessionInBackground() {
+    paperFetch('/auth/me', {}, { timeoutMs: 15000 })   // signOutOn401 (default): revoked -> Login
+        .then(async res => {
+            if (!res.ok) return;
+            const me = await res.json();
+            if (me?.user_id) {
+                await AsyncStorage.multiSet([['USER_ID', me.user_id], ['LAST_TRADER_ID', me.user_id]]);
+                if (me.full_name && me.full_name !== 'Trader') AsyncStorage.setItem('LAST_TRADER_NAME', me.full_name).catch(() => { });
+            }
+        })
+        .catch(() => { /* offline: keep the cached account, as before */ });
 }
 
 /** Revoke this token on the server (best effort), then forget it locally. */

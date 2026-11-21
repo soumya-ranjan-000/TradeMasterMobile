@@ -4,7 +4,7 @@ import { ScreenHeader } from '../ui';
 import { colors, signColor } from '../theme';
 import { inr, groupIN, istDate } from '../format';
 import { useFocusEffect } from '@react-navigation/native';
-import { ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight } from '../icons';
 import { TEST_USER_ID } from '../config';
 import { paperFetch } from '../auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';

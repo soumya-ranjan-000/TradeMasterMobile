@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { NavigationContainer, DarkTheme, createNavigationContainerRef } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Home, PieChart, BookOpen, User, Radar, Search } from 'lucide-react-native';
+import { Home, PieChart, BookOpen, User, Radar, Search } from '../icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme';
 import { restoreSession, onSignedOut } from '../auth';
@@ -176,13 +176,18 @@ const RootNavigator = () => {
     }, []);
 
     // Any paper-service 401 (token expired/revoked) lands here: back to Login.
-    useEffect(() => onSignedOut(() => {
-        if (!navigationRef.isReady()) return;
+    // The startup check now runs in the background, so a 401 can arrive before the
+    // navigator is ready: it's held and applied in onReady.
+    const pendingSignOut = useRef(false);
+    const goToLogin = useCallback(() => {
+        if (!navigationRef.isReady()) { pendingSignOut.current = true; return; }
+        pendingSignOut.current = false;
         const root = navigationRef.getRootState();
         if (root?.routes?.[root.index ?? 0]?.name === 'Login') return;
         toast.info('Signed out', 'Your session ended. Sign in again with your PIN.');
         navigationRef.reset({ index: 0, routes: [{ name: 'Login' }] });
-    }), []);
+    }, []);
+    useEffect(() => onSignedOut(goToLogin), [goToLogin]);
 
     if (!initialRoute) {
         return (
@@ -193,7 +198,8 @@ const RootNavigator = () => {
     }
 
     return (
-        <NavigationContainer theme={TradeMasterTheme} ref={navigationRef}>
+        <NavigationContainer theme={TradeMasterTheme} ref={navigationRef}
+            onReady={() => { if (pendingSignOut.current) goToLogin(); }}>
             <Stack.Navigator
                 initialRouteName={initialRoute}
                 screenOptions={{

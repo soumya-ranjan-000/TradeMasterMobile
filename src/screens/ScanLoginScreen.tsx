@@ -8,7 +8,7 @@ import { View, Text, TextInput, Pressable, ActivityIndicator, Linking, Platform,
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Camera, CheckCircle2, XCircle, Monitor, ShieldAlert } from 'lucide-react-native';
+import { Camera, CheckCircle2, XCircle, Monitor, ShieldAlert } from '../icons';
 import { RootStackParamList } from '../navigation/RootNavigator';
 import { paperFetch, errorMessage, authErrorText, serverDate, QR_PREFIX } from '../auth';
 import { ScreenHeader, Card } from '../ui';
