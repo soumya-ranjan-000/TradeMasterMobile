@@ -312,6 +312,7 @@ export default function OvernightCues({ active, refreshKey = 0 }: { active: bool
                 {news?.headlines != null ? `  ·  ${news.headlines} headlines` : ''}
             </Text>
             {!!newsReason && <Text className="text-text-muted text-[11px] mt-0.5" numberOfLines={1}>{newsReason}</Text>}
+            <ReviewStatus review={snap.review} />
             {snap.data && !snap.data.ok && <Note>Market data incomplete{snap.data.detail ? `: ${snap.data.detail}` : ''}</Note>}
             {!!error && <Note>Refresh failed ({error}); showing the last snapshot.</Note>}
 
@@ -344,6 +345,42 @@ export default function OvernightCues({ active, refreshKey = 0 }: { active: bool
             <Text className="text-text-secondary text-[11px] font-bold">{trackRecord}</Text>
 
             <Text className="text-text-muted text-[11px] mt-4 text-center">Shadow mode — for information. Nothing here changes scores or orders.</Text>
+        </View>
+    );
+}
+
+
+/** "Shadow mode · day 7 of 20 · review on 18 Dec", or the "Ready for review" box. */
+function ReviewStatus({ review }: { review?: import('../api').OvernightReview }) {
+    if (!review || review.status === 'live' || review.status === 'not_started') return null;
+    const day = (d?: string | null) => {
+        if (!d) return '';
+        const [y, m, dd] = d.split('-').map(Number);
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return y && m && dd ? `${dd} ${months[m - 1]}` : d;
+    };
+    if (review.status === 'collecting') {
+        return (
+            <Text className="text-text-muted text-[11px] font-bold mt-1">
+                Shadow mode · day {review.day} of {review.of} · review on {day(review.due_on)}
+            </Text>
+        );
+    }
+    return (
+        <View className="mt-2 rounded-2xl p-3" style={{ backgroundColor: `${colors.warning}1A`, borderWidth: 1, borderColor: `${colors.warning}4D` }}>
+            <Text className="text-text-primary text-[12px] font-black">Ready for review ({review.day} trading days)</Text>
+            <Text className="text-text-muted text-[11px] mt-1">
+                Passed: <Text className="text-text-primary">{review.ready?.length ? review.ready.join(', ') : 'nothing yet'}</Text>
+            </Text>
+            {!!review.not_ready?.length && (
+                <Text className="text-text-muted text-[11px] mt-0.5" numberOfLines={3}>
+                    Not yet: {review.not_ready.slice(0, 4).map(n => `${n.label} (${n.reason})`).join('; ')}
+                </Text>
+            )}
+            <Text className="text-text-muted text-[11px] mt-1">
+                Nothing switches itself on. Enable the passed parts, or extend shadow mode in scanner.yaml.
+                {review.next_reminder_on ? ` Next reminder: ${day(review.next_reminder_on)}.` : ''}
+            </Text>
         </View>
     );
 }

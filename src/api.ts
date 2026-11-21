@@ -278,6 +278,18 @@ export interface OvernightSnapshot {
     data?: { ok: boolean; detail?: string | null } | null;
     outcome?: { sectors?: Record<string, { actual: { gap_pct: number | null; intra_pct?: number | null } | null;
                                            predicted_gap_pct?: number | null }> } | null;
+    review?: OvernightReview;
+}
+
+/** Shadow-mode review status (backend overnight/review.py). */
+export interface OvernightReview {
+    status?: 'not_started' | 'collecting' | 'review_due' | 'live';
+    day?: number;
+    of?: number;
+    due_on?: string;
+    ready?: string[];
+    not_ready?: { label: string; reason: string }[];
+    next_reminder_on?: string | null;
 }
 export interface OvernightAccuracy {
     days_with_outcome: number;
