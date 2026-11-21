@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { View, Text } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { CircleCheck, CircleDashed, CircleX, ListPlus } from '../icons';
+import { CalendarClock, CircleCheck, CircleDashed, CircleX, ListPlus } from '../icons';
 import { getReadiness, Readiness as ReadinessData, ReadinessCheck } from '../api';
 import { colors } from '../theme';
 import { ErrorState, EmptyState, Skeleton } from '../ui';
@@ -32,6 +32,59 @@ export function renderValue(v: unknown): string {
     return String(v);
 }
 
+function fmtDate(iso: string): string {
+    const d = new Date(`${iso}T00:00:00`);
+    if (isNaN(d.getTime())) return iso;
+    const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()];
+    return `${d.getDate()} ${m} ${d.getFullYear()}`;
+}
+
+function daysUntil(iso: string): number {
+    const t = new Date(); t.setHours(0, 0, 0, 0);
+    return Math.max(0, Math.round((new Date(`${iso}T00:00:00`).getTime() - t.getTime()) / 86_400_000));
+}
+
+const num = (x: number) => (Number.isInteger(x) ? String(x) : String(Math.round(x * 100) / 100));
+
+/** "37 of 100 trades" + bar. Drawdown is a limit, so its bar is the share of the limit used. */
+function ProgressLine({ c }: { c: ReadinessCheck }) {
+    const p = c.progress!;
+    const limit = c.key === 'drawdown';
+    const pct = Math.max(0, Math.min(100, p.pct ?? 0));
+    const text = limit ? `${num(p.current)}% of the ${num(p.target)}% limit used`
+        : c.key === 'profit_factor' ? `${num(p.current)} of ${num(p.target)} needed`
+        : `${num(p.current)} of ${num(p.target)} ${p.unit}`;
+    const color = c.status === 'pass' ? colors.success
+        : limit ? (pct >= 100 ? colors.error : pct >= 75 ? colors.warning : colors.success)
+        : c.status === 'fail' ? colors.warning : colors.primary;
+    return (
+        <View className="mt-1.5">
+            <View className="flex-row justify-between mb-1">
+                <Text className="text-text-secondary text-[11px] font-semibold flex-1 mr-2">{text}</Text>
+                {!limit && p.pct != null && <Text className="text-text-muted text-[11px]">{Math.round(pct)}%</Text>}
+            </View>
+            <Bar frac={pct / 100} color={color} h={5} />
+        </View>
+    );
+}
+
+function EtaLine({ c }: { c: ReadinessCheck }) {
+    const e = c.eta!;
+    if (e.basis === 'done') return null;
+    const head = e.basis === 'pace'
+        ? (e.date ? `Est. pass ${fmtDate(e.date)} (~${daysUntil(e.date)} days)` : 'No estimate yet')
+        : e.basis === 'results' ? 'Depends on results — no date' : 'Your decision';
+    return (
+        <View className="flex-row items-start mt-1.5">
+            <CalendarClock size={12} color={colors.textMuted} style={{ marginTop: 2 }} />
+            <Text className="text-text-muted text-[11px] ml-1.5 flex-1 leading-4">
+                <Text className={e.basis === 'pace' && e.date ? 'text-text-primary font-bold' : 'font-semibold'}>{head}</Text>
+                {!!e.note && `  ·  ${e.note}`}
+            </Text>
+        </View>
+    );
+}
+
 function CheckRow({ c, first }: { c: ReadinessCheck; first: boolean }) {
     const s = STATUS[c.status] ?? STATUS.unknown;
     const value = renderValue(c.value);
@@ -48,6 +101,8 @@ function CheckRow({ c, first }: { c: ReadinessCheck; first: boolean }) {
                     <Text style={{ color: c.status === 'unknown' ? colors.textMuted : s.color }}>{value}</Text>
                     {!!c.target && <Text className="text-text-muted">  ·  target {c.target}</Text>}
                 </Text>
+                {!!c.progress && <ProgressLine c={c} />}
+                {!!c.eta && <EtaLine c={c} />}
                 {!!c.why && <Text className="text-text-muted text-[11px] mt-1 leading-4">{c.why}</Text>}
             </View>
         </View>
@@ -127,6 +182,23 @@ export default function Readiness({ refreshKey = 0 }: { refreshKey?: number }) {
                 <View className="mt-3">
                     <Bar frac={total ? passed / total : 0} color={headColor} h={8} />
                 </View>
+                {!ready && !!data.earliest && (
+                    <View className="flex-row items-start mt-3 p-2.5 rounded-lg border border-border">
+                        <CalendarClock size={14} color={colors.primary} style={{ marginTop: 1 }} />
+                        <View className="flex-1 ml-2">
+                            <Text className="text-text-primary text-xs font-bold">
+                                Earliest possible: {data.earliest.date
+                                    ? `${fmtDate(data.earliest.date)} (~${daysUntil(data.earliest.date)} days)` : 'no estimate yet'}
+                            </Text>
+                            <Text className="text-text-muted text-[11px] mt-0.5 leading-4">
+                                {data.earliest.date ? `Based on ${data.earliest.basis}.`
+                                    : data.earliest.no_pace?.length ? `No recent activity for: ${data.earliest.no_pace.join(', ')}.` : ''}
+                                {data.earliest.also_needs?.length
+                                    ? ` Also needs: ${data.earliest.also_needs.join(', ')} (no date — depends on results or your settings).` : ''}
+                            </Text>
+                        </View>
+                    </View>
+                )}
                 {!!data.note && <Text className="text-text-muted text-xs mt-3 leading-4">{data.note}</Text>}
             </Container>
 
@@ -139,6 +211,7 @@ export default function Readiness({ refreshKey = 0 }: { refreshKey?: number }) {
 
             <Footnote lines={[
                 'Unknown = not enough paper trades or replays to judge that check yet.',
+                'Dates assume the last 4 weeks\' pace continues (weekdays; exchange holidays not counted).',
             ]} strong="A checklist only — nothing switches to real money from here." />
         </View>
     );

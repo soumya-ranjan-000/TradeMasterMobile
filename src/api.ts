@@ -628,12 +628,18 @@ export interface ReadinessCheck {
     value: unknown;
     target?: string | null;
     why?: string | null;
+    /** How far along a measurable check is; null for decision-only checks. */
+    progress?: { current: number; target: number; unit: string; pct: number | null } | null;
+    /** done = passing; pace = estimated from recent activity; results = depends on outcomes; your_decision = a setting you change. */
+    eta?: { basis: 'done' | 'pace' | 'results' | 'your_decision'; date: string | null; note: string | null };
 }
 export interface Readiness {
     ready: boolean;
     passed: number;
     total: number;
     checks: ReadinessCheck[];
+    /** Earliest date every data-gathering check could pass at the recent pace. */
+    earliest?: { date: string | null; basis: string; no_pace: string[]; also_needs: string[] };
     note?: string | null;
 }
 export const getReadiness = () => backendJson<Readiness>('/scanner/readiness');
