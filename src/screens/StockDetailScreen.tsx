@@ -196,10 +196,6 @@ const StockDetailScreen = () => {
         }
     }, [isWatchlistModalVisible]);
 
-    useEffect(() => {
-        fetchHistory();
-    }, [symbol, chartInterval, chartPeriod]);
-
     const handleTouchStart = (evt: any) => {
         const x = evt.nativeEvent.locationX;
         const y = evt.nativeEvent.locationY;

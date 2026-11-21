@@ -44,7 +44,8 @@ const greeting = () => {
 const DashboardScreen = () => {
     const navigation = useNavigation<DashboardScreenNavigationProp>();
     const insets = useSafeAreaInsets();
-    const [userId, setUserId] = useState<string>(TEST_USER_ID);
+    // Empty until the saved account loads, so nothing is fetched for the test account first.
+    const [userId, setUserId] = useState<string>('');
     const [profile, setProfile] = useState<ProfileData | null>(null);
     const [refreshing, setRefreshing] = useState(false);
     const [marketStatus, setMarketStatus] = useState<{ is_open: boolean; halted?: boolean; message: string } | null>(null);
@@ -85,13 +86,27 @@ const DashboardScreen = () => {
     useEffect(() => {
         AsyncStorage.getItem(QUOTE_CACHE_KEY).then(raw => { if (raw) setCached(JSON.parse(raw)); }).catch(() => { });
     }, []);
-    useEffect(() => {
-        if (!Object.keys(liveQuotes).length) return;
-        const next = { at: Date.now(), quotes: { ...(cached?.quotes || {}), ...liveQuotes } };
+    // The quote cache is for the next cold start, so it's written at most every 30s
+    // (and when leaving the screen), not on every tick.
+    const pendingCache = React.useRef<{ at: number; quotes: Record<string, Quote> } | null>(null);
+    const lastCacheWrite = React.useRef(0);
+    const writeCache = React.useCallback(() => {
+        const next = pendingCache.current;
+        if (!next) return;
+        pendingCache.current = null;
+        lastCacheWrite.current = Date.now();
         setPricesAt(next.at);
         AsyncStorage.setItem(QUOTE_CACHE_KEY, JSON.stringify(next)).catch(() => { });
+    }, []);
+    useEffect(() => {
+        if (!Object.keys(liveQuotes).length) return;
+        pendingCache.current = { at: Date.now(), quotes: { ...(cached?.quotes || {}), ...liveQuotes } };
+        if (Date.now() - lastCacheWrite.current >= 30_000) writeCache();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [liveQuotes]);
+    useEffect(() => {
+        if (!isFocused) writeCache();
+    }, [isFocused, writeCache]);
 
     const fetchWatchlists = async (id: string = userId) => {
         try {
@@ -148,7 +163,7 @@ const DashboardScreen = () => {
     };
 
     useEffect(() => {
-        if (isFocused) fetchWatchlists(userId);
+        if (isFocused && userId) fetchWatchlists(userId);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isFocused, userId]);
 
@@ -178,10 +193,9 @@ const DashboardScreen = () => {
         const init = async () => {
             const savedId = await AsyncStorage.getItem('USER_ID');
             const finalId = savedId || TEST_USER_ID;
-            setUserId(finalId);
+            setUserId(finalId);  // the focus effect above then loads the watchlists once
             fetchProfile(finalId);
             fetchMarketStatus();
-            fetchWatchlists(finalId);
         };
         init();
         const timer = setInterval(fetchMarketStatus, 300000); // 5 minutes

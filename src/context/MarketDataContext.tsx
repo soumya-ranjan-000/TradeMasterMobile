@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { getMarketStatus, getQuotes, marketWsUrl } from '../api';
 import { useIsFocused } from '@react-navigation/native';
 
@@ -109,7 +109,6 @@ export const MarketDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                     if (prev[key]?.ltp === tick.ltp && prev[key]?.volume === tick.volume) {
                         return prev;
                     }
-                    console.log(`Live Update: ${key} = ₹${tick.ltp}`);
                     return { ...prev, [key]: tick };
                 });
             } catch (err) {
@@ -192,7 +191,7 @@ export const MarketDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 });
 
                 setTicks(prev => ({ ...prev, ...newTicks }));
-                console.log(`✅ Batch update complete for ${Object.keys(newTicks).length} symbols`);
+                if (__DEV__) console.log(`✅ Batch update complete for ${Object.keys(newTicks).length} symbols`);
             }
         } catch (error) {
             console.error('Batch fetch failed:', error);
@@ -205,6 +204,12 @@ export const MarketDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         batchTimer.current = setTimeout(processBatch, 300); // 300ms buffer
     }, [processBatch]);
 
+    // subscribe() reads prices through a ref: depending on `ticks` made it a new
+    // function on every tick, so every useEffect that listed it unsubscribed and
+    // resubscribed all symbols (and re-queued price fetches) on each price change.
+    const ticksRef = useRef(ticks);
+    ticksRef.current = ticks;
+
     const subscribe = useCallback((symbol: string, exchange: string = 'NSE') => {
         const stock_code = symbol.split('.')[0].toUpperCase();
         const key = `${exchange}:${stock_code}`;
@@ -214,10 +219,11 @@ export const MarketDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
         if (currentCount === 0) {
             // New subscription
-            console.log(`Frontend: New subscription for ${key}`);
+            if (__DEV__) console.log(`Frontend: New subscription for ${key}`);
 
             // Only fetch if we don't have valid data already
-            if (!ticks[key] || ticks[key].ltp === 0) {
+            const known = ticksRef.current[key];
+            if (!known || known.ltp === 0) {
                 queueInitialFetch(stock_code);
             }
 
@@ -229,9 +235,9 @@ export const MarketDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 }));
             }
         } else {
-            console.log(`Frontend: Reusing subscription for ${key} (Refs: ${currentCount + 1})`);
+            if (__DEV__) console.log(`Frontend: Reusing subscription for ${key} (Refs: ${currentCount + 1})`);
         }
-    }, [queueInitialFetch, ticks]);
+    }, [queueInitialFetch]);
 
     const unsubscribe = useCallback((symbol: string, exchange: string = 'NSE') => {
         const stock_code = symbol.split('.')[0].toUpperCase();
@@ -242,7 +248,7 @@ export const MarketDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             const newCount = currentCount - 1;
             if (newCount === 0) {
                 subscriptions.current.delete(key);
-                console.log(`Frontend: Last reference for ${key} removed. Unsubscribing.`);
+                if (__DEV__) console.log(`Frontend: Last reference for ${key} removed. Unsubscribing.`);
                 if (ws.current?.readyState === WebSocket.OPEN) {
                     ws.current.send(JSON.stringify({
                         type: 'unsubscribe',
@@ -252,13 +258,15 @@ export const MarketDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 }
             } else {
                 subscriptions.current.set(key, newCount);
-                console.log(`Frontend: Decremented refs for ${key} (Remaining: ${newCount})`);
+                if (__DEV__) console.log(`Frontend: Decremented refs for ${key} (Remaining: ${newCount})`);
             }
         }
     }, []);
 
+    const value = useMemo(() => ({ ticks, subscribe, unsubscribe, isConnected }), [ticks, subscribe, unsubscribe, isConnected]);
+
     return (
-        <MarketDataContext.Provider value={{ ticks, subscribe, unsubscribe, isConnected }}>
+        <MarketDataContext.Provider value={value}>
             {children}
         </MarketDataContext.Provider>
     );
