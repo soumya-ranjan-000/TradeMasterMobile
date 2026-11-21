@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft, TrendingUp, Target, BarChart3, PieChart as PieIcon, ArrowUpRight, ArrowDownRight, Info, RefreshCw } from '../icons';
 import { ScreenHeader, IconButton } from '../ui';
 import { colors } from '../theme';
+import StrategyScorecard from '../components/StrategyScorecard';
 import { TEST_USER_ID } from '../config';
 import { paperFetch } from '../auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -18,6 +19,7 @@ const PerformanceScreen = () => {
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState<any>(null);
     const [equityCurve, setEquityCurve] = useState<any[]>([]);
+    const [scorecardKey, setScorecardKey] = useState(0);
 
     const fetchAnalytics = async () => {
         try {
@@ -113,23 +115,25 @@ const PerformanceScreen = () => {
                 subtitle="Closed paper trades"
                 onBack={() => navigation.goBack()}
                 compact
-                right={<IconButton label="Refresh analytics" onPress={fetchAnalytics}><RefreshCw size={18} color={colors.primary} /></IconButton>}
+                right={<IconButton label="Refresh analytics" onPress={() => { fetchAnalytics(); setScorecardKey(k => k + 1); }}><RefreshCw size={18} color={colors.primary} /></IconButton>}
             />
 
+            {/* One ScrollView in every state so the scorecard (its own backend call) stays mounted. */}
+            <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false}>
             {loading ? (
-                <View className="flex-1 items-center justify-center">
+                <View className="items-center justify-center py-16">
                     <ActivityIndicator size="large" color="#00E0A1" />
                     <Text className="text-text-muted font-bold mt-4">Analyzing your trades...</Text>
                 </View>
             ) : !stats ? (
-                <View className="flex-1 items-center justify-center px-8">
+                <View className="items-center justify-center px-8 py-12">
                     <Text className="text-text-muted font-bold text-center">Could not load analytics from the paper trading service.</Text>
                     <TouchableOpacity onPress={fetchAnalytics} className="mt-4 px-6 py-3 bg-primary rounded-xl">
                         <Text className="text-white font-black uppercase text-xs">Retry</Text>
                     </TouchableOpacity>
                 </View>
             ) : (
-                <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false}>
+                <>
 
                     {renderEquityChart()}
 
@@ -173,7 +177,7 @@ const PerformanceScreen = () => {
                     </View>
 
                     {/* Trade Distribution */}
-                    <View className="bg-surface rounded-[32px] border border-border p-6 mb-20">
+                    <View className="bg-surface rounded-[32px] border border-border p-6 mb-8">
                         <Text className="text-text-primary font-black text-lg mb-6">Trade Distribution</Text>
 
                         <View className="flex-row justify-between items-center mb-4">
@@ -208,8 +212,12 @@ const PerformanceScreen = () => {
                         </View>
                     </View>
 
-                </ScrollView>
+                </>
             )}
+
+                <StrategyScorecard refreshKey={scorecardKey} />
+                <View className="h-20" />
+            </ScrollView>
         </View>
     );
 };

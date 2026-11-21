@@ -453,3 +453,57 @@ export const scanner = {
             body: JSON.stringify({ enabled }),
         }),
 };
+
+// --- strategy scorecard (backend scanner/scorecard.py) -----------------------------
+export type ScoreVerdict = 'making_money' | 'losing_money' | 'unclear' | 'not_enough';
+export type ScoreAction = 'would_disable_auto' | 'watch' | 'keep' | 'keep_collecting';
+
+/** Simulated (replayed) result of a group of setups. R = multiples of the planned risk. */
+export interface SimCell {
+    trades: number | null;
+    win_rate: number | null;            // 0..1
+    expectancy_r: number | null;        // average R per trade, net of costs
+    profit_factor: number | null;
+    verdict: ScoreVerdict;
+    ci_r: [number, number] | null;      // 90% range of expectancy_r
+    note?: string | null;
+}
+/** What the paper account actually earned (₹, net of charges). */
+export interface PaperCell {
+    trades: number;
+    win_rate?: number | null;           // 0..1
+    total_net?: number | null;
+    avg_return_pct?: number | null;
+    verdict: ScoreVerdict;
+    note?: string | null;
+}
+export interface RecentForm {
+    recent_n: number;
+    recent_expectancy_r: number | null;
+    recent_verdict: ScoreVerdict;
+    trend: 'improving' | 'worsening' | 'steady' | null;
+}
+export interface ScoreRecommendation {
+    strategy: string;
+    action: ScoreAction;
+    reasons: string[];
+}
+export interface Scorecard {
+    generated_at: string;
+    since?: string | null;
+    thresholds: { min_trades: number; rolling: number; confidence: number };
+    shadow_mode: boolean;
+    simulated: { overall: SimCell; by: Record<string, Record<string, SimCell>> };
+    recent_form: Record<string, RecentForm>;
+    paper: {
+        overall: PaperCell;
+        by: Record<string, Record<string, PaperCell>>;
+        status: { ok: boolean; detail?: string };
+    };
+    execution_gap: { pairs: number; avg_gap_pct?: number | null };
+    recommendations: ScoreRecommendation[];
+}
+
+/** Which strategies make money. `sinceDays` limits it to recent setups; omit for all history. */
+export const getScorecard = (sinceDays?: number) =>
+    backendJson<Scorecard>(`/scanner/scorecard${sinceDays ? `?since_days=${sinceDays}` : ''}`);
