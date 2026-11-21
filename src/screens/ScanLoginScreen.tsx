@@ -68,7 +68,14 @@ const ScanLoginScreen = () => {
     const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
-        CameraView.isAvailableAsync().then(setCameraAvailable).catch(() => setCameraAvailable(false));
+        // isAvailableAsync exists only in expo-camera's web build; on Android/iOS it throws
+        // UnavailabilityError, which used to read as "no camera" on every phone. Native
+        // devices are assumed to have one; a real failure arrives via onMountError.
+        if (Platform.OS === 'web') {
+            CameraView.isAvailableAsync().then(setCameraAvailable).catch(() => setCameraAvailable(false));
+        } else {
+            setCameraAvailable(true);
+        }
         return () => { if (closeTimer.current) clearTimeout(closeTimer.current); };
     }, []);
 
@@ -187,6 +194,7 @@ const ScanLoginScreen = () => {
                         facing="back"
                         barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
                         onBarcodeScanned={phase.kind === 'scan' ? ({ data }) => { handleCode(data); } : undefined}
+                        onMountError={() => setCameraAvailable(false)}
                     />
                 )}
                 {/* Viewfinder */}
