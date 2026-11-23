@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, RefreshControl, StatusBar, Pressable } from 'react-native';
-import { Bell, Trash2, ListPlus, ScanLine, Newspaper } from '../icons';
+import { Bell, Trash2, ListPlus, ScanLine, Newspaper, Landmark, ChevronRight } from '../icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TEST_USER_ID } from '../config';
 import { paperFetch } from '../auth';
-import { getMarketStatus, getMarketSession, isHolidayToday, nextMarketOpen } from '../api';
+import { broker, getMarketStatus, getMarketSession, isHolidayToday, nextMarketOpen, type BrokerSession } from '../api';
 import MarketPulse from '../components/MarketPulse';
 import OvernightCues from '../components/OvernightCues';
 import TradingStatusPanel from '../components/TradingStatusPanel';
@@ -62,6 +62,13 @@ const DashboardScreen = () => {
     const [overnightRefresh, setOvernightRefresh] = useState(0);
     const isFocused = useIsFocused();
     const appActive = useAppActive();
+    // The ICICI session expires daily: a banner links to renewing it (hidden when live,
+    // unknown, or when this trader may not manage it).
+    const [brokerState, setBrokerState] = useState<BrokerSession['state'] | null>(null);
+    useEffect(() => {
+        if (!isFocused || !appActive) return;
+        broker.status().then(s => setBrokerState(s.state)).catch(() => setBrokerState(null));
+    }, [isFocused, appActive]);
     // Re-render every 30s for the relative times ("2m ago"), only while visible.
     const [, setTick] = useState(0);
     useEffect(() => {
@@ -311,6 +318,8 @@ const DashboardScreen = () => {
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
                 stickyHeaderIndices={[1]}
             >
+                {/* Header (and the broker banner) stay one child: index 1 below is the sticky row */}
+                <View>
                 {/* Header: who, market state, alerts */}
                 <View className="flex-row items-center px-5 pb-4" style={{ paddingTop: Math.max(insets.top, 12) + 14 }}>
                     <Pressable onPress={() => navigation.navigate('Profile')} accessibilityRole="button" accessibilityLabel="Open profile"
@@ -341,6 +350,22 @@ const DashboardScreen = () => {
                     <IconButton label="Alerts" onPress={() => navigation.navigate('Alerts')}>
                         <Bell size={20} color={colors.primary} />
                     </IconButton>
+                </View>
+                {(brokerState === 'expired' || brokerState === 'not_set') && (
+                    <Pressable onPress={() => navigation.navigate('BrokerSession')} accessibilityRole="button"
+                        accessibilityLabel="ICICI session expired. Open to renew it."
+                        className="mx-5 mb-3 flex-row items-center px-4 py-3 rounded-2xl border active:opacity-70"
+                        style={{ borderColor: `${colors.warning}55`, backgroundColor: `${colors.warning}14` }}>
+                        <Landmark size={18} color={colors.warning} />
+                        <View className="flex-1 ml-3">
+                            <Text className="font-bold text-[14px]" style={{ color: colors.warning }}>
+                                {brokerState === 'expired' ? 'ICICI session expired' : 'No ICICI session yet'}
+                            </Text>
+                            <Text className="text-text-muted text-xs mt-0.5">Prices are delayed until you log in. Tap to renew.</Text>
+                        </View>
+                        <ChevronRight size={18} color={colors.warning} />
+                    </Pressable>
+                )}
                 </View>
                 <View className="px-5 pt-1 pb-3 bg-background">
                     <Segmented options={TABS} value={activeCategory} onChange={setActiveCategory} />

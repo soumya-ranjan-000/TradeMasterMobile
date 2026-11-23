@@ -23,6 +23,7 @@ import PerformanceScreen from '../screens/PerformanceScreen';
 import ScannerScreen from '../screens/ScannerScreen';
 import ScanLoginScreen from '../screens/ScanLoginScreen';
 import BriefingScreen from '../screens/BriefingScreen';
+import BrokerSessionScreen from '../screens/BrokerSessionScreen';
 
 // Types for Navigation
 export type RootStackParamList = {
@@ -36,6 +37,7 @@ export type RootStackParamList = {
     DetailedAnalysis: { symbol: string; analysis: any };
     ScanLogin: undefined;
     Briefing: undefined;
+    BrokerSession: undefined;
 };
 
 export type MainTabParamList = {
@@ -246,6 +248,11 @@ const RootNavigator = () => {
                 <Stack.Screen
                     name="ScanLogin"
                     component={ScanLoginScreen}
+                    options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                    name="BrokerSession"
+                    component={BrokerSessionScreen}
                     options={{ headerShown: false }}
                 />
                 <Stack.Screen

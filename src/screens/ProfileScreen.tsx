@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, ScrollView, Pressable, RefreshControl, StatusBar, TextInput, ActivityIndicator } from 'react-native';
-import { LogOut, Bell, ChevronRight, BarChart3, PieChart, KeyRound, ScanLine, Lock, Smartphone, Monitor } from '../icons';
+import { LogOut, Bell, ChevronRight, BarChart3, PieChart, KeyRound, ScanLine, Lock, Smartphone, Monitor, Landmark } from '../icons';
+import { broker, type BrokerSession } from '../api';
 import { TEST_USER_ID } from '../config';
 import { paperFetch, signOut, listSessions, revokeSession, changePin, authErrorText, serverDate, SessionInfo } from '../auth';
 import { toast } from '../components/Toast';
@@ -37,6 +38,8 @@ const ProfileScreen = () => {
     const [profile, setProfile] = useState<ProfileData | null>(null);
     const [loading, setLoading] = useState(false);
     const [sessions, setSessions] = useState<SessionInfo[] | null>(null);
+    const [brokerStatus, setBrokerStatus] = useState<BrokerSession | null>(null);
+    const [brokerError, setBrokerError] = useState<string | null>(null);
     const [sessionsError, setSessionsError] = useState<string | null>(null);
     const [showPinForm, setShowPinForm] = useState(false);
     const [pinForm, setPinForm] = useState({ old: '', next: '', confirm: '' });
@@ -57,8 +60,15 @@ const ProfileScreen = () => {
         }
     };
 
+    const loadBroker = () => {
+        broker.status()
+            .then(s => { setBrokerStatus(s); setBrokerError(null); })
+            .catch(e => setBrokerError(e instanceof Error ? e.message : String(e)));
+    };
+
     const fetchData = async () => {
         loadSessions();
+        loadBroker();
         try {
             setLoading(true);
             const finalId = (await AsyncStorage.getItem('USER_ID')) || TEST_USER_ID;
@@ -204,6 +214,19 @@ const ProfileScreen = () => {
                     <View className="h-px bg-border ml-16" />
                     <Row icon={<Bell size={18} color={colors.warning} />} title="Price alerts" subtitle="Get notified when a stock crosses a price"
                         onPress={() => navigation.navigate('Alerts')} />
+                </View>
+
+                <SectionLabel>Broker (ICICI Breeze)</SectionLabel>
+                <View className="bg-surface rounded-3xl border border-border mb-6 overflow-hidden">
+                    <Row
+                        icon={<Landmark size={18} color={brokerStatus?.state === 'live' ? colors.success
+                            : brokerStatus && brokerStatus.state !== 'unreachable' ? colors.warning : colors.textMuted} />}
+                        title="ICICI session"
+                        subtitle={brokerStatus
+                            ? ({ live: 'Live · real-time broker data', expired: 'Expired · tap to renew',
+                                 not_set: 'Not set · tap to log in to ICICI', unreachable: "Can't check right now · tap to open" })[brokerStatus.state]
+                            : brokerError ? `Status unavailable · ${brokerError}` : 'Checking…'}
+                        onPress={() => navigation.navigate('BrokerSession')} />
                 </View>
 
                 <SectionLabel>Security</SectionLabel>

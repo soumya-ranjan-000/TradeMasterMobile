@@ -4,7 +4,7 @@
  * the screens already consume (they were written against the Breeze service).
  */
 import { BACKEND_API_KEY, ORCHESTRATOR_URL, ORCHESTRATOR_WS_URL } from './config';
-import { paperFetch } from './auth';
+import { getToken, paperFetch } from './auth';
 
 export class ApiError extends Error {
     constructor(public status: number, message: string) {
@@ -719,3 +719,49 @@ export async function estimateCharges(q: { side: 'BUY' | 'SELL'; quantity: numbe
         return null;
     }
 }
+
+
+// --- ICICI Breeze session (backend /api/v1/broker) ------------------------------------
+// The app never talks to the Breeze service itself (its key controls the real ICICI
+// account): the backend relays, and also checks the signed-in trader (Bearer).
+export interface BrokerSession {
+    /** live: real-time broker data · expired / not_set: log in to ICICI · unreachable: Breeze asleep or down */
+    state: 'live' | 'expired' | 'not_set' | 'unreachable';
+    session_valid: boolean;
+    token_set: boolean;
+    token_masked: string | null;
+    /** Seconds left on the saved session (it is kept for 24 h after a login). */
+    saved_for_s: number | null;
+    market_open: boolean | null;
+    message: string;
+    detail: string | null;
+    checked_at: string;
+}
+
+async function brokerJson<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const token = await getToken();
+    return backendJson<T>(`/broker${path}`, {
+        ...init,
+        headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+        },
+    });
+}
+
+export const broker = {
+    status: () => brokerJson<BrokerSession>('/session'),
+    loginUrl: () => brokerJson<{ login_url: string; fallback_url?: string | null }>('/session/login-url'),
+    /** Hand the new apisession to the Breeze service; resolves with the fresh status. */
+    update: (sessionToken: string) => brokerJson<BrokerSession & { updated: boolean }>('/session', {
+        method: 'POST', body: JSON.stringify({ session_token: sessionToken.trim() }),
+    }),
+};
+
+/** The `apisession` value in the address ICICI sends you to after logging in (null if none). */
+export function apiSessionFrom(url: string | null | undefined): string | null {
+    if (!url) return null;
+    const m = /[?&#](?:apisession|api_session)=([A-Za-z0-9]{4,128})/i.exec(url);
+    return m ? m[1] : null;
+}
+
