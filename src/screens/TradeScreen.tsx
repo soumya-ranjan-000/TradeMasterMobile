@@ -15,6 +15,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { TEST_USER_ID } from '../config';
 import { paperFetch } from '../auth';
+import { ChargeEstimate, DEFAULT_RULES, MarketRules, estimateCharges, getMarketRules } from '../api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLivePrice } from '../context/MarketDataContext';
 import { RootStackParamList, MainTabParamList } from '../navigation/RootNavigator';
@@ -46,7 +47,8 @@ const TradeScreen = () => {
     const [limitPrice, setLimitPrice] = useState('');
     // LIMIT only. DAY: cancelled at the session close if unfilled. GTC: until cancelled.
     const [validity, setValidity] = useState<'DAY' | 'GTC'>('DAY');
-    // INTRADAY: squared off automatically at 15:15 IST, shorts allowed.
+    // INTRADAY: squared off automatically at the engine's square-off time
+    // (GET /market/rules, 15:25 IST by default), shorts allowed.
     // DELIVERY: held overnight, long only (a SELL can only reduce holdings).
     const [product, setProduct] = useState<'INTRADAY' | 'DELIVERY'>('INTRADAY');
     // Idempotency key: a retry after a timeout returns the original order
@@ -73,6 +75,25 @@ const TradeScreen = () => {
     // Use the new Socket mechanism for live price
     const tick = useLivePrice(symbol);
     const livePrice = tick?.ltp || null;
+
+    const [rules, setRules] = useState<MarketRules>(DEFAULT_RULES);
+    React.useEffect(() => { getMarketRules().then(setRules); }, []);
+
+    // Charges for this fill, from the paper service's own formula (the ticket used
+    // to say "Zero Fee"). The price is bucketed so live ticks don't refetch it.
+    const [charges, setCharges] = useState<ChargeEstimate | null>(null);
+    const estQty = parseInt(quantity) || 0;
+    const estPrice = orderType === 'LIMIT' ? (parseFloat(limitPrice) || 0) : (livePrice || 0);
+    const estBucket = estPrice > 0 && estQty > 0 ? Math.round(estPrice * estQty / 500) : 0;
+    React.useEffect(() => {
+        if (!estBucket) { setCharges(null); return; }
+        let live = true;
+        const t = setTimeout(() => {
+            estimateCharges({ side, quantity: estQty, price: estPrice, product }).then(c => { if (live) setCharges(c); });
+        }, 350);
+        return () => { live = false; clearTimeout(t); };
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- estPrice via estBucket
+    }, [side, product, estQty, estBucket]);
 
     React.useEffect(() => {
         const init = async () => {
@@ -250,7 +271,7 @@ const TradeScreen = () => {
                     </View>
                     <Text className="text-text-muted text-[11px] mt-2 text-center">
                         {product === 'INTRADAY'
-                            ? 'Auto square-off at 15:15 IST • Short selling allowed'
+                            ? `Auto square-off at ${rules.square_off_time} IST • Short selling allowed`
                             : 'Held overnight • Sell only what you hold'}
                     </Text>
                 </View>
@@ -467,9 +488,17 @@ const TradeScreen = () => {
                         </View>
                         <View className="h-px bg-border my-2" />
                         <View className="flex-row justify-between">
-                            <Text className="text-text-secondary font-medium">Platform Fee</Text>
-                            <Text className="text-text-primary font-bold">₹0.00 (Zero Fee)</Text>
+                            <Text className="text-text-secondary font-medium">Charges (est.)</Text>
+                            <Text className="text-text-primary font-bold"
+                                accessibilityLabel={charges ? `Brokerage ${inr(charges.brokerage)}, STT ${inr(charges.stt)}, exchange ${inr(charges.exchange_txn)}, GST ${inr(charges.gst)}, stamp ${inr(charges.stamp_duty)}` : undefined}>
+                                {charges ? inr(charges.total) : '—'}
+                            </Text>
                         </View>
+                        {charges && (
+                            <Text className="text-text-muted text-[11px] text-right -mt-1">
+                                Brokerage, STT, exchange, SEBI, stamp, GST{charges.dp_charges ? ', DP' : ''}
+                            </Text>
+                        )}
                     </View>
 
                     <View className="flex-row items-center justify-center mt-6 gap-2">

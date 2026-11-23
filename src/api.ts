@@ -4,6 +4,7 @@
  * the screens already consume (they were written against the Breeze service).
  */
 import { BACKEND_API_KEY, ORCHESTRATOR_URL, ORCHESTRATOR_WS_URL } from './config';
+import { paperFetch } from './auth';
 
 export class ApiError extends Error {
     constructor(public status: number, message: string) {
@@ -667,3 +668,38 @@ export async function getBriefing(kind: BriefingKind): Promise<Briefing | null> 
 /** Build a briefing now without sending it to Telegram. */
 export const runBriefing = (kind: BriefingKind) =>
     backendJson<Briefing>(`/scanner/briefings/${kind}/run?send=false`, { method: 'POST' });
+
+
+// --- paper engine rules and charges (the order ticket) -----------------------------------
+/** What the paper engine enforces (GET /market/rules), so the app never hard-codes it. */
+export interface MarketRules {
+    market_open: string;        // "09:15" IST
+    market_close: string;       // "15:30" IST
+    square_off_time: string;    // intraday positions are closed from this time (IST)
+    short_margin_pct: number;
+}
+/** One fill's charges, as the paper service will book them (GET /market/charges). */
+export interface ChargeEstimate {
+    value: number; brokerage: number; stt: number; exchange_txn: number; sebi_fee: number;
+    stamp_duty: number; gst: number; dp_charges: number; total: number;
+}
+export const DEFAULT_RULES: MarketRules = {
+    market_open: '09:15', market_close: '15:30', square_off_time: '15:25', short_margin_pct: 20,
+};
+let rulesLoad: Promise<MarketRules> | null = null;
+/** Market rules, fetched once per app run (the engine's defaults until then, or if it fails). */
+export function getMarketRules(): Promise<MarketRules> {
+    rulesLoad ??= paperFetch('/market/rules')
+        .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+        .catch(() => { rulesLoad = null; return DEFAULT_RULES; });
+    return rulesLoad;
+}
+export async function estimateCharges(q: { side: 'BUY' | 'SELL'; quantity: number; price: number; product: 'INTRADAY' | 'DELIVERY' })
+    : Promise<ChargeEstimate | null> {
+    try {
+        const r = await paperFetch(`/market/charges?side=${q.side}&quantity=${q.quantity}&price=${q.price}&product=${q.product}`);
+        return r.ok ? await r.json() : null;
+    } catch {
+        return null;
+    }
+}

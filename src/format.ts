@@ -117,3 +117,43 @@ export function ago(d?: Date | string | number | null, now = Date.now()): string
 
 /** "RELIANCE.NS" -> "RELIANCE". */
 export const bareSymbol = (s: string) => s.toUpperCase().trim().replace(/\.(NS|BO)$/, '');
+
+/**
+ * The account summary, with the same definitions and labels as the web's
+ * Paper Trading panel (TradeMasterFrontend utils/paper.ts `portfolioSummary`).
+ *
+ * accountValue   the server's equity (shorts count their blocked margin, not
+ *                their full value) re-priced with the live position P&L
+ * todayPnl       realized today (net of charges) + today's move on open
+ *                positions: from the entry for positions opened today, from
+ *                the previous close for older ones
+ * unrealized     open positions only
+ *
+ * `opened_at` is a server timestamp (naive UTC).
+ */
+export function portfolioSummary(
+    account: { equity?: number; unrealized_pnl?: number; balance?: number } | null,
+    positions: { quantity: number; average_price: number; unrealized_pnl?: number; day_change_abs?: number; opened_at?: string | null }[],
+    todayRealized: number,
+    now: number = Date.now(),
+) {
+    const today = istDayKey(now);
+    let unrealized = 0, invested = 0, todayMove = 0;
+    for (const p of positions) {
+        const pnl = p.unrealized_pnl || 0;
+        unrealized += pnl;
+        invested += Math.abs(p.quantity) * p.average_price;
+        const opened = p.opened_at ? (/[zZ]|[+-]\d\d:?\d\d$/.test(p.opened_at) ? p.opened_at : `${p.opened_at}Z`) : null;
+        todayMove += opened && istDayKey(opened) === today ? pnl : (p.day_change_abs || 0) * p.quantity;
+    }
+    return {
+        accountValue: account && account.equity != null ? account.equity - (account.unrealized_pnl || 0) + unrealized : null,
+        todayPnl: todayRealized + todayMove,
+        todayRealized,
+        unrealized,
+        unrealizedPct: invested ? (unrealized / invested) * 100 : 0,
+        invested,
+        currentValue: invested + unrealized,
+        cash: account?.balance ?? null,
+    };
+}

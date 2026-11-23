@@ -16,6 +16,8 @@ interface Position {
     unrealized_pnl: number;
     day_change_perc: number;
     day_change_abs: number;
+    product?: string;
+    opened_at?: string | null;      // naive UTC; "today" is measured from entry for positions opened today
 }
 
 interface PositionContextType {

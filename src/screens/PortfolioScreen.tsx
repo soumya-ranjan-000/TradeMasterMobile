@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { toast } from '../components/Toast';
 import { ScreenHeader, IconButton, confirmAction } from '../ui';
 import { colors, signColor } from '../theme';
-import { inr, istClock, istDate, istDayKey, istDayLabel, istWhen } from '../format';
+import { inr, istClock, istDate, istDayKey, istDayLabel, istWhen, portfolioSummary } from '../format';
 import { View, Text, FlatList, RefreshControl, TouchableOpacity, ScrollView, StatusBar, Modal, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
 import { useFocusEffect, useNavigation, CompositeNavigationProp, useIsFocused } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -15,6 +15,7 @@ import { paperFetch, serverDate } from '../auth';
 import { isExchangeOpen, getMarketSession, isHolidayToday, nextMarketOpen, MarketSession } from '../api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMarketData, useLivePrices, Tick } from '../context/MarketDataContext';
+import { useAppActive } from '../appState';
 import { usePositions } from '../context/PositionContext';
 
 // --- order wording ----------------------------------------------------------------
@@ -91,28 +92,31 @@ const PositionRow = React.memo(({ item, expanded: isExpanded, onToggle, onQuickE
                 activeOpacity={0.7}
                 className="p-4"
             >
+                {/* Left column shrinks (min-w-0); the quantity / P&L column never does,
+                    so long scanner tags can no longer push it off the card. */}
                 <View className="flex-row justify-between items-center">
-                    <View className="flex-row items-center">
+                    <View className="flex-row items-center flex-1 min-w-0 mr-3">
                         <View className={`w-8 h-8 rounded-xl items-center justify-center mr-3 ${(item.unrealized_pnl || 0) >= -0.005 ? 'bg-success/10' : 'bg-error/10'}`}>
                             <Text className={`font-bold text-base ${(item.unrealized_pnl || 0) >= -0.005 ? 'text-success' : 'text-error'}`}>{item.symbol[0]}</Text>
                         </View>
-                        <View>
+                        <View className="flex-1 min-w-0">
                             <View className="flex-row items-center">
-                                <Text className="text-text-primary font-bold text-sm">{item.symbol}</Text>
+                                <Text className="text-text-primary font-bold text-sm shrink" numberOfLines={1}>{item.symbol}</Text>
                                 <Text className="text-text-muted text-[11px] font-black ml-2 px-1.5 py-0.5 rounded bg-background border border-border">
                                     {item.product === 'DELIVERY' ? 'CNC' : 'MIS'}{item.quantity < 0 ? ' • SHORT' : ''}
                                 </Text>
-                                {item.source === 'scanner' && (
-                                    <Text className="text-primary text-[11px] font-black ml-1 px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">
-                                        SCANNER{item.strategy ? ` • ${item.strategy}` : ''}
-                                    </Text>
-                                )}
                             </View>
-                            <Text className="text-text-muted text-[11px] font-bold">Avg {inr(item.average_price || 0)} · LTP {inr(item.current_ltp || 0)}</Text>
+                            {item.source === 'scanner' && (
+                                <Text className="text-primary text-[11px] font-black mt-1 self-start px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20"
+                                    numberOfLines={1}>
+                                    SCANNER{item.strategy ? ` • ${item.strategy}` : ''}
+                                </Text>
+                            )}
+                            <Text className="text-text-muted text-[11px] font-bold mt-1" numberOfLines={1}>Avg {inr(item.average_price || 0)} · LTP {inr(item.current_ltp || 0)}</Text>
                         </View>
                     </View>
-                    <View className="items-end">
-                        <Text className="text-text-primary font-bold text-sm">{item.quantity} {item.quantity === 1 ? 'Share' : 'Shares'}</Text>
+                    <View className="items-end shrink-0">
+                        <Text className="text-text-primary font-bold text-sm">{Math.abs(item.quantity)} {Math.abs(item.quantity) === 1 ? 'Share' : 'Shares'}</Text>
                         <View className="flex-row items-center mt-0.5">
                             {(item.unrealized_pnl || 0) >= -0.005 ? <ArrowUpRight size={10} color="#10B981" /> : <ArrowDownRight size={10} color="#EF4444" />}
                             <Text className={`text-[11px] font-bold ml-1 ${(item.unrealized_pnl || 0) >= -0.005 ? 'text-success' : 'text-error'}`}>
@@ -130,13 +134,13 @@ const PositionRow = React.memo(({ item, expanded: isExpanded, onToggle, onQuickE
                     <View className="flex-row justify-between items-end mb-3">
                         <View>
                             <Text className="text-text-secondary text-[11px] uppercase font-bold tracking-widest">Invested</Text>
-                            <Text className="text-text-primary font-bold text-xs">{inr(item.quantity * item.average_price)}</Text>
+                            <Text className="text-text-primary font-bold text-xs">{inr(Math.abs(item.quantity) * item.average_price)}</Text>
                         </View>
                         <View className="items-end">
                             <Text className="text-text-secondary text-[11px] uppercase font-bold tracking-widest">Day Change</Text>
                             <View className="flex-row items-center">
                                 <Text className={`font-bold text-xs ${(item.day_change_perc || 0) >= 0 ? 'text-success' : 'text-error'}`}>
-                                    {(item.day_change_perc || 0) >= 0 ? '+' : '-'}{(item.day_change_perc || 0).toFixed(2)}%
+                                    {(item.day_change_perc || 0) >= 0 ? '+' : ''}{(item.day_change_perc || 0).toFixed(2)}%
                                 </Text>
                                 <Text className={`text-[11px] font-bold ml-1 ${(item.day_change_perc || 0) >= 0 ? 'text-success opacity-80' : 'text-error opacity-80'}`}>
                                     ({inr((item.day_change_abs || 0) * item.quantity, { sign: true })})
@@ -294,12 +298,23 @@ const ClosedOrderRow = React.memo(({ item, onSelect }: { item: any; clock: numbe
     );
 });
 
-const TradeRow = React.memo(({ item, expanded: isExpanded, onToggle, onSelect }: {
+const TradeRow = React.memo(({ item, expanded: isExpanded, openPnl, onToggle, onSelect }: {
     item: any;
     expanded: boolean;
+    /** Live unrealized P&L of an OPEN trade's position (undefined if not loaded). */
+    openPnl?: number;
     onToggle: (id: string) => void;
     onSelect: (order: any) => void;
 }) => {
+    const closed = item.status === 'CLOSED';
+    const n = item.orders.length;
+    // A trade's realized_pnl is NET of charges, so an open trade with nothing sold
+    // yet showed only its entry charges (e.g. -₹30.19), which read like a loss.
+    // Open: the live P&L of what is still held. Closed: the net result.
+    const headline: number | undefined = closed ? item.realized_pnl : openPnl;
+    const sub = closed
+        ? `net · charges ${inr(item.charges || 0)}`
+        : `open · charges ${inr(item.charges || 0)}${item.gross_pnl ? ` · booked ${inr(item.realized_pnl, { sign: true })}` : ''}`;
     return (
         <View className="bg-surface rounded-2xl border border-border mb-3 overflow-hidden">
             <TouchableOpacity
@@ -308,21 +323,26 @@ const TradeRow = React.memo(({ item, expanded: isExpanded, onToggle, onSelect }:
                 className="p-4"
             >
                 <View className="flex-row justify-between items-center">
-                    <View className="flex-row items-center">
-                        <View className={`w-7 h-7 rounded-lg items-center justify-center mr-3 ${item.status === 'CLOSED' ? 'bg-primary/20' : 'bg-success/10'}`}>
-                            <Briefcase size={12} color={item.status === 'CLOSED' ? '#00E0A1' : '#10B981'} />
+                    <View className="flex-row items-center flex-1 min-w-0 mr-3">
+                        <View className={`w-7 h-7 rounded-lg items-center justify-center mr-3 ${closed ? 'bg-primary/20' : 'bg-success/10'}`}>
+                            <Briefcase size={12} color={closed ? '#00E0A1' : '#10B981'} />
                         </View>
-                        <View>
-                            <Text className="text-text-primary font-bold text-sm">{item.symbol}</Text>
-                            <Text className="text-text-muted text-[11px] font-bold uppercase tracking-widest">
-                                {item.status} TRADE • {item.orders.length} EXECUTIONS
+                        <View className="flex-1 min-w-0">
+                            <Text className="text-text-primary font-bold text-sm" numberOfLines={1}>{item.symbol}</Text>
+                            <Text className="text-text-muted text-[11px] font-bold uppercase tracking-widest" numberOfLines={1}>
+                                {closed ? 'Closed' : 'Open'} • {n} {n === 1 ? 'execution' : 'executions'}
                             </Text>
                         </View>
                     </View>
-                    <View className="items-end">
-                        <Text className={`font-black text-sm ${item.realized_pnl >= 0 ? 'text-success' : 'text-error'}`}>
-                            {inr(item.realized_pnl, { sign: true })}
-                        </Text>
+                    <View className="items-end shrink-0">
+                        {headline != null ? (
+                            <Text className={`font-black text-sm ${headline >= -0.005 ? 'text-success' : 'text-error'}`}>
+                                {inr(headline, { sign: true })}
+                            </Text>
+                        ) : (
+                            <Text className="font-black text-sm text-text-muted">Open</Text>
+                        )}
+                        <Text className="text-text-muted text-[11px]" numberOfLines={1}>{sub}</Text>
                         <View className="flex-row items-center">
                             <Text className="text-text-muted text-[11px] mr-1">{istClock(serverDate(item.timestamp))}</Text>
                             {isExpanded ? <ChevronDown size={12} color="#6B7280" /> : <ChevronRight size={12} color="#6B7280" />}
@@ -333,33 +353,42 @@ const TradeRow = React.memo(({ item, expanded: isExpanded, onToggle, onSelect }:
 
             {isExpanded && (
                 <View className="bg-background/40 border-t border-border/50 p-4 pt-2">
-                    {item.orders.map((ord: any, idx: number) => (
-                        <TouchableOpacity
-                            key={ord.order_id}
-                            onPress={() => onSelect(ord)}
-                            className={`flex-row justify-between items-center py-3 ${idx !== item.orders.length - 1 ? 'border-b border-border/30' : ''}`}
-                        >
-                            <View className="flex-row items-center">
-                                <View className={`px-2 py-0.5 rounded-md mr-3 ${ord.side === 'BUY' ? 'bg-success/10' : 'bg-error/10'}`}>
-                                    <Text className={`text-[11px] font-black ${ord.side === 'BUY' ? 'text-success' : 'text-error'}`}>{ord.side}</Text>
-                                </View>
-                                <View>
-                                    <Text className="text-text-primary text-xs font-bold">
-                                        {ord.side === 'BUY' ? 'Bought' : 'Sold'} {ord.quantity} @ {inr(ord.average_fill_price)}
-                                    </Text>
-                                    <View className="flex-row items-center mt-0.5">
-                                        <Text className="text-text-muted text-[11px] font-bold uppercase tracking-tighter">Value {inr(ord.quantity * ord.average_fill_price)}</Text>
-                                        <Text className="text-text-muted text-[11px] ml-2 opacity-50">• {istClock(serverDate(ord.filled_at || ord.created_at))}</Text>
+                    {item.orders.map((ord: any, idx: number) => {
+                        const qty = ord.filled_quantity || ord.quantity;
+                        const price = ord.average_fill_price || 0;
+                        const leg = ord.realized_pnl;
+                        return (
+                            <TouchableOpacity
+                                key={ord.order_id}
+                                onPress={() => onSelect(ord)}
+                                className={`flex-row justify-between items-center py-3 ${idx !== n - 1 ? 'border-b border-border/30' : ''}`}
+                            >
+                                <View className="flex-row items-center flex-1 min-w-0 mr-2">
+                                    <View className={`px-2 py-0.5 rounded-md mr-3 ${ord.side === 'BUY' ? 'bg-success/10' : 'bg-error/10'}`}>
+                                        <Text className={`text-[11px] font-black ${ord.side === 'BUY' ? 'text-success' : 'text-error'}`}>{ord.side}</Text>
+                                    </View>
+                                    <View className="flex-1 min-w-0">
+                                        {/* quantity x price per share = total */}
+                                        <Text className="text-text-primary text-xs font-bold" numberOfLines={1}
+                                            accessibilityLabel={`${qty} shares at ${inr(price)} each, ${inr(qty * price)} in total`}>
+                                            {qty} × {inr(price)} = <Text className="text-primary font-black">{inr(qty * price)}</Text>
+                                        </Text>
+                                        <Text className="text-text-muted text-[11px] mt-0.5" numberOfLines={1}>
+                                            {ord.side === 'BUY' ? 'Bought' : 'Sold'} {qty} {qty === 1 ? 'share' : 'shares'} at {inr(price)} each · {istClock(serverDate(ord.filled_at || ord.created_at))}
+                                        </Text>
                                     </View>
                                 </View>
-                            </View>
-                            {ord.realized_pnl !== undefined && ord.realized_pnl !== null ? (
-                                <Text className={`text-[11px] font-black ${(ord.realized_pnl || 0) >= -0.005 ? 'text-success' : 'text-error'}`}>
-                                    {inr(ord.realized_pnl || 0, { sign: true })}
-                                </Text>
-                            ) : null}
-                        </TouchableOpacity>
-                    ))}
+                                {leg !== undefined && leg !== null ? (
+                                    <View className="items-end shrink-0">
+                                        <Text className={`text-[11px] font-black ${(leg || 0) >= -0.005 ? 'text-success' : 'text-error'}`}>
+                                            {inr(leg || 0, { sign: true })}
+                                        </Text>
+                                        <Text className="text-text-muted text-[10px]">gross</Text>
+                                    </View>
+                                ) : null}
+                            </TouchableOpacity>
+                        );
+                    })}
                 </View>
             )}
         </View>
@@ -460,9 +489,10 @@ const PortfolioScreen = () => {
         return result;
     }, [positions, ticks]);
 
-    const fetchData = async () => {
+    /** `silent`: the 30s background refresh, which must not flash the spinner or disable buttons. */
+    const fetchData = async (silent = false) => {
         try {
-            setLoading(true);
+            if (!silent) setLoading(true);
             const savedId = await AsyncStorage.getItem('USER_ID');
             const uid = savedId || TEST_USER_ID;
             setUserId(uid);
@@ -489,7 +519,7 @@ const PortfolioScreen = () => {
         } catch (error) {
             console.error("Error fetching data:", error);
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     };
 
@@ -498,6 +528,18 @@ const PortfolioScreen = () => {
             fetchData();
         }, [activeTab])
     );
+
+    // Cash, orders, trades and today's realized P&L every 30s while this screen
+    // is open (positions already poll in PositionContext). Before, they only
+    // reloaded on focus, so an SL/target exit left Cash and P&L stale.
+    const appActive = useAppActive();
+    const fetchRef = useRef(fetchData);
+    fetchRef.current = fetchData;
+    React.useEffect(() => {
+        if (!isFocused || !appActive) return;
+        const t = setInterval(() => fetchRef.current(true), 30_000);
+        return () => clearInterval(t);
+    }, [isFocused, appActive]);
 
     // Subscription management for live P&L is now partially handled by NotificationContext
     // but we'll keep it here for screen-specific focus-based subscriptions if needed.
@@ -592,28 +634,12 @@ const PortfolioScreen = () => {
         confirmAction('Cancel order', `Cancel ${o.side} ${o.quantity} ${o.symbol}?\n${entryRule(o)}.${held}`, 'Cancel order', () => cancelOrder(o.order_id), true);
     };
 
-    const totalUnrealizedPnL = livePositions.reduce((acc, pos) => acc + (pos.unrealized_pnl || 0), 0);
-    // Shorts carry a negative quantity: exposure is the absolute value.
-    const totalInvested = livePositions.reduce((acc, pos) => acc + (Math.abs(pos.quantity) * pos.average_price), 0);
-
-    // Day's Unrealized Performance (Movement of open positions since last close)
-    const dayUnrealizedPnL = livePositions.reduce((acc, pos) => acc + ((pos.day_change_abs || 0) * pos.quantity), 0);
-
     // Today's realized P&L, NET of charges, for the IST trading day. Order
     // realized_pnl is gross (charges are separate), so it is not summed here.
-    const istKey = istDayKey(Date.now());
-    const todayRealizedPnL = dailyPnl[istKey] || 0;
-
-    // 1. "Today" Performance = Today's Realized + Today's Unrealized variation
-    const totalPnLToday = dayUnrealizedPnL + todayRealizedPnL;
-
-    // 2. "Total P&L" on summary card = Net Portfolio Status 
-    // This includes all open unrealized gains + what was closed TODAY.
-    // Historical realized from previous days is ignored for the "Current Portfolio" view.
-    const currentPortfolioPnL = totalUnrealizedPnL + todayRealizedPnL;
-    const currentPortfolioPerc = totalInvested !== 0 ? (currentPortfolioPnL / totalInvested) * 100 : 0;
-
-    const currentVal = (totalInvested || 0) + (totalUnrealizedPnL || 0);
+    const todayRealizedPnL = dailyPnl[istDayKey(Date.now())] || 0;
+    // Same figures and labels as the web's Paper Trading panel.
+    const sum = portfolioSummary(account, livePositions, todayRealizedPnL);
+    const totalUnrealizedPnL = sum.unrealized;
     // `balance` is FREE cash; pending orders hold `reserved` on top of it.
     const reserved = Number(account?.reserved) || 0;
 
@@ -650,6 +676,13 @@ const PortfolioScreen = () => {
         setNewTrailingSL(item.trailing_sl?.toString() || '');
     }, []);
 
+    // Live unrealized P&L per position: the headline of its OPEN trade card.
+    const openPnlByPosition = useMemo(() => {
+        const m: Record<string, number> = {};
+        livePositions.forEach((p: any) => { m[p.position_id] = p.unrealized_pnl || 0; });
+        return m;
+    }, [livePositions]);
+
     const groupedTrades = useMemo(() => {
         if (!trades || trades.length === 0) return [];
 
@@ -676,6 +709,8 @@ const PortfolioScreen = () => {
                 symbol: t.symbol,
                 orders: tradeOrders,
                 realized_pnl: t.realized_pnl,
+                gross_pnl: t.gross_pnl,
+                charges: t.charges,
                 status: t.status,
                 timestamp: t.updated_at,
                 type: t.type
@@ -762,8 +797,9 @@ const PortfolioScreen = () => {
             );
         }
         if (item.itemType === 'CLOSED_ORDER') return <ClosedOrderRow item={item} clock={clockTick} onSelect={setSelectedOrder} />;
-        return <TradeRow item={item} expanded={expandedTrades.includes(item.id)} onToggle={toggleTrade} onSelect={setSelectedOrder} />;
-    }, [ticks, marketOpen, opensAtMs, loading, clockTick, onCancelOrder, expandedTrades, toggleTrade]);
+        return <TradeRow item={item} expanded={expandedTrades.includes(item.id)} openPnl={openPnlByPosition[item.id]}
+            onToggle={toggleTrade} onSelect={setSelectedOrder} />;
+    }, [ticks, marketOpen, opensAtMs, loading, clockTick, onCancelOrder, expandedTrades, toggleTrade, openPnlByPosition]);
     return (
         <View className="flex-1 bg-background">
             <StatusBar barStyle="light-content" backgroundColor="#0E1116" />
@@ -781,24 +817,25 @@ const PortfolioScreen = () => {
                 <View className="bg-surface rounded-3xl border border-border p-4">
                     <Text className="text-text-muted text-xs font-semibold">Account value</Text>
                     <Text className="text-text-primary text-[28px] font-black mt-0.5" style={{ fontVariant: ['tabular-nums'] }}>
-                        {account ? inr((account.balance ?? 0) + reserved + (currentVal || 0)) : '—'}
+                        {sum.accountValue != null ? inr(sum.accountValue) : '—'}
                     </Text>
-                    <Text className="text-[13px] font-bold" style={{ color: signColor(totalPnLToday) }}>
-                        {inr(totalPnLToday || 0, { sign: true })} today
+                    <Text className="text-[13px] font-bold" style={{ color: signColor(sum.todayPnl) }}
+                        accessibilityLabel={`Today's P&L ${inr(sum.todayPnl, { sign: true })}: closed today plus today's move on open positions`}>
+                        {inr(sum.todayPnl, { sign: true })} today
                     </Text>
                     <View className="flex-row mt-3 pt-3 border-t border-border">
                         <View className="flex-1">
                             <Text className="text-text-muted text-xs font-semibold">Cash</Text>
-                            <Text className="text-text-primary text-sm font-bold mt-0.5" style={{ fontVariant: ['tabular-nums'] }}>{account ? inr(account.balance, { compact: true }) : '—'}</Text>
+                            <Text className="text-text-primary text-sm font-bold mt-0.5" style={{ fontVariant: ['tabular-nums'] }}>{sum.cash != null ? inr(sum.cash, { compact: true }) : '—'}</Text>
                         </View>
                         <View className="flex-1">
-                            <Text className="text-text-muted text-xs font-semibold">In positions</Text>
-                            <Text className="text-text-primary text-sm font-bold mt-0.5" style={{ fontVariant: ['tabular-nums'] }}>{inr(currentVal || 0, { compact: true })}</Text>
+                            <Text className="text-text-muted text-xs font-semibold">Current value</Text>
+                            <Text className="text-text-primary text-sm font-bold mt-0.5" style={{ fontVariant: ['tabular-nums'] }}>{inr(sum.currentValue, { compact: true })}</Text>
                         </View>
                         <View className="flex-1 items-end">
-                            <Text className="text-text-muted text-xs font-semibold">Open P&L</Text>
-                            <Text className="text-sm font-bold mt-0.5" style={{ color: signColor(currentPortfolioPnL), fontVariant: ['tabular-nums'] }}>
-                                {inr(currentPortfolioPnL || 0, { sign: true, compact: true })}
+                            <Text className="text-text-muted text-xs font-semibold">Unrealized P&L</Text>
+                            <Text className="text-sm font-bold mt-0.5" style={{ color: signColor(sum.unrealized), fontVariant: ['tabular-nums'] }}>
+                                {inr(sum.unrealized, { sign: true, compact: true })}
                             </Text>
                         </View>
                     </View>
