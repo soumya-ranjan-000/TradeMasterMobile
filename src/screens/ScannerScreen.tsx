@@ -122,11 +122,13 @@ function holdingOf(bridge: BridgeStatus | null, symbol: string, direction: 'long
     return null;
 }
 
-const ScanRow = React.memo(({ g, open, exec, holding, onToggle, children }: {
+const ScanRow = React.memo(({ g, open, exec, holding, skipped, onToggle, children }: {
     g: StockGroup;
     open: boolean;
     exec?: ScanExecution;
     holding?: Holding;
+    /** Why auto paper-trading skipped this READY stock (no order yet). */
+    skipped?: string;
     onToggle: (key: string) => void;
     /** The expanded strategy cards (only for the open row). */
     children?: React.ReactNode;
@@ -176,7 +178,7 @@ const ScanRow = React.memo(({ g, open, exec, holding, onToggle, children }: {
                     <Text className="text-success">{inr(c.targets?.[0])}</Text>
                     {c.reward_risk_net != null ? ` · R:R ${c.reward_risk_net.toFixed(1)}` : ''}
                 </Text>
-                {(g.all.length > 1 || exec) && (
+                {(g.all.length > 1 || exec || skipped) && (
                     <View className="flex-row items-center mt-1.5">
                         {g.all.length > 1 && (
                             <Text className="text-text-muted text-[11px] font-bold mr-1">
@@ -184,6 +186,10 @@ const ScanRow = React.memo(({ g, open, exec, holding, onToggle, children }: {
                             </Text>
                         )}
                         {renderExecBadge(exec)}
+                        {!exec && skipped ? (
+                            <Text className="text-[11px] font-black uppercase" style={{ color: '#F59E0B' }}
+                                accessibilityLabel={`Not sent automatically: ${skipped}`}>Not sent</Text>
+                        ) : null}
                     </View>
                 )}
             </TouchableOpacity>
@@ -493,6 +499,11 @@ const ScannerScreen = () => {
                         <Text className="text-text-muted text-[11px] ml-1 flex-1">{f.message}</Text>
                     </View>
                 ))}
+                {!exec && bridge?.skips?.[c.id] && (
+                    <Text className="text-[11px] font-bold mt-2" style={{ color: '#F59E0B' }}>
+                        Not sent automatically: {bridge.skips[c.id]}. Send to Paper still works.
+                    </Text>
+                )}
                 {exec?.error && (
                     <Text className="text-[11px] font-bold mt-2" style={{ color: execStyle(exec).color }}>Paper: {exec.error}</Text>
                 )}
@@ -620,7 +631,8 @@ const ScannerScreen = () => {
         const open = expanded === g.key;
         return (
             <ScanRow g={g} open={open} exec={g.all.map(x => execByCandidate[x.id]).find(Boolean)}
-                holding={holdingByKey[g.key]} onToggle={toggleRow}>
+                holding={holdingByKey[g.key]} skipped={g.all.map(x => bridge?.skips?.[x.id]).find(Boolean)}
+                onToggle={toggleRow}>
                 {open ? g.all.map(c => renderCandidate(c, g.best, g.all.length > 1)) : null}
             </ScanRow>
         );

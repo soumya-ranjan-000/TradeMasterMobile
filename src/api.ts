@@ -425,6 +425,8 @@ export interface BridgeStatus {
     last_sync: Record<string, any> | null;
     /** What the scanner's paper account holds or has on order: "PNB|long" -> "position" | "pending order". */
     holdings?: Record<string, string>;
+    /** READY candidates the last automatic pass did not send: candidate id -> reason. */
+    skips?: Record<string, string>;
 }
 
 export interface ScanRun {
