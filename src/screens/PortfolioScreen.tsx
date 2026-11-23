@@ -113,6 +113,11 @@ const PositionRow = React.memo(({ item, expanded: isExpanded, onToggle, onQuickE
                                 </Text>
                             )}
                             <Text className="text-text-muted text-[11px] font-bold mt-1" numberOfLines={1}>Avg {inr(item.average_price || 0)} · LTP {inr(item.current_ltp || 0)}</Text>
+                            {item.opened_at ? (
+                                <Text className="text-text-muted text-[11px] mt-0.5 opacity-70" numberOfLines={1}>
+                                    Opened {istWhen(serverDate(item.opened_at))}
+                                </Text>
+                            ) : null}
                         </View>
                     </View>
                     <View className="items-end shrink-0">
