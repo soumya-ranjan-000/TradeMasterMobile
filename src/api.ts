@@ -391,6 +391,8 @@ export interface ScanCandidate {
     entry_confirmed_at: string | null;
     expires_at: string | null;
     updated_at: string;
+    first_seen_at?: string;     // when this setup arrived (naive UTC)
+    version?: number;           // arrival order on this stock: v1, v2, ... (see backend Candidate.version)
 }
 
 export interface ScanExecution {

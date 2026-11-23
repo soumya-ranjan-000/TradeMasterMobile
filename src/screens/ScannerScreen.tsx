@@ -8,6 +8,7 @@ import {
     ChevronDown, ChevronUp, RefreshCw, Radar, Send, AlertTriangle, CircleCheck, CircleX, Clock,
 } from '../icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useAppActive } from '../appState';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ApiError, BridgeStatus, ScanCandidate, ScanExecution, ScanStyle, scanner } from '../api';
 import { TEST_USER_ID } from '../config';
@@ -49,6 +50,26 @@ interface StockGroup {
     key: string;
     best: ScanCandidate;           // qualified first, then the higher score
     all: ScanCandidate[];          // every strategy that fired on this stock and side
+    version: number;               // newest setup's version (v1, v2, ...)
+    versionAt: Date | null;        // when that newest setup arrived: rows are grouped by this
+    firstSeen: Date | null;        // when the stock was first listed
+}
+
+/** A 30-minute IST slot header between rows. */
+interface SlotHeader { key: string; header: true; label: string; count: number }
+
+const SLOT_MIN = 30;
+const istShift = (d: Date) => new Date(d.getTime() + 330 * 60_000);   // read with getUTC*
+const hm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+function slotOf(d: Date | null): { key: string; label: string } {
+    if (!d) return { key: '0', label: 'Time unknown' };
+    const t = istShift(d);
+    const start = Math.floor((t.getUTCHours() * 60 + t.getUTCMinutes()) / SLOT_MIN) * SLOT_MIN;
+    const day = t.toISOString().slice(0, 10);
+    const today = istShift(new Date()).toISOString().slice(0, 10);
+    const dayLabel = day === today ? 'Today'
+        : t.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+    return { key: `${day} ${hm(start)}`, label: `${dayLabel} ${hm(start)}–${hm(start + SLOT_MIN)}` };
 }
 
 const EXEC_STYLE: Record<ScanExecution['status'], { color: string; label: string }> = {
@@ -127,6 +148,10 @@ const ScanRow = React.memo(({ g, open, exec, holding, onToggle, children }: {
                                 {ready ? 'Ready' : 'Waiting'}
                             </Text>
                         </View>
+                        <View className="px-1.5 py-0.5 rounded-md ml-1.5" style={{ backgroundColor: g.version > 1 ? '#8B5CF620' : '#94A3B820' }}
+                            accessibilityLabel={g.version > 1 ? `Version ${g.version}: a newer strategy arrived on this stock` : 'Version 1'}>
+                            <Text className="text-[11px] font-black" style={{ color: g.version > 1 ? '#8B5CF6' : '#94A3B8' }}>v{g.version || 1}</Text>
+                        </View>
                         {holding && (
                             <View className="px-1.5 py-0.5 rounded-md ml-1.5" style={{ backgroundColor: holding.same ? '#3B82F620' : '#F59E0B20' }}>
                                 <Text className="text-[11px] font-black uppercase" style={{ color: holding.same ? '#3B82F6' : '#F59E0B' }}>
@@ -140,6 +165,12 @@ const ScanRow = React.memo(({ g, open, exec, holding, onToggle, children }: {
                         {open ? <ChevronUp size={16} color="#94A3B8" /> : <ChevronDown size={16} color="#94A3B8" />}
                     </View>
                 </View>
+                {g.versionAt && (
+                    <Text className="text-text-muted text-[11px] mt-0.5">
+                        {g.version > 1 ? `v${g.version} at ` : 'Listed '}{istClock(g.versionAt)}
+                        {g.firstSeen && g.version > 1 && g.firstSeen.getTime() !== g.versionAt.getTime() ? ` · listed ${istClock(g.firstSeen)}` : ''}
+                    </Text>
+                )}
                 <Text className="text-text-muted text-[11px] font-bold mt-1">
                     {inr(c.entry_trigger)} · SL <Text className="text-error">{inr(c.stop)}</Text> · TGT{' '}
                     <Text className="text-success">{inr(c.targets?.[0])}</Text>
@@ -167,6 +198,8 @@ const ScannerScreen = () => {
     const [style, setStyle] = useState<ScanStyle>(() => (inSession() ? 'intraday' : 'swing'));
     const [side, setSide] = useState<Side>('long');
     const [signal, setSignal] = useState<SignalFilter>('ALL');
+    // Rows in 30-minute arrival slots, newest first (by when the latest strategy arrived).
+    const [byTime, setByTime] = useState(true);
     const [view, setView] = useState<'OPPORTUNITIES' | 'ORDERS'>('OPPORTUNITIES');
     const [candidates, setCandidates] = useState<ScanCandidate[]>([]);
     const [executions, setExecutions] = useState<ScanExecution[]>([]);
@@ -242,7 +275,15 @@ const ScannerScreen = () => {
     }, []);
 
     useEffect(() => { showCached(style); /* first paint only */ }, []);   // eslint-disable-line react-hooks/exhaustive-deps
-    useFocusEffect(useCallback(() => { load(); }, [load]));
+    // Reload on focus, then every 20 s while the screen is open and the app is in
+    // front, so an invalidated stock leaves the list soon after the Telegram alert.
+    const appActive = useAppActive();
+    useFocusEffect(useCallback(() => {
+        load();
+        if (!appActive) return;
+        const t = setInterval(() => load(), 20_000);
+        return () => clearInterval(t);
+    }, [load, appActive]));
 
     const switchStyle = (s: ScanStyle) => {
         if (s === style) return;
@@ -399,8 +440,9 @@ const ScannerScreen = () => {
             <View key={c.id} className="bg-surface/60 rounded-2xl border border-border/40 mb-2 px-4 py-3">
                 <View className="flex-row items-center justify-between">
                     <Text className="text-text-primary text-[11px] font-black flex-1">
-                        {c.strategy}
-                        <Text className="text-text-muted font-bold"> · {c.setup_state}{multi ? ` · ${Math.round(c.score)}` : ''}</Text>
+                        {c.version ? `v${c.version} ` : ''}{c.strategy}
+                        <Text className="text-text-muted font-bold"> · {c.setup_state}{multi ? ` · ${Math.round(c.score)}` : ''}
+                            {c.first_seen_at ? ` · ${istClock(serverDate(c.first_seen_at))}` : ''}</Text>
                     </Text>
                     {renderExecBadge(exec)}
                 </View>
@@ -498,9 +540,16 @@ const ScannerScreen = () => {
         const m: Record<string, StockGroup> = {};
         candidates.forEach(c => {
             const key = `${c.symbol}|${c.direction}`;
-            const g = m[key] || (m[key] = { key, best: c, all: [] });
+            const g = m[key] || (m[key] = { key, best: c, all: [], version: 0, versionAt: null, firstSeen: null });
             g.all.push(c);
             if (rank(c) > rank(g.best)) g.best = c;
+            const seen = serverDate(c.first_seen_at);
+            const v = c.version ?? 1;
+            if (v > g.version || (v === g.version && seen && (!g.versionAt || seen > g.versionAt))) {
+                g.version = v;
+                g.versionAt = seen;
+            }
+            if (seen && (!g.firstSeen || seen < g.firstSeen)) g.firstSeen = seen;
         });
         Object.values(m).forEach(g => g.all.sort((a, b) => rank(b) - rank(a)));
         return Object.values(m).sort((a, b) => rank(b.best) - rank(a.best));
@@ -519,9 +568,32 @@ const ScannerScreen = () => {
         signal === 'ALL' || (signal === 'READY') === (g.best.status === 'qualified'));
     const count = (d: Side) => ideaGroups.filter(g => g.best.direction === d).length;
     const readyCount = sideGroups.filter(g => g.best.status === 'qualified').length;
+    // Slot headers interleaved, newest slot first; inside a slot the usual order holds.
+    const opportunityItems: (StockGroup | SlotHeader)[] = (() => {
+        if (!byTime) return shown;
+        const slots = new Map<string, { label: string; rows: StockGroup[] }>();
+        for (const g of shown) {
+            const sl = slotOf(g.versionAt || g.firstSeen);
+            if (!slots.has(sl.key)) slots.set(sl.key, { label: sl.label, rows: [] });
+            slots.get(sl.key)!.rows.push(g);
+        }
+        return Array.from(slots.entries()).sort((a, b) => (a[0] < b[0] ? 1 : -1)).flatMap(([key, x]) => [
+            { key: `slot-${key}`, header: true as const, label: x.label, count: x.rows.length },
+            ...x.rows,
+        ]);
+    })();
 
     // Virtualized list: the swing universe can yield hundreds of rows.
-    const renderOpportunity = ({ item: g }: { item: StockGroup }) => {
+    const renderOpportunity = ({ item }: { item: StockGroup | SlotHeader }) => {
+        if ('header' in item) {
+            return (
+                <View className="flex-row items-center justify-between px-1 pt-2 pb-1.5">
+                    <Text className="text-text-muted text-[11px] font-black uppercase tracking-widest">{item.label}</Text>
+                    <Text className="text-text-muted text-[11px] font-bold">{item.count} {item.count === 1 ? 'stock' : 'stocks'}</Text>
+                </View>
+            );
+        }
+        const g = item;
         const open = expanded === g.key;
         return (
             <ScanRow g={g} open={open} exec={g.all.map(x => execByCandidate[x.id]).find(Boolean)}
@@ -578,7 +650,7 @@ const ScannerScreen = () => {
             ) : (
                 <FlatList
                     className="flex-1"
-                    data={(view === 'OPPORTUNITIES' ? shown : executions) as any[]}
+                    data={(view === 'OPPORTUNITIES' ? opportunityItems : executions) as any[]}
                     keyExtractor={listKey}
                     renderItem={renderListItem}
                     contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }}
@@ -619,6 +691,11 @@ const ScannerScreen = () => {
                                             </Text>
                                         </TouchableOpacity>
                                     ))}
+                                    <TouchableOpacity onPress={() => setByTime(b => !b)}
+                                        accessibilityLabel={byTime ? 'Stop grouping by 30-minute arrival slot' : 'Group by 30-minute arrival slot'}
+                                        className={`px-3 py-1.5 rounded-full ml-auto ${byTime ? 'bg-primary/20 border border-primary/40' : 'bg-surface border border-border/40'}`}>
+                                        <Text className={`text-[11px] font-black uppercase ${byTime ? 'text-primary' : 'text-text-muted'}`}>30 min</Text>
+                                    </TouchableOpacity>
                                 </View>
                                 {!error && shown.length === 0 && (
                                     <Text className="text-text-muted text-center mt-12 font-bold leading-5">
