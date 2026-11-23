@@ -444,6 +444,11 @@ export const scanner = {
         backendJson<{ bridge: BridgeStatus; items: ScanExecution[] }>(`/scanner/executions?limit=${limit}`),
     execute: (candidateId: string) =>
         backendJson<ScanExecution>(`/scanner/candidates/${encodeURIComponent(candidateId)}/execute`, { method: 'POST' }),
+    /** Empty this style's watchlist and rescan (setups with a paper order are kept). */
+    clearWatchlist: (style: ScanStyle) =>
+        backendJson<{ cleared: Record<string, { cleared: number; kept_with_orders: number }>;
+                      scans: Record<string, { run_id?: string; universe?: string; error?: string }> }>(
+            `/scanner/watchlist/clear?style=${style}&rescan=true`, { method: 'POST' }),
     scan: (style: ScanStyle, universe: string) =>
         backendJson<ScanRun>('/scanner/scan', {
             method: 'POST',

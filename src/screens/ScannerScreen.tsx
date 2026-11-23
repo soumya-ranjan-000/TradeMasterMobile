@@ -5,7 +5,7 @@ import {
     Switch, Platform,
 } from 'react-native';
 import {
-    ChevronDown, ChevronUp, RefreshCw, Radar, Send, AlertTriangle, CircleCheck, CircleX, Clock,
+    ChevronDown, ChevronUp, RefreshCw, Radar, Send, AlertTriangle, CircleCheck, CircleX, Clock, Eraser,
 } from '../icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useAppActive } from '../appState';
@@ -308,6 +308,29 @@ const ScannerScreen = () => {
             }
         }, 3000);
     };
+
+    // Empty this style's list and rescan; stocks come back as the scan finds them (v1).
+    const clearAndRescan = () => confirmAction(
+        `Clear ${style} watchlist?`,
+        `Every ${style} setup leaves the list and a fresh scan starts. Stocks come back as the scan finds them, ` +
+        `as new (v1). Setups with a paper order stay, so their orders aren't cancelled.`,
+        'Clear & rescan',
+        async () => {
+            try {
+                const res = await scanner.clearWatchlist(style);
+                const c = res.cleared?.[style];
+                setCandidates(prev => prev.filter(x => x.style !== style || (execByCandidate[x.id]?.status === 'placed')));
+                toast.success('Watchlist cleared',
+                    `${c?.cleared ?? 0} setups cleared${c?.kept_with_orders ? `, ${c.kept_with_orders} with paper orders kept` : ''}. Rescanning…`);
+                const runId = res.scans?.[style]?.run_id;
+                if (runId) { setScanRun(runId); pollRun(runId); }
+                load();
+            } catch (err) {
+                toast.error("Couldn't clear the watchlist", errorText(err));
+            }
+        },
+        true,
+    );
 
     const runScan = async () => {
         try {
@@ -616,6 +639,9 @@ const ScannerScreen = () => {
                 right={<>
                     <IconButton label="Refresh results" onPress={() => { setRefreshing(true); load(); }}>
                         <RefreshCw size={18} color={colors.primary} />
+                    </IconButton>
+                    <IconButton label={`Clear the ${style} watchlist and rescan`} disabled={!!scanRun} onPress={clearAndRescan}>
+                        <Eraser size={18} color={colors.error} />
                     </IconButton>
                     <IconButton label={scanRun ? 'Scan running' : 'Run a new scan'} tone="primary" disabled={!!scanRun} onPress={runScan}>
                         {scanRun ? <ActivityIndicator color={colors.background} size="small" /> : <Radar size={18} color={colors.background} />}

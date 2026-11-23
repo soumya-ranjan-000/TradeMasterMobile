@@ -55,6 +55,7 @@ export { default as ShieldQuestion } from 'lucide-react-native/dist/esm/icons/sh
 export { default as Smartphone } from 'lucide-react-native/dist/esm/icons/smartphone.js';
 export { default as Target } from 'lucide-react-native/dist/esm/icons/target.js';
 export { default as Trash2 } from 'lucide-react-native/dist/esm/icons/trash-2.js';
+export { default as Eraser } from 'lucide-react-native/dist/esm/icons/eraser.js';
 export { default as TrendingDown } from 'lucide-react-native/dist/esm/icons/trending-down.js';
 export { default as TrendingUp } from 'lucide-react-native/dist/esm/icons/trending-up.js';
 export { default as User } from 'lucide-react-native/dist/esm/icons/user.js';
