@@ -4,6 +4,7 @@ import { LogOut, Bell, ChevronRight, BarChart3, PieChart, KeyRound, ScanLine, Lo
 import { TEST_USER_ID } from '../config';
 import { paperFetch, signOut, listSessions, revokeSession, changePin, authErrorText, serverDate, SessionInfo } from '../auth';
 import { toast } from '../components/Toast';
+import { getPaperAccountId } from '../paperAccount';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -62,8 +63,10 @@ const ProfileScreen = () => {
             setLoading(true);
             const finalId = (await AsyncStorage.getItem('USER_ID')) || TEST_USER_ID;
             setUserId(finalId);
+            // The paper card shows the account picked on Portfolio; the profile is the Trader ID's.
+            const accountId = await getPaperAccountId();
             const [accRes, profRes] = await Promise.all([
-                paperFetch(`/account/${finalId}`),
+                paperFetch(`/account/${encodeURIComponent(accountId)}`),
                 paperFetch(`/profile/${finalId}`),
             ]);
             if (accRes.ok) setAccount(await accRes.json());

@@ -175,6 +175,9 @@ export default function Readiness({ refreshKey = 0 }: { refreshKey?: number }) {
             {error && !loading && <RefreshFailed error={error} onRetry={load} />}
 
             <Container>
+                {!!data.book && (
+                    <Text className="text-text-muted text-xs font-semibold mb-1">Judging the {data.book.label} book · {data.book.paper_user_id}</Text>
+                )}
                 <Text className="text-text-primary text-[15px] font-black leading-5" accessibilityRole="summary">
                     Ready for real money: <Text style={{ color: headColor }}>{ready ? 'yes' : 'not yet'}</Text>
                     <Text className="text-text-secondary font-bold"> — {passed} of {total} check{total === 1 ? '' : 's'} pass</Text>

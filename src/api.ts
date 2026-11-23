@@ -420,7 +420,10 @@ export interface BridgeStatus {
     master_switch: boolean;
     mode: string;
     trigger: string;
-    paper_user_id: string;
+    paper_user_id: string;          // the default book's account (the lab once books are set)
+    /** Paper books (scanner.yaml `books`): which account each strategy's orders go to. */
+    books?: { name: string; label: string; paper_user_id: string; strategies: string[]; catch_all: boolean;
+              new_orders: boolean; max_orders_per_day: number; guard: 'watch' | 'enforce' }[];
     outbound_key_set: boolean;
     last_sync: Record<string, any> | null;
     /** What the scanner's paper account holds or has on order: "PNB|long" -> "position" | "pending order". */
@@ -585,6 +588,8 @@ export interface RiskGuardStatus {
     sector_cap_pct?: number | null;
     shadow_mode?: boolean;
     account?: string | null;
+    /** The paper book shown (newer backends; default: the lab). */
+    book?: { name: string; label: string; paper_user_id: string; guard: 'watch' | 'enforce' } | null;
     snapshot?: RiskSnapshot | null;
     events?: RiskGuardEvent[];          // newest first
 }
@@ -653,6 +658,8 @@ export interface Readiness {
     /** Earliest date every data-gathering check could pass at the recent pace. */
     earliest?: { date: string | null; basis: string; no_pace: string[]; also_needs: string[] };
     note?: string | null;
+    /** The paper book judged (newer backends; default: the real book). */
+    book?: { name: string; label: string; paper_user_id: string } | null;
 }
 export const getReadiness = () => backendJson<Readiness>('/scanner/readiness');
 

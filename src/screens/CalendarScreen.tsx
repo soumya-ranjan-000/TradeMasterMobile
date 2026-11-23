@@ -5,9 +5,8 @@ import { colors, signColor } from '../theme';
 import { inr, groupIN, istDate } from '../format';
 import { useFocusEffect } from '@react-navigation/native';
 import { ChevronLeft, ChevronRight } from '../icons';
-import { TEST_USER_ID } from '../config';
 import { paperFetch } from '../auth';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getPaperAccountId } from '../paperAccount';
 
 const CalendarScreen = () => {
     const [pnlData, setPnlData] = useState<Record<string, number>>({});
@@ -17,9 +16,8 @@ const CalendarScreen = () => {
     const fetchPnL = async () => {
         try {
             setLoading(true);
-            const savedId = await AsyncStorage.getItem('USER_ID');
-            const uid = savedId || TEST_USER_ID;
-            const res = await paperFetch(`/stats/daily/${uid}`);
+            const uid = await getPaperAccountId();      // Main, Lab or Real book (Portfolio picks it)
+            const res = await paperFetch(`/stats/daily/${encodeURIComponent(uid)}`);
             const data = await res.json();
             setPnlData(data);
         } catch (error) {

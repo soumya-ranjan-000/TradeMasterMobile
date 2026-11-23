@@ -213,6 +213,9 @@ const ScannerScreen = () => {
     const [universes, setUniverses] = useState<Record<ScanStyle, string>>({ intraday: 'nifty100', swing: 'nifty500' });
     const [marketOpen, setMarketOpen] = useState<boolean | null>(null);
     const [userId, setUserId] = useState(TEST_USER_ID);
+    // Your own account or one of your books ("<id>~lab", "<id>~real").
+    const mine = (id: string) => id === userId || id.startsWith(`${userId}~`);
+    const bookName = (id: string) => (id.endsWith('~lab') ? 'Lab' : id.endsWith('~real') ? 'Real' : id);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -357,7 +360,8 @@ const ScannerScreen = () => {
                 if (rec.status === 'placed') {
                     toast.success('Paper order placed',
                         `${c.symbol} ${c.direction.toUpperCase()} x${rec.request.quantity} @ ${rupee(rec.request.entry)} (${rec.request.entry_type})` +
-                        (rec.request.user_id !== userId ? ` · Note: placed in account "${rec.request.user_id}", not yours ("${userId}").` : ''));
+                        (rec.request.user_id && !mine(rec.request.user_id) ? ` · Note: placed in account "${rec.request.user_id}", not yours ("${userId}").`
+                            : rec.request.user_id && rec.request.user_id !== userId ? ` · In your ${bookName(rec.request.user_id)} book.` : ''));
                 } else {
                     toast.error(`Order ${rec.status}`, rec.error || 'See the Paper tab');
                 }
@@ -372,7 +376,8 @@ const ScannerScreen = () => {
             'Send to paper trading?',
             `${c.direction === 'long' ? 'BUY' : 'SELL'} ${c.quantity ?? '?'} ${c.symbol}\n` +
             `Entry ≤ ${rupee(c.direction === 'long' ? c.entry_high : c.entry_low)} • SL ${rupee(c.stop)} • Target ${rupee(target)}` +
-            (bridge && bridge.paper_user_id !== userId ? `\n\nAccount: "${bridge.paper_user_id}"` : ''),
+            ((bridge?.books?.length ?? 0) > 1 ? `\n\nGoes to its strategy's paper book.`
+                : bridge && bridge.paper_user_id !== userId ? `\n\nAccount: "${bridge.paper_user_id}"` : ''),
             'Send', go,
         );
     };
@@ -414,10 +419,14 @@ const ScannerScreen = () => {
         if (!bridge) return null;
         const allowed = bridge.allowed ?? bridge.master_switch;
         const on = (bridge.auto_switch ?? true) && allowed;
-        const otherAccount = bridge.paper_user_id !== userId;
+        const otherAccount = !mine(bridge.paper_user_id);
         const notes: string[] = [];
         if (!allowed) notes.push('Disabled on the server (SCANNER_AUTO_TRADE_ENABLED / execution.mode). Send to Paper still works.');
         if (otherAccount) notes.push(`Orders go to account "${bridge.paper_user_id}"; you are "${userId}".`);
+        const open = (bridge.books || []).filter(b => b.new_orders);
+        if (open.length > 1) notes.push('Orders go to your paper books by strategy: ' + open.map(b => b.catch_all
+            ? `${b.label}: every other strategy${b.max_orders_per_day ? `, ${b.max_orders_per_day}/day` : ', no daily cap'}`
+            : `${b.label}: ${b.strategies.length ? b.strategies.join(', ') : 'none yet'}`).join(' · ') + '. Pick the account on Portfolio.');
         if (!bridge.outbound_key_set) notes.push('Backend has no PAPER_TRADING_SERVICE_API_KEY.');
         return (
             <View className={`mx-6 mb-4 px-4 py-3 rounded-2xl border ${on ? 'bg-success/10 border-success/20' : 'bg-surface border-border/40'}`}>

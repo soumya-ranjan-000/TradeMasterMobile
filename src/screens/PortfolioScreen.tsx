@@ -12,8 +12,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Briefcase, ArrowUpRight, ArrowDownRight, History, Layers, Info, ShieldCheck, X, Target, TrendingUp, ChevronDown, ChevronRight, BarChart3, Clock, Lock } from '../icons';
 import { TEST_USER_ID } from '../config';
 import { paperFetch, serverDate } from '../auth';
+import { accountLabel, addFunds, getPaperAccountId, listAccounts, setPaperAccountId, type PaperAccountRow } from '../paperAccount';
 import { isExchangeOpen, getMarketSession, isHolidayToday, nextMarketOpen, MarketSession } from '../api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMarketData, useLivePrices, Tick } from '../context/MarketDataContext';
 import { useAppActive } from '../appState';
 import { usePositions } from '../context/PositionContext';
@@ -414,6 +414,11 @@ const PortfolioScreen = () => {
     // {IST date: realized P&L NET of charges}, from the paper service.
     const [dailyPnl, setDailyPnl] = useState<Record<string, number>>({});
     const [loading, setLoading] = useState(false);
+    // Main, Lab and Real book once the trader has books (see paperAccount.ts).
+    const [accounts, setAccounts] = useState<PaperAccountRow[]>([]);
+    const [fundsOpen, setFundsOpen] = useState(false);
+    const [fundsAmount, setFundsAmount] = useState('50000');
+    const [fundsBusy, setFundsBusy] = useState(false);
 
     const [modifyingPos, setModifyingPos] = useState<any>(null);
     const [newSL, setNewSL] = useState('');
@@ -498,10 +503,10 @@ const PortfolioScreen = () => {
     const fetchData = async (silent = false) => {
         try {
             if (!silent) setLoading(true);
-            const savedId = await AsyncStorage.getItem('USER_ID');
-            const uid = savedId || TEST_USER_ID;
+            const uid = await getPaperAccountId();      // Main, Lab or Real book
             setUserId(uid);
             getMarketSession().then(setSession).catch(() => { });
+            listAccounts().then(setAccounts).catch(() => { });
 
             // Positions are synced in parallel with the rest.
             const [ordRes, accRes, tRes, dRes] = await Promise.all([
@@ -533,6 +538,35 @@ const PortfolioScreen = () => {
             fetchData();
         }, [activeTab])
     );
+
+    /** Show and trade in another of the trader's accounts (positions reload via PositionContext). */
+    const switchAccount = async (id: string) => {
+        if (id === userId) return;
+        setFundsOpen(false);
+        // Never show one account's numbers under another's name while the new ones load.
+        setAccount(null); setOrders([]); setTrades([]); setDailyPnl({});
+        await setPaperAccountId(id);
+        fetchData();
+    };
+
+    const submitFunds = async () => {
+        const amount = Number(fundsAmount);
+        if (!Number.isFinite(amount) || amount <= 0 || amount > 1_000_000) {
+            toast.error('Enter an amount between ₹1 and ₹10,00,000');
+            return;
+        }
+        setFundsBusy(true);
+        try {
+            setAccount(await addFunds(userId, amount));
+            toast.success(`${inr(amount, { decimals: 0 })} added to the lab`);
+            setFundsOpen(false);
+            fetchData(true);
+        } catch (e: any) {
+            toast.error(e?.message || "Couldn't add funds");
+        } finally {
+            setFundsBusy(false);
+        }
+    };
 
     // Cash, orders, trades and today's realized P&L every 30s while this screen
     // is open (positions already poll in PositionContext). Before, they only
@@ -820,6 +854,21 @@ const PortfolioScreen = () => {
             {/* Summary: what the account is worth and how it splits */}
             <View className="px-5 mb-4">
                 <View className="bg-surface rounded-3xl border border-border p-4">
+                    {accounts.length > 1 && (
+                        <View className="flex-row bg-background rounded-xl p-1 mb-3" accessibilityRole="tablist">
+                            {accounts.map(a => {
+                                const active = a.user_id === userId;
+                                return (
+                                    <TouchableOpacity key={a.user_id} onPress={() => switchAccount(a.user_id)}
+                                        accessibilityRole="tab" accessibilityState={{ selected: active }}
+                                        accessibilityLabel={`${accountLabel(a)} account`}
+                                        className={`flex-1 py-1.5 rounded-lg items-center ${active ? 'bg-primary/20' : ''}`}>
+                                        <Text className={`text-xs font-bold ${active ? 'text-primary' : 'text-text-muted'}`}>{accountLabel(a)}</Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+                    )}
                     <Text className="text-text-muted text-xs font-semibold">Account value</Text>
                     <Text className="text-text-primary text-[28px] font-black mt-0.5" style={{ fontVariant: ['tabular-nums'] }}>
                         {sum.accountValue != null ? inr(sum.accountValue) : '—'}
@@ -844,6 +893,40 @@ const PortfolioScreen = () => {
                             </Text>
                         </View>
                     </View>
+                    {account?.kind === 'lab' && (
+                        <View className="mt-2">
+                            {!fundsOpen ? (
+                                <View className="flex-row items-center justify-between">
+                                    <Text className="text-text-muted text-xs font-semibold" style={{ fontVariant: ['tabular-nums'] }}>
+                                        {(account.net_deposits ?? 0) > 0 ? `Top-ups ${inr(account.net_deposits, { decimals: 0 })} · not profit` : 'Lab: virtual money for testing'}
+                                    </Text>
+                                    <TouchableOpacity onPress={() => setFundsOpen(true)} accessibilityRole="button" accessibilityLabel="Add funds to the lab">
+                                        <Text className="text-primary text-xs font-bold">+ Add funds</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ) : (
+                                <View>
+                                    <View className="flex-row items-center">
+                                        <Text className="text-text-muted text-xs font-semibold mr-2">Add ₹</Text>
+                                        <TextInput value={fundsAmount} onChangeText={setFundsAmount} keyboardType="number-pad"
+                                            accessibilityLabel="Amount to add"
+                                            className="flex-1 bg-background border border-border rounded-lg px-2 py-1.5 text-text-primary text-sm font-bold" />
+                                        <TouchableOpacity onPress={submitFunds} disabled={fundsBusy}
+                                            className="ml-2 bg-primary rounded-lg px-3 py-1.5" accessibilityRole="button">
+                                            {fundsBusy ? <ActivityIndicator size="small" color="#fff" /> : <Text className="text-white text-xs font-bold">Add</Text>}
+                                        </TouchableOpacity>
+                                        <TouchableOpacity onPress={() => setFundsOpen(false)} className="ml-2" accessibilityRole="button">
+                                            <Text className="text-text-muted text-xs font-bold">Cancel</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                    <Text className="text-text-muted text-[11px] mt-1.5">Virtual money for the lab only. Recorded as a top-up, so returns stay measured on the money put in.</Text>
+                                </View>
+                            )}
+                        </View>
+                    )}
+                    {account?.kind === 'real' && (
+                        <Text className="text-text-muted text-xs mt-2">Treated as real money: never topped up, never reset.</Text>
+                    )}
                     {reserved > 0 && (
                         <View className="flex-row items-center mt-2" accessibilityLabel={`${inr(reserved, { decimals: 0 })} held for pending orders, not included in cash`}>
                             <Lock size={11} color={colors.textMuted} />

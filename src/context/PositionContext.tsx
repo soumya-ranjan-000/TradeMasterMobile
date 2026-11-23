@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { TEST_USER_ID } from '../config';
 import { paperFetch } from '../auth';
+import { getPaperAccountId, onPaperAccountChange } from '../paperAccount';
 import { useAppActive } from '../appState';
 
 interface Position {
@@ -41,10 +40,9 @@ export const PositionProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const load = useCallback(async (silent: boolean) => {
         try {
             if (!silent) setLoading(true);
-            const savedId = await AsyncStorage.getItem('USER_ID');
-            const uid = savedId || TEST_USER_ID;
+            const uid = await getPaperAccountId();      // Main, Lab or Real book (Portfolio picks it)
 
-            const res = await paperFetch(`/positions/${uid}`);
+            const res = await paperFetch(`/positions/${encodeURIComponent(uid)}`);
             if (res.ok) {
                 const text = await res.text();
                 if (text !== lastSignature.current) {
@@ -61,6 +59,13 @@ export const PositionProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }, []);
 
     const refreshPositions = useCallback(() => load(false), [load]);
+
+    // Another account picked on Portfolio: drop the old list and load the new one now.
+    useEffect(() => onPaperAccountChange(() => {
+        lastSignature.current = null;
+        setPositions([]);
+        load(false);
+    }), [load]);
 
     useEffect(() => {
         // Paused in the background; on return to the foreground, refresh once and resume.

@@ -15,8 +15,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { TEST_USER_ID } from '../config';
 import { paperFetch } from '../auth';
+import { getPaperAccountId } from '../paperAccount';
 import { ChargeEstimate, DEFAULT_RULES, MarketRules, estimateCharges, getMarketRules } from '../api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLivePrice } from '../context/MarketDataContext';
 import { RootStackParamList, MainTabParamList } from '../navigation/RootNavigator';
 import { CompositeNavigationProp } from '@react-navigation/native';
@@ -97,8 +97,8 @@ const TradeScreen = () => {
 
     React.useEffect(() => {
         const init = async () => {
-            const savedId = await AsyncStorage.getItem('USER_ID');
-            if (savedId) setUserId(savedId);
+            // Orders go to the paper account picked on Portfolio (Main, Lab or Real book).
+            setUserId(await getPaperAccountId());
         };
         init();
     }, [symbol]);

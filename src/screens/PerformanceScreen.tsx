@@ -8,9 +8,8 @@ import StrategyScorecard from '../components/StrategyScorecard';
 import RiskGuard from '../components/RiskGuard';
 import Journal from '../components/Journal';
 import Readiness from '../components/Readiness';
-import { TEST_USER_ID } from '../config';
 import { paperFetch } from '../auth';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getPaperAccountId } from '../paperAccount';
 import Svg, { Path, Rect, Circle, G, Line, Text as SvgText, Defs, LinearGradient as SVGGradiant, Stop } from 'react-native-svg';
 
 const { width } = Dimensions.get('window');
@@ -31,8 +30,7 @@ const PerformanceScreen = () => {
     const fetchAnalytics = async () => {
         try {
             setLoading(true);
-            const savedId = await AsyncStorage.getItem('USER_ID');
-            const uid = savedId || TEST_USER_ID;
+            const uid = await getPaperAccountId();      // Main, Lab or Real book (Portfolio picks it)
 
             // Closed trades, NET of charges (paper service /analytics).
             const res = await paperFetch(`/analytics/${encodeURIComponent(uid)}`);

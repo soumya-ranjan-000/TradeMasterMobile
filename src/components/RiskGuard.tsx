@@ -124,8 +124,11 @@ export default function RiskGuard({ refreshKey = 0 }: { refreshKey?: number }) {
             {error && !loading && <RefreshFailed error={error} onRetry={load} />}
 
             <Text className="text-text-muted text-xs font-semibold mb-3 leading-4">
+                {data?.book ? `${data.book.label} book · ` : ''}
                 {shadow
-                    ? 'Shadow mode: the guard only records orders it would have blocked. Nothing is stopped.'
+                    ? (data?.book?.guard === 'watch'
+                        ? 'Watch mode: every check runs and is saved on the order, nothing is stopped.'
+                        : 'Shadow mode: the guard only records orders it would have blocked. Nothing is stopped.')
                     : 'The guard blocks orders that would break a limit.'}
             </Text>
 
