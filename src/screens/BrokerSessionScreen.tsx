@@ -1,17 +1,20 @@
 /**
  * ICICI Breeze session, renewed from the phone.
  *
- * The session expires daily. "Log in to ICICI" opens the ICICI login inside the
- * app; when ICICI sends the browser on with `?apisession=…`, the screen catches
- * that address before it loads, hands the value to the backend (which relays it
- * to the Breeze service) and shows the fresh status. If ICICI won't log in
- * inside the app, open it in the browser and paste the value (or the whole
- * address) instead.
+ * The session expires daily. Two ways to log in, both hands-free once the ICICI
+ * app's Redirect URL is the backend's /broker/return page:
+ *   browser  the ICICI login opens in the phone's browser; /broker/return sends
+ *            it back with trademaster://broker-session?apisession=… (RootNavigator
+ *            opens this screen with that param and it is applied here);
+ *   in app   a WebView; any address carrying apisession= (ICICI's own redirect,
+ *            or /broker/return's link back) is caught before it loads.
+ * Either way the value goes to the backend (which relays it to the Breeze service)
+ * with this phone's sign-in. Last resort: paste the value or the whole address.
  */
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, ActivityIndicator, Linking, ScrollView, StatusBar, RefreshControl } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, useRoute, type RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AlertTriangle, CheckCircle2, CloudOff, KeyRound, X } from '../icons';
 import { RootStackParamList } from '../navigation/RootNavigator';
@@ -21,6 +24,10 @@ import { colors } from '../theme';
 import { toast } from '../components/Toast';
 import { haptic } from '../haptics';
 import { ago } from '../format';
+import { ORCHESTRATOR_URL } from '../config';
+
+/** What the ICICI app's Redirect URL must be for the hands-free return (backend, public page). */
+const RETURN_URL = `${ORCHESTRATOR_URL}/broker/return`;
 
 const LOOK: Record<BrokerSession['state'], { label: string; color: string; Icon: typeof CheckCircle2 }> = {
     live: { label: 'Live', color: colors.success, Icon: CheckCircle2 },
@@ -44,6 +51,7 @@ const hoursLeft = (s: number | null) =>
 
 const BrokerSessionScreen = () => {
     const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+    const route = useRoute<RouteProp<RootStackParamList, 'BrokerSession'>>();
     const [status, setStatus] = useState<BrokerSession | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -84,6 +92,18 @@ const BrokerSessionScreen = () => {
             setApplying(false);
         }
     }, []);
+
+    // Back from the browser: trademaster://broker-session?apisession=… (see RootNavigator).
+    const fromLink = route.params?.apisession;
+    const appliedLink = useRef<string | null>(null);
+    useEffect(() => {
+        if (!fromLink || appliedLink.current === fromLink) return;
+        appliedLink.current = fromLink;
+        captured.current = true;
+        setLoginUrl(null);
+        apply(fromLink);
+        navigation.setParams({ apisession: undefined });
+    }, [fromLink, apply, navigation]);
 
     const openLogin = async (where: 'app' | 'browser') => {
         setOpening(where);
@@ -161,28 +181,42 @@ const BrokerSessionScreen = () => {
                     {!!error && !!status && <Text className="text-error text-xs mt-2">{error}</Text>}
                 </Card>
 
-                <Pressable onPress={() => openLogin('app')} disabled={!!opening || applying} accessibilityRole="button"
+                <Pressable onPress={() => openLogin('browser')} disabled={!!opening || applying} accessibilityRole="button"
                     className="py-4 rounded-2xl items-center bg-primary active:opacity-80 mb-3"
                     style={{ opacity: opening || applying ? 0.6 : 1 }}>
-                    {opening === 'app' || applying
+                    {opening === 'browser' || applying
                         ? <ActivityIndicator color={colors.background} />
                         : <Text className="text-background font-black text-[15px]">
-                            {status?.state === 'live' ? 'Renew: log in to ICICI' : 'Log in to ICICI'}
+                            {status?.state === 'live' ? 'Renew: log in with the browser' : 'Log in to ICICI with the browser'}
                         </Text>}
                 </Pressable>
+                <Pressable onPress={() => openLogin('app')} disabled={!!opening || applying} accessibilityRole="button"
+                    className="py-3.5 rounded-2xl items-center border border-border active:opacity-70 mb-3"
+                    style={{ opacity: opening || applying ? 0.6 : 1 }}>
+                    {opening === 'app'
+                        ? <ActivityIndicator color={colors.primary} />
+                        : <Text className="text-primary font-bold">Log in inside the app</Text>}
+                </Pressable>
                 <Text className="text-text-muted text-xs leading-4 mb-6">
-                    ICICI asks for your user ID, password and OTP. When you finish, the app picks up the new session
-                    by itself. Nothing is stored on the phone.
+                    ICICI asks for your user ID, password and OTP. When you finish, you come back here and the new session
+                    is applied by itself. Nothing is stored on the phone.
                 </Text>
 
-                <SectionLabel>If the login won't work in the app</SectionLabel>
+                <SectionLabel>One-time setup for the hands-free return</SectionLabel>
                 <Card className="mb-6">
-                    <Pressable onPress={() => openLogin('browser')} disabled={!!opening} accessibilityRole="button"
-                        className="py-3 rounded-xl items-center border border-border active:opacity-70 mb-3">
-                        {opening === 'browser'
-                            ? <ActivityIndicator color={colors.primary} />
-                            : <Text className="text-primary font-bold">Open the ICICI login in the browser</Text>}
-                    </Pressable>
+                    <Text className="text-text-secondary text-xs leading-5">
+                        In the ICICI Breeze API portal, set your app&apos;s Redirect URL to:
+                    </Text>
+                    <Text selectable className="text-text-primary text-xs font-bold mt-1.5 mb-1.5" style={{ fontVariant: ['tabular-nums'] }}>
+                        {RETURN_URL}
+                    </Text>
+                    <Text className="text-text-muted text-xs leading-4">
+                        Long-press to copy. Until then, the login inside the app still works, or paste the value below.
+                    </Text>
+                </Card>
+
+                <SectionLabel>Last resort: paste it</SectionLabel>
+                <Card className="mb-6">
                     <Text className="text-text-muted text-xs mb-2 leading-4">
                         After logging in, copy the address of the page ICICI opens (it contains apisession=…), or just the
                         value, and paste it here.

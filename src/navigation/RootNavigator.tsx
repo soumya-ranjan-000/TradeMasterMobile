@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Linking } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { NavigationContainer, DarkTheme, createNavigationContainerRef } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme';
 import { restoreSession, onSignedOut } from '../auth';
 import { toast } from '../components/Toast';
+import { apiSessionFrom } from '../api';
 
 import DashboardScreen from '../screens/DashboardScreen';
 import WatchlistScreen from '../screens/WatchlistScreen';
@@ -37,7 +38,8 @@ export type RootStackParamList = {
     DetailedAnalysis: { symbol: string; analysis: any };
     ScanLogin: undefined;
     Briefing: undefined;
-    BrokerSession: undefined;
+    /** apisession: a session value handed back by the ICICI login (trademaster://broker-session?apisession=…). */
+    BrokerSession: { apisession?: string } | undefined;
 };
 
 export type MainTabParamList = {
@@ -193,6 +195,27 @@ const RootNavigator = () => {
     }, []);
     useEffect(() => onSignedOut(goToLogin), [goToLogin]);
 
+    // trademaster://broker-session?apisession=… : the ICICI login (via the backend's
+    // /broker/return page) handing a new Breeze session back. Opens the renewal screen,
+    // which applies it with this phone's sign-in; never skips the sign-in screen.
+    const pendingLink = useRef<string | null>(null);
+    const openLink = useCallback((url: string | null) => {
+        if (!url || !/^trademaster:\/\/broker-session/i.test(url)) return;
+        if (!navigationRef.isReady()) { pendingLink.current = url; return; }
+        pendingLink.current = null;
+        const root = navigationRef.getRootState();
+        if (root?.routes?.[root.index ?? 0]?.name === 'Login') {
+            toast.info('Sign in first', 'Then renew the ICICI session from Profile.');
+            return;
+        }
+        navigationRef.navigate('BrokerSession', { apisession: apiSessionFrom(url) ?? undefined });
+    }, []);
+    useEffect(() => {
+        Linking.getInitialURL().then(openLink).catch(() => { });
+        const sub = Linking.addEventListener('url', e => openLink(e.url));
+        return () => sub.remove();
+    }, [openLink]);
+
     if (!initialRoute) {
         return (
             <View style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }}>
@@ -203,7 +226,10 @@ const RootNavigator = () => {
 
     return (
         <NavigationContainer theme={TradeMasterTheme} ref={navigationRef}
-            onReady={() => { if (pendingSignOut.current) goToLogin(); }}>
+            onReady={() => {
+                if (pendingSignOut.current) goToLogin();
+                else if (pendingLink.current) openLink(pendingLink.current);
+            }}>
             <Stack.Navigator
                 initialRouteName={initialRoute}
                 screenOptions={{
