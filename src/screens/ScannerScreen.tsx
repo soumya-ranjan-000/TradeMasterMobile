@@ -590,7 +590,9 @@ const ScannerScreen = () => {
     }, [candidates]);
     // A stock with a placed paper order (pending or filled) leaves Ideas and
     // shows under Paper instead, like the web watchlist.
-    const ideaGroups = groups.filter(g => !g.all.some(x => execByCandidate[x.id]?.status === 'placed'));
+    const ideaGroups = groups.filter(g => !g.all.some(x => execByCandidate[x.id]?.status === 'placed')
+        // held or on order in the paper account on this side (manual orders too)
+        && !holdingOf(bridge, g.best.symbol, g.best.direction)?.same);
     const sideGroups = ideaGroups.filter(g => g.best.direction === side);
     // Stable per bridge refresh, so the memoized rows don't re-render on every pass.
     const holdingByKey = React.useMemo(() => {
