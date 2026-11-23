@@ -420,6 +420,8 @@ export interface BridgeStatus {
     paper_user_id: string;
     outbound_key_set: boolean;
     last_sync: Record<string, any> | null;
+    /** What the scanner's paper account holds or has on order: "PNB|long" -> "position" | "pending order". */
+    holdings?: Record<string, string>;
 }
 
 export interface ScanRun {

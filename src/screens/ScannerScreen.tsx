@@ -90,10 +90,22 @@ const renderExecBadge = (e?: ScanExecution) => {
 };
 
 /** One stock+side row; memoized so the list only re-renders rows whose data changed. */
-const ScanRow = React.memo(({ g, open, exec, onToggle, children }: {
+/** The paper account already has this stock (same side: don't add; other side: don't hedge). */
+type Holding = { side: 'long' | 'short'; what: string; same: boolean } | null;
+function holdingOf(bridge: BridgeStatus | null, symbol: string, direction: 'long' | 'short'): Holding {
+    const sym = symbol.toUpperCase().replace(/\.(NS|BO)$/, '');
+    const h = bridge?.holdings ?? {};
+    const other = direction === 'long' ? 'short' : 'long';
+    if (h[`${sym}|${direction}`]) return { side: direction, what: h[`${sym}|${direction}`], same: true };
+    if (h[`${sym}|${other}`]) return { side: other, what: h[`${sym}|${other}`], same: false };
+    return null;
+}
+
+const ScanRow = React.memo(({ g, open, exec, holding, onToggle, children }: {
     g: StockGroup;
     open: boolean;
     exec?: ScanExecution;
+    holding?: Holding;
     onToggle: (key: string) => void;
     /** The expanded strategy cards (only for the open row). */
     children?: React.ReactNode;
@@ -115,6 +127,13 @@ const ScanRow = React.memo(({ g, open, exec, onToggle, children }: {
                                 {ready ? 'Ready' : 'Waiting'}
                             </Text>
                         </View>
+                        {holding && (
+                            <View className="px-1.5 py-0.5 rounded-md ml-1.5" style={{ backgroundColor: holding.same ? '#3B82F620' : '#F59E0B20' }}>
+                                <Text className="text-[11px] font-black uppercase" style={{ color: holding.same ? '#3B82F6' : '#F59E0B' }}>
+                                    {holding.same ? 'Holding' : `Holding ${holding.side}`}
+                                </Text>
+                            </View>
+                        )}
                     </View>
                     <View className="flex-row items-center">
                         <Text className="text-text-primary font-black text-base mr-1">{Math.round(c.score)}</Text>
@@ -371,7 +390,9 @@ const ScannerScreen = () => {
     const renderCandidate = (c: ScanCandidate, best: ScanCandidate, multi: boolean) => {
         const long = c.direction === 'long';
         const exec = execByCandidate[c.id];
-        const canSend = !exec || exec.status === 'failed' || exec.status === 'rejected';
+        // Only a placed order blocks a send; a cancelled one can go again.
+        const holding = holdingOf(bridge, c.symbol, c.direction);
+        const canSend = (!exec || exec.status !== 'placed') && !holding;
         const swingShort = c.style === 'swing' && !long;
         const ownLevels = c.stop !== best.stop || c.targets?.[0] !== best.targets?.[0];
         return (
@@ -429,7 +450,9 @@ const ScannerScreen = () => {
                     >
                         {sending === c.id ? <ActivityIndicator color="white" size="small" /> : <Send size={14} color="white" />}
                         <Text className="text-white font-black text-xs uppercase ml-2">
-                            {swingShort ? 'Swing shorts not tradable' : canSend ? 'Send to Paper' : 'Already sent'}
+                            {swingShort ? 'Swing shorts not tradable'
+                                : holding ? (holding.same ? 'Already holding' : `Holding ${holding.side}`)
+                                : canSend ? 'Send to Paper' : 'Already sent'}
                         </Text>
                     </TouchableOpacity>
                 </View>
@@ -482,17 +505,27 @@ const ScannerScreen = () => {
         Object.values(m).forEach(g => g.all.sort((a, b) => rank(b) - rank(a)));
         return Object.values(m).sort((a, b) => rank(b.best) - rank(a.best));
     }, [candidates]);
-    const sideGroups = groups.filter(g => g.best.direction === side);
+    // A stock with a placed paper order (pending or filled) leaves Ideas and
+    // shows under Paper instead, like the web watchlist.
+    const ideaGroups = groups.filter(g => !g.all.some(x => execByCandidate[x.id]?.status === 'placed'));
+    const sideGroups = ideaGroups.filter(g => g.best.direction === side);
+    // Stable per bridge refresh, so the memoized rows don't re-render on every pass.
+    const holdingByKey = React.useMemo(() => {
+        const m: Record<string, Holding> = {};
+        groups.forEach(g => { m[g.key] = holdingOf(bridge, g.best.symbol, g.best.direction); });
+        return m;
+    }, [groups, bridge]);
     const shown = sideGroups.filter(g =>
         signal === 'ALL' || (signal === 'READY') === (g.best.status === 'qualified'));
-    const count = (d: Side) => groups.filter(g => g.best.direction === d).length;
+    const count = (d: Side) => ideaGroups.filter(g => g.best.direction === d).length;
     const readyCount = sideGroups.filter(g => g.best.status === 'qualified').length;
 
     // Virtualized list: the swing universe can yield hundreds of rows.
     const renderOpportunity = ({ item: g }: { item: StockGroup }) => {
         const open = expanded === g.key;
         return (
-            <ScanRow g={g} open={open} exec={g.all.map(x => execByCandidate[x.id]).find(Boolean)} onToggle={toggleRow}>
+            <ScanRow g={g} open={open} exec={g.all.map(x => execByCandidate[x.id]).find(Boolean)}
+                holding={holdingByKey[g.key]} onToggle={toggleRow}>
                 {open ? g.all.map(c => renderCandidate(c, g.best, g.all.length > 1)) : null}
             </ScanRow>
         );
