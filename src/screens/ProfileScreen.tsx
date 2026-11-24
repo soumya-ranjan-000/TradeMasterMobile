@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, ScrollView, Pressable, RefreshControl, StatusBar, TextInput, ActivityIndicator } from 'react-native';
-import { LogOut, Bell, ChevronRight, BarChart3, PieChart, KeyRound, ScanLine, Lock, Smartphone, Monitor, Landmark } from '../icons';
-import { broker, type BrokerSession } from '../api';
+import { LogOut, Bell, ChevronRight, BarChart3, PieChart, KeyRound, ScanLine, Lock, Smartphone, Monitor, Landmark, Activity } from '../icons';
+import { broker, lastSystemStatus, type BrokerSession } from '../api';
 import { TEST_USER_ID } from '../config';
 import { paperFetch, signOut, listSessions, revokeSession, changePin, authErrorText, serverDate, SessionInfo } from '../auth';
 import { toast } from '../components/Toast';
@@ -13,6 +13,7 @@ import { RootStackParamList } from '../navigation/RootNavigator';
 import { ScreenHeader, Card, SectionLabel, Skeleton, confirmAction } from '../ui';
 import { colors, signColor } from '../theme';
 import { inr, ago } from '../format';
+import { STATUS_LOOK } from './SystemStatusScreen';
 
 /** Paper-trading account from the paper trading service (/account/{id}). */
 interface AccountData {
@@ -169,6 +170,8 @@ const ProfileScreen = () => {
         </View>
     );
 
+    const sys = lastSystemStatus();
+
     return (
         <View className="flex-1 bg-background">
             <StatusBar barStyle="light-content" />
@@ -227,6 +230,18 @@ const ProfileScreen = () => {
                                  not_set: 'Not set · tap to log in to ICICI', unreachable: "Can't check right now · tap to open" })[brokerStatus.state]
                             : brokerError ? `Status unavailable · ${brokerError}` : 'Checking…'}
                         onPress={() => navigation.navigate('BrokerSession')} />
+                </View>
+
+                <SectionLabel>System</SectionLabel>
+                <View className="bg-surface rounded-3xl border border-border mb-6 overflow-hidden">
+                    {/* Shows the last check this app run made; opening the screen checks (it wakes sleeping services). */}
+                    <Row
+                        icon={<Activity size={18} color={sys ? STATUS_LOOK[sys.overall].color : colors.textSecondary} />}
+                        title="System status"
+                        subtitle={sys
+                            ? `${STATUS_LOOK[sys.overall].label} · checked ${ago(serverDate(sys.checked_at))}`
+                            : 'Health of every TradeMaster service'}
+                        onPress={() => navigation.navigate('SystemStatus')} />
                 </View>
 
                 <SectionLabel>Security</SectionLabel>

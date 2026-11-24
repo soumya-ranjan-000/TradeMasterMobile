@@ -25,6 +25,7 @@ import ScannerScreen from '../screens/ScannerScreen';
 import ScanLoginScreen from '../screens/ScanLoginScreen';
 import BriefingScreen from '../screens/BriefingScreen';
 import BrokerSessionScreen from '../screens/BrokerSessionScreen';
+import SystemStatusScreen from '../screens/SystemStatusScreen';
 
 // Types for Navigation
 export type RootStackParamList = {
@@ -40,6 +41,7 @@ export type RootStackParamList = {
     Briefing: undefined;
     /** apisession: a session value handed back by the ICICI login (trademaster://broker-session?apisession=…). */
     BrokerSession: { apisession?: string } | undefined;
+    SystemStatus: undefined;
 };
 
 export type MainTabParamList = {
@@ -284,6 +286,11 @@ const RootNavigator = () => {
                 <Stack.Screen
                     name="Briefing"
                     component={BriefingScreen}
+                    options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                    name="SystemStatus"
+                    component={SystemStatusScreen}
                     options={{ headerShown: false }}
                 />
             </Stack.Navigator>

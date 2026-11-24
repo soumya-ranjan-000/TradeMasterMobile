@@ -3,7 +3,8 @@
  * authenticated with BACKEND_API_KEY. Responses are normalised to the shapes
  * the screens already consume (they were written against the Breeze service).
  */
-import { BACKEND_API_KEY, ORCHESTRATOR_URL, ORCHESTRATOR_WS_URL } from './config';
+import { Platform } from 'react-native';
+import { API_URL, BACKEND_API_KEY, ORCHESTRATOR_URL, ORCHESTRATOR_WS_URL } from './config';
 import { getToken, paperFetch } from './auth';
 
 export class ApiError extends Error {
@@ -765,3 +766,115 @@ export function apiSessionFrom(url: string | null | undefined): string | null {
     return m ? m[1] : null;
 }
 
+
+// --- system status (health of every TradeMaster service) -----------------------------
+// Same data as the web's System Status drawer: the backend runs the checks
+// (GET /system/status, cached there for 60 s; refresh=true re-checks at most
+// every 10 s). Every check wakes sleeping free-plan Render services and spends
+// their free hours, so the app checks only while the System Status screen is open.
+export type ServiceState = 'ok' | 'degraded' | 'down' | 'sleeping' | 'unconfigured';
+
+export interface ServiceStatus {
+    key: string;
+    name: string;
+    role: string;
+    state: ServiceState;
+    detail: string;
+    url: string | null;
+    dashboard_url: string | null;
+    dashboard_label: string;
+    latency_ms: number;
+}
+
+export interface SystemStatus {
+    overall: 'ok' | 'degraded' | 'down';
+    checked_at: string;
+    active_window: boolean;
+    cached?: boolean;
+    age_s?: number;
+    /** True when the backend was unreachable and these are the phone's own basic /health pings. */
+    fallback?: boolean;
+    services: ServiceStatus[];
+}
+
+/** Mon-Fri 08:00-16:00 IST: the backend's "active window" (outside it, silent Render services are asleep, not down). */
+export function inStatusWindow(now: Date = new Date()): boolean {
+    const ist = new Date(now.getTime() + IST_OFFSET_MIN * 60_000);
+    const day = ist.getUTCDay();
+    const h = ist.getUTCHours();
+    return day >= 1 && day <= 5 && h >= 8 && h < 16;
+}
+
+let lastStatus: SystemStatus | null = null;
+/** The last status this app run fetched (null if none yet). Lets other screens show it without waking services. */
+export const lastSystemStatus = () => lastStatus;
+
+export async function getSystemStatus(refresh = false): Promise<SystemStatus> {
+    const s = await backendJson<SystemStatus>(`/system/status${refresh ? '?refresh=true' : ''}`);
+    lastStatus = s;
+    return s;
+}
+
+// Fallback when the backend itself can't be reached: ping each service's PUBLIC
+// /health straight from the phone (no keys, up/down only, no deep checks). Same
+// list and wording as the web's app/api/status-fallback. Not on web builds,
+// where the browser's CORS rules would make every ping look like a failure.
+const PING_TIMEOUT_MS = 5000;
+const FALLBACK_SERVICES: { key: string; name: string; role: string; url: string; dashboard: string }[] = [
+    { key: 'backend', name: 'Backend API', role: 'Orchestrator, scanner, research chat', url: ORCHESTRATOR_URL, dashboard: '/dashboard' },
+    { key: 'breeze', name: 'Breeze (ICICI) interface', role: 'Live prices, history, broker session',
+        url: 'https://icici-dirct-breeze-api-interface.onrender.com', dashboard: '/dashboard' },
+    { key: 'economic', name: 'Economic events', role: 'No-trade windows and halts',
+        url: 'https://trademaster-economic-events-service.onrender.com', dashboard: '/dashboard/' },
+    { key: 'sentiment', name: 'Global sentiment', role: 'Market and sector bias',
+        url: 'https://trademaster-global-sentiment-service-n981.onrender.com', dashboard: '/dashboard' },
+    { key: 'paper', name: 'Paper trading', role: 'Simulated orders and portfolio',
+        url: API_URL.replace(/\/api\/v1\/?$/, ''), dashboard: '/docs' },
+];
+
+async function pingHealth(base: string, active: boolean): Promise<Pick<ServiceStatus, 'state' | 'detail' | 'latency_ms'>> {
+    const started = Date.now();
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), PING_TIMEOUT_MS);
+    try {
+        const res = await fetch(`${base}/health`, { signal: ctl.signal });
+        const latency_ms = Date.now() - started;
+        const routing = res.headers.get('x-render-routing') || '';
+        if (routing.startsWith('suspend')) {
+            return { state: 'down', detail: `Suspended on Render (${routing}): resume it in the Render dashboard.`, latency_ms };
+        }
+        if (res.ok) return { state: 'ok', detail: 'Answering /health (basic check only).', latency_ms };
+        return { state: 'down', detail: `/health answered HTTP ${res.status}.`, latency_ms };
+    } catch (e: any) {
+        const why = e?.name || 'error';
+        const latency_ms = Date.now() - started;
+        if (!active && base.includes('onrender.com')) {
+            return { state: 'sleeping', detail: `No answer in ${PING_TIMEOUT_MS / 1000}s (${why}). Outside market hours a free Render service sleeps; this check wakes it.`, latency_ms };
+        }
+        return { state: 'down', detail: `No answer in ${PING_TIMEOUT_MS / 1000}s (${why}).`, latency_ms };
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+/** Basic up/down pings from the phone, or null where that isn't possible (web builds). */
+export async function getFallbackSystemStatus(): Promise<SystemStatus | null> {
+    if (Platform.OS === 'web') return null;
+    const now = new Date();
+    const active = inStatusWindow(now);
+    const services = await Promise.all(FALLBACK_SERVICES.map(async s => {
+        const base = s.url.replace(/\/+$/, '');
+        return {
+            key: s.key, name: s.name, role: s.role, ...(await pingHealth(base, active)), url: base,
+            dashboard_url: `${base}${s.dashboard}`,
+            dashboard_label: s.dashboard === '/docs' ? 'API docs' : 'Dashboard',
+        };
+    }));
+    return {
+        overall: services.some(s => s.state === 'down') ? 'down' : 'ok',
+        checked_at: now.toISOString(),
+        active_window: active,
+        fallback: true,
+        services,
+    };
+}
