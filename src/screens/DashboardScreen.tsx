@@ -198,27 +198,23 @@ const DashboardScreen = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isFocused, userId]);
 
-    const subscribedWatchlistSymbols = React.useRef<Set<string>>(new Set());
+    // Keyed on the sorted symbol list: subscribe/unsubscribe and `watchlists` change
+    // identity on every tick/refresh, and re-running unsubscribed + resubscribed
+    // every symbol each time (the 25 Nov 2026 subscription storm).
+    const subRef = React.useRef({ subscribe, unsubscribe });
+    subRef.current = { subscribe, unsubscribe };
+    const watchlistSymbolsKey = React.useMemo(() => {
+        const allSymbols = new Set<string>();
+        watchlists.forEach(wl => wl.symbols?.forEach((sym: string) => allSymbols.add(sym)));
+        return Array.from(allSymbols).sort().join(',');
+    }, [watchlists]);
 
     useEffect(() => {
-        if (isFocused && activeCategory === 'Watchlists' && watchlists.length > 0) {
-            const allSymbols = new Set<string>();
-            watchlists.forEach(wl => wl.symbols?.forEach((sym: string) => allSymbols.add(sym)));
-            allSymbols.forEach(sym => {
-                if (!subscribedWatchlistSymbols.current.has(sym)) {
-                    subscribe(sym);
-                    subscribedWatchlistSymbols.current.add(sym);
-                }
-            });
-            return () => {
-                subscribedWatchlistSymbols.current.forEach(sym => unsubscribe(sym));
-                subscribedWatchlistSymbols.current.clear();
-            };
-        } else if (subscribedWatchlistSymbols.current.size > 0) {
-            subscribedWatchlistSymbols.current.forEach(sym => unsubscribe(sym));
-            subscribedWatchlistSymbols.current.clear();
-        }
-    }, [isFocused, activeCategory, watchlists, subscribe, unsubscribe]);
+        if (!isFocused || activeCategory !== 'Watchlists' || !watchlistSymbolsKey) return;
+        const syms = watchlistSymbolsKey.split(',');
+        syms.forEach(sym => subRef.current.subscribe(sym));
+        return () => syms.forEach(sym => subRef.current.unsubscribe(sym));
+    }, [isFocused, activeCategory, watchlistSymbolsKey]);
 
     useEffect(() => {
         const init = async () => {

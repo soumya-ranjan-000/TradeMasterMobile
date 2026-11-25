@@ -104,17 +104,26 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }, [alerts]);
 
     // 2. Subscribe to all relevant symbols
-    useEffect(() => {
+    // Keyed on the sorted symbol LIST, not on the arrays or the subscribe functions:
+    // those change identity on every positions refresh and every tick, and each
+    // re-run unsubscribed and resubscribed every symbol. On 25 Nov 2026 that churned
+    // the backend's Breeze subscriptions many times a second.
+    const subRef = useRef({ subscribe, unsubscribe, setBackgroundWatch });
+    subRef.current = { subscribe, unsubscribe, setBackgroundWatch };
+    const watchedSymbolsKey = useMemo(() => {
         const symbols = new Set<string>();
         alerts.filter(a => a.active && !a.isTriggered).forEach(a => symbols.add(a.symbol));
         positions.forEach(p => symbols.add(p.symbol));
-
-        symbols.forEach(sym => subscribe(sym));
+        return Array.from(symbols).sort().join(',');
+    }, [alerts, positions]);
+    useEffect(() => {
+        const symbols = watchedSymbolsKey ? watchedSymbolsKey.split(',') : [];
+        symbols.forEach(sym => subRef.current.subscribe(sym));
         // Active alerts or open positions: keep ticks flowing in the background so
         // alert and SL/target notifications still fire (as before the AppState change).
-        setBackgroundWatch(symbols.size > 0);
-        return () => symbols.forEach(sym => unsubscribe(sym));
-    }, [alerts, positions, subscribe, unsubscribe, setBackgroundWatch]);
+        subRef.current.setBackgroundWatch(symbols.length > 0);
+        return () => symbols.forEach(sym => subRef.current.unsubscribe(sym));
+    }, [watchedSymbolsKey]);
 
     // 3. Client-side monitoring logic (Alerts & Positions). Runs when alerts or
     // positions change and when a watched symbol's price changes, without
