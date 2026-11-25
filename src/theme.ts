@@ -19,6 +19,8 @@ export const colors = {
     success: '#00E0A1',
     error: '#FF4D4D',
     warning: '#FBBF24',
+    intraday: '#60A5FA',
+    swing: '#C084FC',
     tabBar: '#161A20',
 } as const;
 

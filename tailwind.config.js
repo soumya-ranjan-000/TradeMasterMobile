@@ -22,6 +22,9 @@ module.exports = {
                 success: "#00E0A1",
                 error: "#FF4D4D",
                 warning: "#FBBF24",
+                // How a position is held: never red/green, which mean P&L and side.
+                intraday: "#60A5FA", // MIS, squared off at 15:25
+                swing: "#C084FC",    // CNC (delivery), held overnight
                 border: "#2A2E39",
             },
         },

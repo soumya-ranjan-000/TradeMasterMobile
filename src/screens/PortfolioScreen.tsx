@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { toast } from '../components/Toast';
 import { ScreenHeader, IconButton, confirmAction } from '../ui';
 import { colors, signColor } from '../theme';
@@ -13,13 +13,46 @@ import { Briefcase, ArrowUpRight, ArrowDownRight, History, Layers, Info, ShieldC
 import { TEST_USER_ID } from '../config';
 import { paperFetch, serverDate } from '../auth';
 import { accountLabel, addFunds, getPaperAccountId, listAccounts, setPaperAccountId, type PaperAccountRow } from '../paperAccount';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isExchangeOpen, getMarketSession, isHolidayToday, nextMarketOpen, MarketSession } from '../api';
 import { useMarketData, useLivePrices, Tick } from '../context/MarketDataContext';
 import { useAppActive } from '../appState';
 import { usePositions } from '../context/PositionContext';
 
+// --- intraday or swing --------------------------------------------------------------
+// INTRADAY (MIS) is squared off automatically at 15:25; DELIVERY (CNC) is held
+// overnight: the swing strategies, results_drift and the monthly rotation.
+// Rows saved before products existed were all intraday.
+type TradeStyle = 'intraday' | 'swing';
+type StyleFilter = 'all' | TradeStyle;
+const STYLE_FILTER_KEY = 'PORTFOLIO_STYLE_FILTER';
+const tradeStyle = (product?: string | null): TradeStyle => (product === 'DELIVERY' ? 'swing' : 'intraday');
+const STYLE_LABEL: Record<TradeStyle, string> = { intraday: 'Intraday', swing: 'Swing' };
+const STYLE_HINT: Record<TradeStyle, string> = {
+    intraday: 'Intraday: squared off automatically at 15:25',
+    swing: 'Swing: held overnight',
+};
+
+const StyleBadge = ({ product, short }: { product?: string | null; short?: boolean }) => {
+    const style = tradeStyle(product);
+    const cls = style === 'swing' ? 'text-swing bg-swing/10 border-swing/30' : 'text-intraday bg-intraday/10 border-intraday/30';
+    return (
+        <Text accessibilityLabel={`${STYLE_HINT[style]}${short ? ', short' : ''}`}
+            className={`text-[11px] font-black px-1.5 py-0.5 rounded border uppercase ${cls}`}>
+            {STYLE_LABEL[style]}{short ? ' • SHORT' : ''}
+        </Text>
+    );
+};
+
+const ScannerTag = ({ source, strategy, className = '' }: { source?: string | null; strategy?: string | null; className?: string }) =>
+    source === 'scanner' ? (
+        <Text className={`text-primary text-[11px] font-black px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20 ${className}`}
+            numberOfLines={1}>
+            SCANNER{strategy ? ` • ${strategy}` : ''}
+        </Text>
+    ) : null;
+
 // --- order wording ----------------------------------------------------------------
-const productTag = (p?: string) => (p === 'DELIVERY' ? 'CNC' : 'MIS');
 const sideWord = (side?: string) => (side === 'SELL' ? 'Sell' : 'Buy');
 const px = (v?: number | null) => inr(v, { trim: true });
 const stockCode = (symbol: string) => symbol.split('.')[0].toUpperCase();
@@ -101,17 +134,10 @@ const PositionRow = React.memo(({ item, expanded: isExpanded, onToggle, onQuickE
                         </View>
                         <View className="flex-1 min-w-0">
                             <View className="flex-row items-center">
-                                <Text className="text-text-primary font-bold text-sm shrink" numberOfLines={1}>{item.symbol}</Text>
-                                <Text className="text-text-muted text-[11px] font-black ml-2 px-1.5 py-0.5 rounded bg-background border border-border">
-                                    {item.product === 'DELIVERY' ? 'CNC' : 'MIS'}{item.quantity < 0 ? ' • SHORT' : ''}
-                                </Text>
+                                <Text className="text-text-primary font-bold text-sm shrink mr-2" numberOfLines={1}>{item.symbol}</Text>
+                                <StyleBadge product={item.product} short={item.quantity < 0} />
                             </View>
-                            {item.source === 'scanner' && (
-                                <Text className="text-primary text-[11px] font-black mt-1 self-start px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20"
-                                    numberOfLines={1}>
-                                    SCANNER{item.strategy ? ` • ${item.strategy}` : ''}
-                                </Text>
-                            )}
+                            <ScannerTag source={item.source} strategy={item.strategy} className="mt-1 self-start" />
                             <Text className="text-text-muted text-[11px] font-bold mt-1" numberOfLines={1}>Avg {inr(item.average_price || 0)} · LTP {inr(item.current_ltp || 0)}</Text>
                             {item.opened_at ? (
                                 <Text className="text-text-muted text-[11px] mt-0.5 opacity-70" numberOfLines={1}>
@@ -240,14 +266,8 @@ const PendingOrderRow = React.memo(({ item, ltp, marketOpen, opensAtMs, loading,
                             <Text className="text-text-primary font-bold text-sm flex-shrink" numberOfLines={1}>{item.quantity} × {item.symbol}</Text>
                         </View>
                         <View className="flex-row items-center flex-wrap mt-1.5">
-                            <Text className="text-text-muted text-[11px] font-black px-1.5 py-0.5 rounded bg-background border border-border">
-                                {productTag(item.product)}
-                            </Text>
-                            {item.source === 'scanner' && (
-                                <Text className="text-primary text-[11px] font-black ml-1 px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">
-                                    SCANNER{item.strategy ? ` • ${item.strategy}` : ''}
-                                </Text>
-                            )}
+                            <StyleBadge product={item.product} />
+                            <ScannerTag source={item.source} strategy={item.strategy} className="ml-1" />
                         </View>
                     </View>
                     <View className="items-end">
@@ -298,6 +318,10 @@ const ClosedOrderRow = React.memo(({ item, onSelect }: { item: any; clock: numbe
                 </View>
                 <Text className="text-text-muted text-[11px]">{istWhen(orderTime(item))}</Text>
             </View>
+            <View className="flex-row items-center flex-wrap mt-1.5">
+                <StyleBadge product={item.product} />
+                <ScannerTag source={item.source} strategy={item.strategy} className="ml-1" />
+            </View>
             <Text className="text-text-secondary text-[11px] mt-1" numberOfLines={2}>{closedReason(item)}</Text>
         </TouchableOpacity>
     );
@@ -337,6 +361,10 @@ const TradeRow = React.memo(({ item, expanded: isExpanded, openPnl, onToggle, on
                             <Text className="text-text-muted text-[11px] font-bold uppercase tracking-widest" numberOfLines={1}>
                                 {closed ? 'Closed' : 'Open'} • {n} {n === 1 ? 'execution' : 'executions'}
                             </Text>
+                            <View className="flex-row items-center flex-wrap mt-1">
+                                <StyleBadge product={item.product} short={item.type === 'SHORT'} />
+                                <ScannerTag source={item.source} strategy={item.strategy} className="ml-1 shrink" />
+                            </View>
                         </View>
                     </View>
                     <View className="items-end shrink-0">
@@ -408,6 +436,19 @@ const PortfolioScreen = () => {
     const { positions, loading: posLoading, refreshPositions } = usePositions();
     const [userId, setUserId] = useState<string>(TEST_USER_ID);
     const [activeTab, setActiveTab] = useState<'POSITIONS' | 'ORDERS'>('POSITIONS');
+    // Intraday / swing filter for both lists, remembered on this phone.
+    const [styleFilter, setStyleFilter] = useState<StyleFilter>('all');
+    useEffect(() => {
+        AsyncStorage.getItem(STYLE_FILTER_KEY)
+            .then(v => { if (v === 'intraday' || v === 'swing') setStyleFilter(v); })
+            .catch(() => { });
+    }, []);
+    const chooseStyle = useCallback((v: StyleFilter) => {
+        setStyleFilter(v);
+        AsyncStorage.setItem(STYLE_FILTER_KEY, v).catch(() => { });
+    }, []);
+    const keepStyle = useCallback((product?: string | null) => styleFilter === 'all' || tradeStyle(product) === styleFilter,
+        [styleFilter]);
     const [orders, setOrders] = useState<any[]>([]);
     const [account, setAccount] = useState<any>(null);
     const [trades, setTrades] = useState<any[]>([]);
@@ -752,18 +793,32 @@ const PortfolioScreen = () => {
                 charges: t.charges,
                 status: t.status,
                 timestamp: t.updated_at,
-                type: t.type
+                type: t.type,
+                product: t.product,
+                source: t.source,
+                strategy: t.strategy,
             };
         });
     }, [trades, orders]);
 
+    const shownPositions = useMemo(() => livePositions.filter(p => keepStyle(p.product)), [livePositions, keepStyle]);
+
+    // How many of each the filter chips offer, for the list on screen.
+    const styleCounts = useMemo(() => {
+        const items = activeTab === 'POSITIONS'
+            ? livePositions.map(p => p.product)
+            : [...orders.filter(o => o.status === 'PENDING').map(o => o.product), ...groupedTrades.map(t => t.product)];
+        const swing = items.filter(pr => tradeStyle(pr) === 'swing').length;
+        return { all: items.length, intraday: items.length - swing, swing };
+    }, [activeTab, livePositions, orders, groupedTrades]);
+
     const tradeData = useMemo(() => {
-        const rawTrades = groupedTrades;
+        const rawTrades = groupedTrades.filter(t => keepStyle(t.product));
         const openTrades = rawTrades.filter(t => t.status !== 'CLOSED');
         const closedTrades = rawTrades.filter(t => t.status === 'CLOSED');
 
         // Find pending orders (not yet part of any trade/position)
-        const pendingOrders = orders.filter(o => o.status === 'PENDING');
+        const pendingOrders = orders.filter(o => o.status === 'PENDING' && keepStyle(o.product));
 
         const sections: any[] = [];
 
@@ -780,7 +835,7 @@ const PortfolioScreen = () => {
         // Cancelled / expired / rejected orders from the last 3 days, newest first.
         const cutoff = Date.now() - 3 * 86_400_000;
         const closedOrders = orders
-            .filter(o => (o.status === 'CANCELLED' || o.status === 'REJECTED') && (orderTime(o)?.getTime() ?? 0) >= cutoff)
+            .filter(o => (o.status === 'CANCELLED' || o.status === 'REJECTED') && keepStyle(o.product) && (orderTime(o)?.getTime() ?? 0) >= cutoff)
             .sort((a, b) => (orderTime(b)?.getTime() ?? 0) - (orderTime(a)?.getTime() ?? 0));
         if (closedOrders.length > 0) {
             sections.push({ itemType: 'HEADER', title: 'Cancelled & expired (last 3 days)', count: closedOrders.length, unit: 'order' });
@@ -807,7 +862,7 @@ const PortfolioScreen = () => {
         }
 
         return sections;
-    }, [groupedTrades, orders]);
+    }, [groupedTrades, orders, keepStyle]);
 
     const renderPosition = useCallback(({ item }: { item: any }) => (
         <PositionRow
@@ -958,10 +1013,31 @@ const PortfolioScreen = () => {
                 </View>
             </View>
 
+            {/* Intraday / swing filter */}
+            <View className="px-4 mb-3 flex-row" accessibilityRole="radiogroup" accessibilityLabel="Show intraday, swing or all">
+                {(['all', 'intraday', 'swing'] as const).map(v => {
+                    const on = styleFilter === v;
+                    const onCls = v === 'swing' ? 'bg-swing/15 border-swing/40' : v === 'intraday' ? 'bg-intraday/15 border-intraday/40' : 'bg-surfaceHighlight border-text-muted/40';
+                    const onText = v === 'swing' ? 'text-swing' : v === 'intraday' ? 'text-intraday' : 'text-text-primary';
+                    const label = v === 'all' ? 'All' : STYLE_LABEL[v];
+                    return (
+                        <TouchableOpacity key={v} onPress={() => chooseStyle(v)}
+                            accessibilityRole="radio" accessibilityState={{ selected: on }}
+                            accessibilityLabel={`${label}, ${styleCounts[v]}`}
+                            accessibilityHint={v === 'all' ? 'Intraday and swing' : STYLE_HINT[v]}
+                            className={`mr-2 px-3 py-1.5 rounded-full border flex-row items-center ${on ? onCls : 'bg-surface border-border'}`}>
+                            <Text className={`text-xs font-bold ${on ? onText : 'text-text-muted'}`}>{label}</Text>
+                            <Text className={`text-[11px] font-bold ml-1.5 ${on ? onText : 'text-text-muted'}`}
+                                style={{ fontVariant: ['tabular-nums'] }}>{styleCounts[v]}</Text>
+                        </TouchableOpacity>
+                    );
+                })}
+            </View>
+
             {/* List */}
             {activeTab === 'POSITIONS' ? (
                 <FlatList
-                    data={livePositions}
+                    data={shownPositions}
                     keyExtractor={(item) => `${item.symbol}-${item.position_id || ''}`}
                     contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
                     renderItem={renderPosition}
@@ -985,8 +1061,14 @@ const PortfolioScreen = () => {
                         ) : (
                             <View className="items-center mt-20 opacity-50 px-10">
                                 <Layers size={48} color="#2A2E39" />
-                                <Text className="text-text-muted text-lg font-bold mt-4">No Open Positions</Text>
-                                <Text className="text-text-muted text-center mt-2">You don't have any active trades currently.</Text>
+                                <Text className="text-text-muted text-lg font-bold mt-4">
+                                    {styleFilter === 'all' ? 'No Open Positions' : `No ${STYLE_LABEL[styleFilter]} Positions`}
+                                </Text>
+                                <Text className="text-text-muted text-center mt-2">
+                                    {styleFilter === 'all' || !livePositions.length
+                                        ? "You don't have any active trades currently."
+                                        : `Switch to All to see the other ${livePositions.length}.`}
+                                </Text>
                             </View>
                         )
                     }
@@ -1017,8 +1099,12 @@ const PortfolioScreen = () => {
                         ) : (
                             <View className="items-center mt-20 opacity-50 px-10">
                                 <History size={48} color="#2A2E39" />
-                                <Text className="text-text-muted text-lg font-bold mt-4">No Trade History</Text>
-                                <Text className="text-text-muted text-center mt-2">Your completed trades will appear here.</Text>
+                                <Text className="text-text-muted text-lg font-bold mt-4">
+                                    {styleFilter === 'all' ? 'No Trade History' : `No ${STYLE_LABEL[styleFilter]} Orders`}
+                                </Text>
+                                <Text className="text-text-muted text-center mt-2">
+                                    {styleFilter === 'all' ? 'Your completed trades will appear here.' : 'Switch to All to see the rest.'}
+                                </Text>
                             </View>
                         )
                     }
@@ -1224,7 +1310,7 @@ const PortfolioScreen = () => {
                                 </View>
                                 <View className="flex-row justify-between">
                                     <Text className="text-text-secondary font-bold">Order Type</Text>
-                                    <Text className="text-text-primary font-black">{selectedOrder?.order_type} · {productTag(selectedOrder?.product)}</Text>
+                                    <Text className="text-text-primary font-black">{selectedOrder?.order_type} · {STYLE_LABEL[tradeStyle(selectedOrder?.product)]}</Text>
                                 </View>
                                 <View className="flex-row justify-between">
                                     <Text className="text-text-secondary font-bold">Status</Text>
